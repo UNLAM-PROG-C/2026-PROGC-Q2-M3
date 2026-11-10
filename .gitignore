@@ -30,3 +30,18 @@
 *.exe
 *.out
 *.app
+
+# TP Integrador
+
+## .NET
+bin/
+obj/
+TestResults/
+*.user
+*.suo
+.vs/
+.idea/
+
+## Godot (cliente futuro)
+.godot/
+.devcontainer/
