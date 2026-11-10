@@ -1,0 +1,227 @@
+{
+  "protocolVersion": 1,
+  "type": "InitialState",
+  "payload": {
+    "sessionId": "5f0c3a2e-8d4b-4c1e-9a7f-2b6d1e0c9a41",
+    "initializationId": 1,
+    "playerId": 1,
+    "tick": 0,
+    "map": {
+      "cellSize": 1,
+      "columns": 40,
+      "rows": 40,
+      "revision": 0
+    },
+    "players": [
+      {
+        "playerId": 1,
+        "mainCenterId": 1
+      },
+      {
+        "playerId": 2,
+        "mainCenterId": 2
+      }
+    ],
+    "units": [
+      {
+        "unitId": 3,
+        "owner": 1,
+        "unitType": "Worker",
+        "x": 7.5,
+        "z": 3.5,
+        "hp": 40,
+        "order": "Idle"
+      },
+      {
+        "unitId": 4,
+        "owner": 1,
+        "unitType": "Worker",
+        "x": 7.5,
+        "z": 5.5,
+        "hp": 40,
+        "order": "Idle"
+      },
+      {
+        "unitId": 5,
+        "owner": 2,
+        "unitType": "Worker",
+        "x": 32.5,
+        "z": 36.5,
+        "hp": 40,
+        "order": "Idle"
+      },
+      {
+        "unitId": 6,
+        "owner": 2,
+        "unitType": "Worker",
+        "x": 32.5,
+        "z": 34.5,
+        "hp": 40,
+        "order": "Idle"
+      }
+    ],
+    "buildings": [
+      {
+        "buildingId": 1,
+        "owner": 1,
+        "buildingType": "MainCenter",
+        "footprint": {
+          "column": 2,
+          "row": 2,
+          "width": 4,
+          "height": 4
+        },
+        "hp": 1000,
+        "isCompleted": true
+      },
+      {
+        "buildingId": 2,
+        "owner": 2,
+        "buildingType": "MainCenter",
+        "footprint": {
+          "column": 34,
+          "row": 34,
+          "width": 4,
+          "height": 4
+        },
+        "hp": 1000,
+        "isCompleted": true
+      }
+    ],
+    "trees": [
+      {
+        "treeId": 7,
+        "column": 12,
+        "row": 8,
+        "x": 12.5,
+        "z": 8.5,
+        "isAvailable": true
+      },
+      {
+        "treeId": 8,
+        "column": 13,
+        "row": 8,
+        "x": 13.5,
+        "z": 8.5,
+        "isAvailable": true
+      },
+      {
+        "treeId": 9,
+        "column": 26,
+        "row": 30,
+        "x": 26.5,
+        "z": 30.5,
+        "isAvailable": true
+      },
+      {
+        "treeId": 10,
+        "column": 27,
+        "row": 30,
+        "x": 27.5,
+        "z": 30.5,
+        "isAvailable": true
+      }
+    ],
+    "ownResources": {
+      "wood": 200,
+      "food": 100
+    },
+    "ownProduction": [
+      {
+        "producerId": 1,
+        "status": "Idle",
+        "pending": []
+      }
+    ],
+    "catalog": {
+      "ticksPerSecond": 20,
+      "units": [
+        {
+          "unitType": "Worker",
+          "maxHp": 40,
+          "cost": {
+            "wood": 0,
+            "food": 50
+          },
+          "trainingDurationTicks": 200,
+          "speedPerSecond": 3
+        },
+        {
+          "unitType": "Soldier",
+          "maxHp": 80,
+          "cost": {
+            "wood": 0,
+            "food": 80
+          },
+          "trainingDurationTicks": 300,
+          "speedPerSecond": 3.5,
+          "attack": {
+            "damage": 8,
+            "range": 1.5,
+            "cooldownTicks": 20
+          }
+        }
+      ],
+      "buildings": [
+        {
+          "buildingType": "MainCenter",
+          "maxHp": 1000,
+          "footprintWidth": 4,
+          "footprintHeight": 4
+        },
+        {
+          "buildingType": "Farm",
+          "maxHp": 200,
+          "footprintWidth": 2,
+          "footprintHeight": 2,
+          "cost": {
+            "wood": 60,
+            "food": 0
+          }
+        },
+        {
+          "buildingType": "Barracks",
+          "maxHp": 400,
+          "footprintWidth": 3,
+          "footprintHeight": 3,
+          "cost": {
+            "wood": 150,
+            "food": 0
+          }
+        },
+        {
+          "buildingType": "Tower",
+          "maxHp": 300,
+          "footprintWidth": 2,
+          "footprintHeight": 2,
+          "cost": {
+            "wood": 120,
+            "food": 0
+          },
+          "attack": {
+            "damage": 10,
+            "range": 6,
+            "cooldownTicks": 30
+          }
+        },
+        {
+          "buildingType": "Fence",
+          "maxHp": 100,
+          "footprintWidth": 1,
+          "footprintHeight": 1,
+          "cost": {
+            "wood": 5,
+            "food": 0
+          }
+        }
+      ],
+      "farmRepairCost": {
+        "wood": 30,
+        "food": 0
+      },
+      "farmRepairWorkRequired": 100,
+      "gatherRange": 1.5,
+      "buildRange": 1.5
+    }
+  }
+}

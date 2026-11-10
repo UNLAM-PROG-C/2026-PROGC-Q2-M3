@@ -1,0 +1,38 @@
+{
+  "protocolVersion": 1,
+  "type": "StateEvents",
+  "payload": {
+    "tick": 30,
+    "mapRevision": 1,
+    "events": [
+      {
+        "type": "ProductionChanged",
+        "producerId": 1,
+        "status": "Training",
+        "activeUnitType": "Worker",
+        "remainingTicks": 200,
+        "pending": [],
+        "index": 2
+      },
+      {
+        "type": "ResourcesChanged",
+        "wood": 150,
+        "food": 50,
+        "index": 3
+      }
+    ],
+    "commandResults": [
+      {
+        "clientCommandId": 4,
+        "sequence": 4,
+        "tick": 30,
+        "outcome": "Accepted",
+        "entityResults": [
+          {
+            "entityId": 1
+          }
+        ]
+      }
+    ]
+  }
+}

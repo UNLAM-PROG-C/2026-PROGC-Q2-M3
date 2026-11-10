@@ -1,0 +1,8 @@
+{
+  "protocolVersion": 1,
+  "type": "MatchStarted",
+  "payload": {
+    "sessionId": "5f0c3a2e-8d4b-4c1e-9a7f-2b6d1e0c9a41",
+    "initializationId": 1
+  }
+}

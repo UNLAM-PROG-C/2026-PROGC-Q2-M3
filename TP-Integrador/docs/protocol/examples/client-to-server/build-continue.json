@@ -1,0 +1,20 @@
+{
+  "protocolVersion": 1,
+  "type": "Build",
+  "messageId": 10,
+  "payload": {
+    "buildingId": 11,
+    "routeMapRevision": 1,
+    "routes": [
+      {
+        "unitId": 4,
+        "waypoints": [
+          {
+            "x": 10.5,
+            "z": 9.5
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 1,
+  "type": "ProtocolError",
+  "payload": {
+    "error": "Network.UnsupportedVersion",
+    "detail": "El servidor solo acepta la versi\u00F3n 1.",
+    "serverProtocolVersion": 1
+  }
+}

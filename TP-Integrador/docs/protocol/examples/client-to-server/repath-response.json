@@ -1,0 +1,24 @@
+{
+  "protocolVersion": 1,
+  "type": "RepathResponse",
+  "messageId": 13,
+  "payload": {
+    "unitId": 4,
+    "orderId": 2,
+    "mapRevision": 1,
+    "waypoints": [
+      {
+        "x": 7.5,
+        "z": 6.5
+      },
+      {
+        "x": 11.5,
+        "z": 6.5
+      },
+      {
+        "x": 11.5,
+        "z": 7.5
+      }
+    ]
+  }
+}

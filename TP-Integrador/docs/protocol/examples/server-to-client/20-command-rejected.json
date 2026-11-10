@@ -1,0 +1,8 @@
+{
+  "protocolVersion": 1,
+  "type": "CommandRejected",
+  "payload": {
+    "messageId": 9,
+    "error": "Common.MatchNotRunning"
+  }
+}

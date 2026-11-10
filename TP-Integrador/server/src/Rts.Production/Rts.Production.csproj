@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Módulo Production: solicitudes de entrenamiento, colas FIFO, inicio con pago, progreso y aparición de unidades.
+    Solo depende de Rts.Shared. No escribe WorldState, no cobra comida ni crea unidades; propone.
+    Ver docs/modules/05-production.md y docs/contracts/05-production.md.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Rts.Production</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rts.Shared\Rts.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Rts.Production.Tests" />
+  </ItemGroup>
+
+</Project>

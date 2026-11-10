@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Módulo Networking: TCP + JSON UTF-8 por líneas, handshake, framing, parsing estructural, Command Admission, colas de salida
+    con escritor único por conexión, heartbeat y cierre. No aplica reglas de gameplay ni escribe WorldState ni GameSessionState.
+    Depende de Rts.Shared y Rts.Protocol. Ver docs/modules/08-networking.md y docs/contracts/08-networking.md.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Rts.Networking</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rts.Shared\Rts.Shared.csproj" />
+    <ProjectReference Include="..\Rts.Protocol\Rts.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Rts.Networking.Tests" />
+  </ItemGroup>
+
+</Project>

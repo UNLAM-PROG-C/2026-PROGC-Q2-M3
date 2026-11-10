@@ -1,0 +1,30 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Rts.Combat/Rts.Combat.csproj" />
+    <Project Path="src/Rts.Construction/Rts.Construction.csproj" />
+    <Project Path="src/Rts.Economy/Rts.Economy.csproj" />
+    <Project Path="src/Rts.GameSession/Rts.GameSession.csproj" />
+    <Project Path="src/Rts.Movement/Rts.Movement.csproj" />
+    <Project Path="src/Rts.Networking/Rts.Networking.csproj" />
+    <Project Path="src/Rts.Production/Rts.Production.csproj" />
+    <Project Path="src/Rts.Protocol/Rts.Protocol.csproj" />
+    <Project Path="src/Rts.Server/Rts.Server.csproj" />
+    <Project Path="src/Rts.Shared/Rts.Shared.csproj" />
+    <Project Path="src/Rts.Simulation/Rts.Simulation.csproj" />
+    <Project Path="src/Rts.StateSync/Rts.StateSync.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Rts.Combat.Tests/Rts.Combat.Tests.csproj" />
+    <Project Path="tests/Rts.Construction.Tests/Rts.Construction.Tests.csproj" />
+    <Project Path="tests/Rts.Economy.Tests/Rts.Economy.Tests.csproj" />
+    <Project Path="tests/Rts.GameSession.Tests/Rts.GameSession.Tests.csproj" />
+    <Project Path="tests/Rts.Movement.Tests/Rts.Movement.Tests.csproj" />
+    <Project Path="tests/Rts.Networking.Tests/Rts.Networking.Tests.csproj" />
+    <Project Path="tests/Rts.Production.Tests/Rts.Production.Tests.csproj" />
+    <Project Path="tests/Rts.Protocol.Tests/Rts.Protocol.Tests.csproj" />
+    <Project Path="tests/Rts.Server.Tests/Rts.Server.Tests.csproj" />
+    <Project Path="tests/Rts.Shared.Tests/Rts.Shared.Tests.csproj" />
+    <Project Path="tests/Rts.Simulation.Tests/Rts.Simulation.Tests.csproj" />
+    <Project Path="tests/Rts.StateSync.Tests/Rts.StateSync.Tests.csproj" />
+  </Folder>
+</Solution>

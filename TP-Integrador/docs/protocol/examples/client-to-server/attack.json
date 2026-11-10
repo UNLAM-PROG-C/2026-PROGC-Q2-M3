@@ -1,0 +1,24 @@
+{
+  "protocolVersion": 1,
+  "type": "Attack",
+  "messageId": 11,
+  "payload": {
+    "targetId": 13,
+    "routeMapRevision": 1,
+    "routes": [
+      {
+        "unitId": 14,
+        "waypoints": [
+          {
+            "x": 20.5,
+            "z": 20.5
+          },
+          {
+            "x": 30.5,
+            "z": 30
+          }
+        ]
+      }
+    ]
+  }
+}

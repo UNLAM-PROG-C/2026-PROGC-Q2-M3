@@ -1,0 +1,7 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Rts.GameSession\Rts.GameSession.csproj" />
+  </ItemGroup>
+
+</Project>

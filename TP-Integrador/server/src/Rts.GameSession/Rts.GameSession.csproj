@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Módulo GameSession: registro de dos jugadores, plazas, preparación e inicio sincronizado, desconexiones y resultado único.
+    Solo depende de Rts.Shared. Es el único escritor de GameSessionState; no toca WorldState ni sockets.
+    Ver docs/modules/07-game-session.md y docs/contracts/07-game-session.md.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Rts.GameSession</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rts.Shared\Rts.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Rts.GameSession.Tests" />
+  </ItemGroup>
+
+</Project>

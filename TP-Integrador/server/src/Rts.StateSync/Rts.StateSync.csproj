@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Módulo State Sync: proyecta lo confirmado por Simulation en mensajes por destinatario (InitialState, StateEvents,
+    PositionUpdate), con privacidad y orden. Sin estado propio del mundo, sin I/O: encola en IClientOutbox (Networking).
+    Depende de Rts.Shared y Rts.Protocol. Ver docs/modules/09-state-sync.md y docs/contracts/09-state-sync.md.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Rts.StateSync</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rts.Shared\Rts.Shared.csproj" />
+    <ProjectReference Include="..\Rts.Protocol\Rts.Protocol.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Rts.StateSync.Tests" />
+  </ItemGroup>
+
+</Project>

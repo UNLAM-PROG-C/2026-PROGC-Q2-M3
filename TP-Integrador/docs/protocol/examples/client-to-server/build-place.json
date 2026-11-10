@@ -1,0 +1,22 @@
+{
+  "protocolVersion": 1,
+  "type": "Build",
+  "messageId": 3,
+  "payload": {
+    "buildingType": "Farm",
+    "anchorColumn": 8,
+    "anchorRow": 10,
+    "routeMapRevision": 0,
+    "routes": [
+      {
+        "unitId": 3,
+        "waypoints": [
+          {
+            "x": 9,
+            "z": 9.5
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Módulo Economy: cálculo puro de recolección, regeneración de árboles, producción de granjas y costos.
+    Solo depende de Rts.Shared. No escribe WorldState, no conoce red ni JSON.
+    Ver docs/modules/01-economy.md y docs/contracts/01-economy.md.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Rts.Economy</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rts.Shared\Rts.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Rts.Economy.Tests" />
+  </ItemGroup>
+
+</Project>

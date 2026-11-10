@@ -1,0 +1,7 @@
+{
+  "protocolVersion": 1,
+  "type": "Hello",
+  "payload": {
+    "clientName": "godot-agus"
+  }
+}

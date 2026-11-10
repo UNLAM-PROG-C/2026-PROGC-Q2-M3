@@ -1,0 +1,20 @@
+{
+  "protocolVersion": 1,
+  "type": "RepairFarm",
+  "messageId": 6,
+  "payload": {
+    "farmId": 11,
+    "routeMapRevision": 1,
+    "routes": [
+      {
+        "unitId": 3,
+        "waypoints": [
+          {
+            "x": 9,
+            "z": 9.5
+          }
+        ]
+      }
+    ]
+  }
+}

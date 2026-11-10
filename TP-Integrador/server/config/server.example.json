@@ -1,0 +1,95 @@
+// EJEMPLO de configuración del servidor (contrato 10 §3).
+// Todos los números son VALORES TEMPORALES para pruebas locales: los definitivos son PENDIENTES de balance (AGENTS §8).
+// Para usarlo: copiarlo como server.json, apuntar "mapFile" a un mapa real (formato D-052) y ajustar los valores.
+{
+  "mapFile": "maps/default.json",
+
+  "simulation": {
+    "tickRate": { "ticksPerSecond": 20 },
+    "maxCommandsPerTick": 64,
+    "commandQueueCapacity": 1024,
+    "barrierTimeout": "00:00:02",
+    "runDomainPhaseInParallel": true,
+    "diagnostics": "Summary"
+  },
+
+  "economy": {
+    "initialBalance": { "wood": 200, "food": 100 },
+    "maxWoodPerTree": 100,
+    "woodPerGather": 5,
+    "gatherIntervalTicks": 20,
+    "treeRespawnTicks": 1200,
+    "farmProductionIntervalTicks": 100,
+    "foodPerFarmBatch": 7,
+    "batchesPerFarmCycle": 5,
+    "buildingWoodCosts": { "Farm": 60, "Barracks": 150, "Tower": 120, "Fence": 5 },
+    "farmRepairWoodCost": 30,
+    "unitFoodCosts": { "Worker": 50, "Soldier": 80 }
+  },
+
+  "combat": {
+    "unitMaxHp": { "Worker": 40, "Soldier": 80 },
+    "soldier": { "damage": 8, "range": 1.5, "cooldownTicks": 20 },
+    "tower": { "damage": 10, "range": 6.0, "cooldownTicks": 30 }
+  },
+
+  "movement": {
+    "speedPerSecond": { "Worker": 3.0, "Soldier": 3.5 },
+    "arrivalTolerance": 0.1,
+    "gatherRange": 1.5,
+    "buildRange": 1.5,
+    "attackRange": 1.5,
+    "maxWaypointsPerRoute": 64,
+    "repathTimeoutTicks": 40,
+    "pursuitRepathIntervalTicks": 10
+  },
+
+  "construction": {
+    "buildingMaxHp": { "MainCenter": 1000, "Farm": 200, "Barracks": 400, "Tower": 300, "Fence": 100 },
+    "footprintSizes": {
+      "MainCenter": { "width": 4, "height": 4 },
+      "Farm": { "width": 2, "height": 2 },
+      "Barracks": { "width": 3, "height": 3 },
+      "Tower": { "width": 2, "height": 2 },
+      "Fence": { "width": 1, "height": 1 }
+    },
+    "initialHpFraction": 0.1,
+    "buildHpPerWorkerTick": 1,
+    "repairWorkRequired": 100,
+    "repairWorkPerWorkerTick": 1
+  },
+
+  "production": {
+    "trainingDurationTicks": { "Worker": 200, "Soldier": 300 },
+    "maxPendingPerProducer": 5,
+    "spawnSearchRadiusCells": 3
+  },
+
+  "gameSession": {
+    "readyTimeout": "00:00:30",
+    "eventQueueCapacity": 64
+  },
+
+  "stateSync": {
+    "positionRateHz": 10,
+    "positionDecimals": 3
+  },
+
+  "networking": {
+    "listenAddress": "0.0.0.0",
+    "port": 7777,
+    "protocolVersion": 1,
+    "maxInboundMessageBytes": 65536,
+    "maxPendingConnections": 4,
+    "handshakeTimeout": "00:00:05",
+    "commandsPerSecond": 20,
+    "commandBurst": 40,
+    "outboundQueueCapacity": 512,
+    "maxViolations": 10,
+    "violationWindow": "00:00:10",
+    "pingIdleInterval": "00:00:03",
+    "pongTimeout": "00:00:05",
+    "closeLinger": "00:00:00.500",
+    "drainTimeout": "00:00:02"
+  }
+}

@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Punto de composición del servidor (contrato 00 §1, contrato 10). No es un módulo: no tiene reglas de juego. Lee y valida la
+    configuración, arma el catálogo, crea cada pieza en orden (D-082), arranca la partida, espera su fin y sale con el código
+    correspondiente. Composición manual, sin contenedor de dependencias (D-081). Es el único proyecto que referencia a todos.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Rts.Server</RootNamespace>
+    <AssemblyName>rts-server</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rts.Shared\Rts.Shared.csproj" />
+    <ProjectReference Include="..\Rts.Protocol\Rts.Protocol.csproj" />
+    <ProjectReference Include="..\Rts.Economy\Rts.Economy.csproj" />
+    <ProjectReference Include="..\Rts.Combat\Rts.Combat.csproj" />
+    <ProjectReference Include="..\Rts.Construction\Rts.Construction.csproj" />
+    <ProjectReference Include="..\Rts.Movement\Rts.Movement.csproj" />
+    <ProjectReference Include="..\Rts.Production\Rts.Production.csproj" />
+    <ProjectReference Include="..\Rts.Simulation\Rts.Simulation.csproj" />
+    <ProjectReference Include="..\Rts.GameSession\Rts.GameSession.csproj" />
+    <ProjectReference Include="..\Rts.StateSync\Rts.StateSync.csproj" />
+    <ProjectReference Include="..\Rts.Networking\Rts.Networking.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Rts.Server.Tests" />
+  </ItemGroup>
+
+</Project>

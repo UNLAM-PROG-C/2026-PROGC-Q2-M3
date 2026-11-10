@@ -1,0 +1,20 @@
+{
+  "protocolVersion": 1,
+  "type": "StateEvents",
+  "payload": {
+    "tick": 7,
+    "mapRevision": 1,
+    "events": [
+      {
+        "type": "RepathRequested",
+        "unitId": 4,
+        "orderId": 2,
+        "mapRevision": 1,
+        "targetId": 7,
+        "isPaused": true,
+        "index": 0
+      }
+    ],
+    "commandResults": []
+  }
+}

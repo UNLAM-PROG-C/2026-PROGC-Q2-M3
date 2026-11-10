@@ -1,0 +1,48 @@
+{
+  "protocolVersion": 1,
+  "type": "StateEvents",
+  "payload": {
+    "tick": 1,
+    "mapRevision": 0,
+    "events": [
+      {
+        "type": "UnitOrderChanged",
+        "unitId": 3,
+        "orderId": 1,
+        "kind": "Move",
+        "index": 0
+      },
+      {
+        "type": "UnitOrderChanged",
+        "unitId": 4,
+        "orderId": 2,
+        "kind": "GatherWood",
+        "index": 1
+      }
+    ],
+    "commandResults": [
+      {
+        "clientCommandId": 1,
+        "sequence": 1,
+        "tick": 1,
+        "outcome": "Accepted",
+        "entityResults": [
+          {
+            "entityId": 3
+          }
+        ]
+      },
+      {
+        "clientCommandId": 2,
+        "sequence": 2,
+        "tick": 1,
+        "outcome": "Accepted",
+        "entityResults": [
+          {
+            "entityId": 4
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "protocolVersion": 1,
+  "type": "StateEvents",
+  "payload": {
+    "tick": 186,
+    "mapRevision": 1,
+    "events": [
+      {
+        "type": "BuildingProgressChanged",
+        "buildingId": 11,
+        "hp": 200,
+        "index": 0
+      },
+      {
+        "type": "BuildingCompleted",
+        "buildingId": 11,
+        "index": 1
+      },
+      {
+        "type": "UnitOrderChanged",
+        "unitId": 3,
+        "orderId": 0,
+        "kind": "Idle",
+        "index": 2
+      }
+    ],
+    "commandResults": []
+  }
+}

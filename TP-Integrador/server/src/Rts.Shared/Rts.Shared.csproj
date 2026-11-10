@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Núcleo de contratos compartidos. NO depende de ningún otro proyecto.
+    Contiene solo tipos base (IDs, geometría, recursos, comandos, eventos, errores);
+    no contiene reglas de gameplay ni DTOs JSON. Ver docs/contracts/00-shared-kernel.md.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Rts.Shared</RootNamespace>
+  </PropertyGroup>
+
+</Project>

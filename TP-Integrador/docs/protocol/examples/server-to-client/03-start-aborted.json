@@ -1,0 +1,8 @@
+{
+  "protocolVersion": 1,
+  "type": "StartAborted",
+  "payload": {
+    "initializationId": 1,
+    "reason": "OpponentLeft"
+  }
+}

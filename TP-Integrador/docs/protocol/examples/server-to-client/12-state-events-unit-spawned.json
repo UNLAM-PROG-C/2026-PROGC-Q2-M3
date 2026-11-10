@@ -1,0 +1,28 @@
+{
+  "protocolVersion": 1,
+  "type": "StateEvents",
+  "payload": {
+    "tick": 230,
+    "mapRevision": 1,
+    "events": [
+      {
+        "type": "UnitSpawned",
+        "unitId": 12,
+        "owner": 1,
+        "unitType": "Worker",
+        "x": 6.5,
+        "z": 2.5,
+        "hp": 40,
+        "index": 0
+      },
+      {
+        "type": "ProductionChanged",
+        "producerId": 1,
+        "status": "Idle",
+        "pending": [],
+        "index": 1
+      }
+    ],
+    "commandResults": []
+  }
+}

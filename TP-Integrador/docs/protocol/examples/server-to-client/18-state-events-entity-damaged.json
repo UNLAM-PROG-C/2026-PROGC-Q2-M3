@@ -1,0 +1,17 @@
+{
+  "protocolVersion": 1,
+  "type": "StateEvents",
+  "payload": {
+    "tick": 2010,
+    "mapRevision": 1,
+    "events": [
+      {
+        "type": "EntityDamaged",
+        "entityId": 3,
+        "hp": 32,
+        "index": 0
+      }
+    ],
+    "commandResults": []
+  }
+}

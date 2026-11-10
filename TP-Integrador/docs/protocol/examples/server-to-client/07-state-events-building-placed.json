@@ -1,0 +1,55 @@
+{
+  "protocolVersion": 1,
+  "type": "StateEvents",
+  "payload": {
+    "tick": 6,
+    "mapRevision": 1,
+    "events": [
+      {
+        "type": "BuildingPlaced",
+        "buildingId": 11,
+        "owner": 1,
+        "buildingType": "Farm",
+        "footprint": {
+          "column": 8,
+          "row": 10,
+          "width": 2,
+          "height": 2
+        },
+        "hp": 20,
+        "index": 0
+      },
+      {
+        "type": "MapRevisionChanged",
+        "revision": 1,
+        "index": 1
+      },
+      {
+        "type": "UnitOrderChanged",
+        "unitId": 3,
+        "orderId": 3,
+        "kind": "Build",
+        "index": 2
+      },
+      {
+        "type": "ResourcesChanged",
+        "wood": 140,
+        "food": 100,
+        "index": 3
+      }
+    ],
+    "commandResults": [
+      {
+        "clientCommandId": 3,
+        "sequence": 3,
+        "tick": 6,
+        "outcome": "Accepted",
+        "entityResults": [
+          {
+            "entityId": 3
+          }
+        ]
+      }
+    ]
+  }
+}

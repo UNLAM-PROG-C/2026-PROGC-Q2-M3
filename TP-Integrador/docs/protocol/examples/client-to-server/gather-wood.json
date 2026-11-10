@@ -1,0 +1,24 @@
+{
+  "protocolVersion": 1,
+  "type": "GatherWood",
+  "messageId": 2,
+  "payload": {
+    "treeId": 7,
+    "routeMapRevision": 0,
+    "routes": [
+      {
+        "unitId": 4,
+        "waypoints": [
+          {
+            "x": 9.5,
+            "z": 6.5
+          },
+          {
+            "x": 11.5,
+            "z": 7.5
+          }
+        ]
+      }
+    ]
+  }
+}

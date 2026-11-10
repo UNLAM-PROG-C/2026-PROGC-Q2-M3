@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Módulo Units / Movement: órdenes de unidad, validación de rutas candidatas, alcanzabilidad,
+    rangos de interacción y avance oficial de posiciones. Solo depende de Rts.Shared.
+    No escribe WorldState, no calcula rutas para Godot, no conoce red ni JSON.
+    Ver docs/modules/04-units-movement.md y docs/contracts/04-units-movement.md.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Rts.Movement</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rts.Shared\Rts.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Rts.Movement.Tests" />
+  </ItemGroup>
+
+</Project>

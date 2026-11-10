@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Rts.Server\Rts.Server.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\config\server.example.json" Link="server.example.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

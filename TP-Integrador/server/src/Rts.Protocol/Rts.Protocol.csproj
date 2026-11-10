@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Esquema único del protocolo JSON entre el servidor y Godot (DECIDIDO D-066): DTOs, nombres de mensaje, convenciones del
+    serializador y la cola de salida hacia Networking. Referencia Rts.Shared solo para enums de dominio y para dirigir mensajes
+    por PlayerId; los DTOs usan tipos primitivos para los IDs y nunca exponen entidades de dominio.
+    Lo referencian Rts.StateSync y Rts.Networking. Ver docs/contracts/09-state-sync.md.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Rts.Protocol</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rts.Shared\Rts.Shared.csproj" />
+  </ItemGroup>
+
+</Project>

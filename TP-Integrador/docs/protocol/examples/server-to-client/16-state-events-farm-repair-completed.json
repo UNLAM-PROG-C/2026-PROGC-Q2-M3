@@ -1,0 +1,30 @@
+{
+  "protocolVersion": 1,
+  "type": "StateEvents",
+  "payload": {
+    "tick": 800,
+    "mapRevision": 1,
+    "events": [
+      {
+        "type": "FarmRepairProgressChanged",
+        "farmId": 11,
+        "workDone": 100,
+        "workRequired": 100,
+        "index": 0
+      },
+      {
+        "type": "FarmRepairCompleted",
+        "farmId": 11,
+        "index": 1
+      },
+      {
+        "type": "UnitOrderChanged",
+        "unitId": 3,
+        "orderId": 0,
+        "kind": "Idle",
+        "index": 2
+      }
+    ],
+    "commandResults": []
+  }
+}

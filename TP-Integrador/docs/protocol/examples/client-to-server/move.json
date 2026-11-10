@@ -1,0 +1,27 @@
+{
+  "protocolVersion": 1,
+  "type": "Move",
+  "messageId": 1,
+  "payload": {
+    "destination": {
+      "x": 10.5,
+      "z": 6.5
+    },
+    "routeMapRevision": 0,
+    "routes": [
+      {
+        "unitId": 3,
+        "waypoints": [
+          {
+            "x": 9,
+            "z": 5
+          },
+          {
+            "x": 10.5,
+            "z": 6.5
+          }
+        ]
+      }
+    ]
+  }
+}

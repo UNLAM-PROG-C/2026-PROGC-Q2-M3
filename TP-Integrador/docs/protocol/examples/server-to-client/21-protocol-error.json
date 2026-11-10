@@ -1,0 +1,8 @@
+{
+  "protocolVersion": 1,
+  "type": "ProtocolError",
+  "payload": {
+    "error": "Network.MalformedJson",
+    "detail": "Se esperaba un objeto JSON."
+  }
+}

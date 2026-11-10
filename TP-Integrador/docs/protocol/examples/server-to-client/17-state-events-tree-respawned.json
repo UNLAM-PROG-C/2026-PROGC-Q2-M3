@@ -1,0 +1,16 @@
+{
+  "protocolVersion": 1,
+  "type": "StateEvents",
+  "payload": {
+    "tick": 1610,
+    "mapRevision": 1,
+    "events": [
+      {
+        "type": "TreeRespawned",
+        "treeId": 7,
+        "index": 0
+      }
+    ],
+    "commandResults": []
+  }
+}

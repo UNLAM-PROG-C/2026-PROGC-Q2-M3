@@ -1,0 +1,11 @@
+{
+  "protocolVersion": 1,
+  "type": "Stop",
+  "messageId": 12,
+  "payload": {
+    "unitIds": [
+      3,
+      4
+    ]
+  }
+}

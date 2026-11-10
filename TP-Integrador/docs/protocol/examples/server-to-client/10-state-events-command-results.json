@@ -1,0 +1,42 @@
+{
+  "protocolVersion": 1,
+  "type": "StateEvents",
+  "payload": {
+    "tick": 40,
+    "mapRevision": 1,
+    "events": [
+      {
+        "type": "UnitOrderChanged",
+        "unitId": 4,
+        "orderId": 5,
+        "kind": "Move",
+        "index": 0
+      }
+    ],
+    "commandResults": [
+      {
+        "clientCommandId": 5,
+        "sequence": 5,
+        "tick": 40,
+        "outcome": "PartiallyAccepted",
+        "entityResults": [
+          {
+            "entityId": 4
+          },
+          {
+            "entityId": 5,
+            "error": "Common.NotOwner"
+          }
+        ]
+      },
+      {
+        "clientCommandId": 8,
+        "sequence": 6,
+        "tick": 40,
+        "outcome": "Rejected",
+        "error": "Economy.InsufficientWood",
+        "entityResults": []
+      }
+    ]
+  }
+}

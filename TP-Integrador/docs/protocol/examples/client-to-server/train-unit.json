@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 1,
+  "type": "TrainUnit",
+  "messageId": 4,
+  "payload": {
+    "producerId": 1,
+    "unitType": "Worker"
+  }
+}

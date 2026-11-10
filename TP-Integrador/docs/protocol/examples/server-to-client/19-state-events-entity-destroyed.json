@@ -1,0 +1,26 @@
+{
+  "protocolVersion": 1,
+  "type": "StateEvents",
+  "payload": {
+    "tick": 2100,
+    "mapRevision": 2,
+    "events": [
+      {
+        "type": "EntityDestroyed",
+        "entityId": 3,
+        "index": 0
+      },
+      {
+        "type": "EntityDestroyed",
+        "entityId": 11,
+        "index": 1
+      },
+      {
+        "type": "MapRevisionChanged",
+        "revision": 2,
+        "index": 2
+      }
+    ],
+    "commandResults": []
+  }
+}

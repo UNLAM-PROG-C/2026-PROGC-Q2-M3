@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Módulo Simulation: único dueño y escritor del WorldState; loop de ticks a 20 Hz con fases ordenadas,
+    snapshot inmutable, barrera Economy ∥ Combat y commit determinista. Depende de Shared y de los cinco módulos de dominio.
+    Ver docs/modules/06-simulation.md y docs/contracts/06-simulation.md.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Rts.Simulation</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rts.Shared\Rts.Shared.csproj" />
+    <ProjectReference Include="..\Rts.Economy\Rts.Economy.csproj" />
+    <ProjectReference Include="..\Rts.Combat\Rts.Combat.csproj" />
+    <ProjectReference Include="..\Rts.Construction\Rts.Construction.csproj" />
+    <ProjectReference Include="..\Rts.Movement\Rts.Movement.csproj" />
+    <ProjectReference Include="..\Rts.Production\Rts.Production.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Rts.Simulation.Tests" />
+  </ItemGroup>
+
+</Project>

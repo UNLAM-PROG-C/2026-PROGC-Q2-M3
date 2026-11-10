@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Módulo Construction: colocación de edificios, construcción progresiva y reparación de capacidad de granjas.
+    Solo depende de Rts.Shared. No escribe WorldState, no cobra recursos, no conoce red ni JSON.
+    Ver docs/modules/03-construction.md y docs/contracts/03-construction.md.
+  -->
+  <PropertyGroup>
+    <RootNamespace>Rts.Construction</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Rts.Shared\Rts.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Rts.Construction.Tests" />
+  </ItemGroup>
+
+</Project>
