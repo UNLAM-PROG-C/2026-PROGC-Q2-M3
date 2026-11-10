@@ -10,42 +10,42 @@ public interface IOutboundPayload
 /// <summary>Cómo trata la cola de salida de una conexión a un mensaje (DECIDIDO D-064).</summary>
 public enum DeliveryClass
 {
-    /// <summary>
-    /// Nunca se descarta ni se reordena. Si la cola de un cliente no puede aceptar mensajes esenciales, Networking aplica su
-    /// política de saturación y desconecta (08 §5).
-    /// </summary>
-    Essential = 1,
+  /// <summary>
+  /// Nunca se descarta ni se reordena. Si la cola de un cliente no puede aceptar mensajes esenciales, Networking aplica su
+  /// política de saturación y desconecta (08 §5).
+  /// </summary>
+  Essential = 1,
 
-    /// <summary>
-    /// Reemplazable: si en la cola hay un mensaje del mismo <see cref="OutboundMessage.Type"/> que todavía no empezó a enviarse,
-    /// se quita y el nuevo se agrega <b>al final</b>. Como el nuevo nunca se adelanta a nada, la consolidación no atraviesa
-    /// barreras estructurales (09 §7). Solo lo usa <c>PositionUpdate</c>.
-    /// </summary>
-    Supersedable = 2,
+  /// <summary>
+  /// Reemplazable: si en la cola hay un mensaje del mismo <see cref="OutboundMessage.Type"/> que todavía no empezó a enviarse,
+  /// se quita y el nuevo se agrega <b>al final</b>. Como el nuevo nunca se adelanta a nada, la consolidación no atraviesa
+  /// barreras estructurales (09 §7). Solo lo usa <c>PositionUpdate</c>.
+  /// </summary>
+  Supersedable = 2,
 }
 
 /// <summary>Mensaje listo para la cola de salida. Networking lo envuelve en su sobre y lo serializa en el escritor de la conexión.</summary>
 public sealed record OutboundMessage
 {
-    public OutboundMessage(string type, IOutboundPayload payload, DeliveryClass delivery)
+  public OutboundMessage(string type, IOutboundPayload payload, DeliveryClass delivery)
+  {
+    ArgumentException.ThrowIfNullOrWhiteSpace(type);
+    ArgumentNullException.ThrowIfNull(payload);
+    if (!Enum.IsDefined(delivery))
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(type);
-        ArgumentNullException.ThrowIfNull(payload);
-        if (!Enum.IsDefined(delivery))
-        {
-            throw new ArgumentOutOfRangeException(nameof(delivery), delivery, "Clase de entrega desconocida.");
-        }
-
-        Type = type;
-        Payload = payload;
-        Delivery = delivery;
+      throw new ArgumentOutOfRangeException(nameof(delivery), delivery, "Clase de entrega desconocida.");
     }
 
-    public string Type { get; }
+    Type = type;
+    Payload = payload;
+    Delivery = delivery;
+  }
 
-    public IOutboundPayload Payload { get; }
+  public string Type { get; }
 
-    public DeliveryClass Delivery { get; }
+  public IOutboundPayload Payload { get; }
+
+  public DeliveryClass Delivery { get; }
 }
 
 /// <summary>
@@ -58,5 +58,5 @@ public sealed record OutboundMessage
 /// </summary>
 public interface IClientOutbox
 {
-    void Enqueue(PlayerId recipient, OutboundMessage message);
+  void Enqueue(PlayerId recipient, OutboundMessage message);
 }

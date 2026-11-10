@@ -13,5 +13,5 @@ namespace Rts.Movement;
 /// </summary>
 public interface IMovementCalculator
 {
-    MovementTickResult CalculateTick(MovementTickInput input);
+  MovementTickResult CalculateTick(MovementTickInput input);
 }

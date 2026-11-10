@@ -18,94 +18,94 @@ namespace Rts.Simulation.State;
 /// </summary>
 public sealed record WorldState
 {
-    public WorldState(
-        TickId tick,
-        GridSpec grid,
-        MapRevision mapRevision,
-        ImmutableSortedDictionary<PlayerId, PlayerState> players,
-        ImmutableSortedDictionary<EntityId, UnitEntity> units,
-        ImmutableSortedDictionary<EntityId, BuildingEntity> buildings,
-        ImmutableSortedDictionary<EntityId, TreeEntity> trees,
-        EntityId lastEntityId,
-        OrderId lastOrderId,
-        IdempotencyLedger idempotency,
-        MatchResult? gameplayResult)
+  public WorldState(
+      TickId tick,
+      GridSpec grid,
+      MapRevision mapRevision,
+      ImmutableSortedDictionary<PlayerId, PlayerState> players,
+      ImmutableSortedDictionary<EntityId, UnitEntity> units,
+      ImmutableSortedDictionary<EntityId, BuildingEntity> buildings,
+      ImmutableSortedDictionary<EntityId, TreeEntity> trees,
+      EntityId lastEntityId,
+      OrderId lastOrderId,
+      IdempotencyLedger idempotency,
+      MatchResult? gameplayResult)
+  {
+    ArgumentNullException.ThrowIfNull(grid);
+    ArgumentNullException.ThrowIfNull(players);
+    ArgumentNullException.ThrowIfNull(units);
+    ArgumentNullException.ThrowIfNull(buildings);
+    ArgumentNullException.ThrowIfNull(trees);
+    ArgumentNullException.ThrowIfNull(idempotency);
+
+    if (players.Count != 2 || !players.ContainsKey(PlayerId.One) || !players.ContainsKey(PlayerId.Two) ||
+        players.Any(kv => kv.Value.Player != kv.Key))
     {
-        ArgumentNullException.ThrowIfNull(grid);
-        ArgumentNullException.ThrowIfNull(players);
-        ArgumentNullException.ThrowIfNull(units);
-        ArgumentNullException.ThrowIfNull(buildings);
-        ArgumentNullException.ThrowIfNull(trees);
-        ArgumentNullException.ThrowIfNull(idempotency);
-
-        if (players.Count != 2 || !players.ContainsKey(PlayerId.One) || !players.ContainsKey(PlayerId.Two) ||
-            players.Any(kv => kv.Value.Player != kv.Key))
-        {
-            throw new ArgumentException("El mundo tiene exactamente a P1 y P2.", nameof(players));
-        }
-
-        var seen = new HashSet<EntityId>();
-        void Check(EntityId key, EntityId id, string name)
-        {
-            if (key != id || !seen.Add(id) || id > lastEntityId)
-            {
-                throw new ArgumentException($"ID inconsistente o duplicado en {name}: {id}.");
-            }
-        }
-
-        foreach ((EntityId key, UnitEntity unit) in units)
-        {
-            Check(key, unit.Id, nameof(units));
-        }
-
-        foreach ((EntityId key, BuildingEntity building) in buildings)
-        {
-            Check(key, building.Id, nameof(buildings));
-        }
-
-        foreach ((EntityId key, TreeEntity tree) in trees)
-        {
-            Check(key, tree.Id, nameof(trees));
-        }
-
-        Tick = tick;
-        Grid = grid;
-        MapRevision = mapRevision;
-        Players = players;
-        Units = units;
-        Buildings = buildings;
-        Trees = trees;
-        LastEntityId = lastEntityId;
-        LastOrderId = lastOrderId;
-        Idempotency = idempotency;
-        GameplayResult = gameplayResult;
+      throw new ArgumentException("El mundo tiene exactamente a P1 y P2.", nameof(players));
     }
 
-    /// <summary>Último tick confirmado (<see cref="TickId.Zero"/> = estado inicial).</summary>
-    public TickId Tick { get; }
+    var seen = new HashSet<EntityId>();
+    void Check(EntityId key, EntityId id, string name)
+    {
+      if (key != id || !seen.Add(id) || id > lastEntityId)
+      {
+        throw new ArgumentException($"ID inconsistente o duplicado en {name}: {id}.");
+      }
+    }
 
-    public GridSpec Grid { get; }
+    foreach ((EntityId key, UnitEntity unit) in units)
+    {
+      Check(key, unit.Id, nameof(units));
+    }
 
-    public MapRevision MapRevision { get; }
+    foreach ((EntityId key, BuildingEntity building) in buildings)
+    {
+      Check(key, building.Id, nameof(buildings));
+    }
 
-    public ImmutableSortedDictionary<PlayerId, PlayerState> Players { get; }
+    foreach ((EntityId key, TreeEntity tree) in trees)
+    {
+      Check(key, tree.Id, nameof(trees));
+    }
 
-    public ImmutableSortedDictionary<EntityId, UnitEntity> Units { get; }
+    Tick = tick;
+    Grid = grid;
+    MapRevision = mapRevision;
+    Players = players;
+    Units = units;
+    Buildings = buildings;
+    Trees = trees;
+    LastEntityId = lastEntityId;
+    LastOrderId = lastOrderId;
+    Idempotency = idempotency;
+    GameplayResult = gameplayResult;
+  }
 
-    public ImmutableSortedDictionary<EntityId, BuildingEntity> Buildings { get; }
+  /// <summary>Último tick confirmado (<see cref="TickId.Zero"/> = estado inicial).</summary>
+  public TickId Tick { get; }
 
-    public ImmutableSortedDictionary<EntityId, TreeEntity> Trees { get; }
+  public GridSpec Grid { get; }
 
-    /// <summary>Último EntityId asignado; el próximo es <c>LastEntityId.Value + 1</c>.</summary>
-    public EntityId LastEntityId { get; }
+  public MapRevision MapRevision { get; }
 
-    /// <summary>Último OrderId asignado.</summary>
-    public OrderId LastOrderId { get; }
+  public ImmutableSortedDictionary<PlayerId, PlayerState> Players { get; }
 
-    public IdempotencyLedger Idempotency { get; }
+  public ImmutableSortedDictionary<EntityId, UnitEntity> Units { get; }
 
-    /// <summary>Resultado de gameplay fijado por Victory Rules; con valor, no se ejecutan más fases de gameplay.</summary>
-    public MatchResult? GameplayResult { get; }
+  public ImmutableSortedDictionary<EntityId, BuildingEntity> Buildings { get; }
 
-    public bool IsGameplayOver => GameplayResult is not null;
+  public ImmutableSortedDictionary<EntityId, TreeEntity> Trees { get; }
+
+  /// <summary>Último EntityId asignado; el próximo es <c>LastEntityId.Value + 1</c>.</summary>
+  public EntityId LastEntityId { get; }
+
+  /// <summary>Último OrderId asignado.</summary>
+  public OrderId LastOrderId { get; }
+
+  public IdempotencyLedger Idempotency { get; }
+
+  /// <summary>Resultado de gameplay fijado por Victory Rules; con valor, no se ejecutan más fases de gameplay.</summary>
+  public MatchResult? GameplayResult { get; }
+
+  public bool IsGameplayOver => GameplayResult is not null;
 }

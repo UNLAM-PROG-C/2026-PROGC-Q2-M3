@@ -6,15 +6,15 @@ namespace Rts.Simulation.Diagnostics;
 /// <summary>Fases del tick, en el orden aprobado (06 §3).</summary>
 public enum SimulationPhase
 {
-    CommandBatch = 1,
-    Movement = 2,
-    Construction = 3,
-    Snapshot = 4,
-    EconomyAndCombat = 5,
-    BarrierAndCommit = 6,
-    VictoryRules = 7,
-    Production = 8,
-    Publication = 9,
+  CommandBatch = 1,
+  Movement = 2,
+  Construction = 3,
+  Snapshot = 4,
+  EconomyAndCombat = 5,
+  BarrierAndCommit = 6,
+  VictoryRules = 7,
+  Production = 8,
+  Publication = 9,
 }
 
 /// <summary>Duración medida de una fase.</summary>

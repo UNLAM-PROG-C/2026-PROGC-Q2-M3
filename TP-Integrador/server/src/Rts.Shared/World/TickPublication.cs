@@ -31,5 +31,5 @@ public sealed record TickPublication(
 /// </summary>
 public interface ITickPublisher
 {
-    void Publish(TickPublication publication);
+  void Publish(TickPublication publication);
 }

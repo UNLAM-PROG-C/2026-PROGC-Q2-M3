@@ -14,5 +14,5 @@ namespace Rts.Economy;
 /// </summary>
 public interface IEconomyCalculator
 {
-    EconomyTickResult CalculateTick(EconomyTickInput input);
+  EconomyTickResult CalculateTick(EconomyTickInput input);
 }

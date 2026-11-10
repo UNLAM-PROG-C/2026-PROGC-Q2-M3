@@ -6,12 +6,12 @@ namespace Rts.Shared.Commands;
 /// </summary>
 public enum CommandType
 {
-    Move = 1,
-    Stop = 2,
-    Attack = 3,
-    GatherWood = 4,
-    Build = 5,
-    RepairFarm = 6,
-    TrainUnit = 7,
-    RepathResponse = 8,
+  Move = 1,
+  Stop = 2,
+  Attack = 3,
+  GatherWood = 4,
+  Build = 5,
+  RepairFarm = 6,
+  TrainUnit = 7,
+  RepathResponse = 8,
 }

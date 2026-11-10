@@ -11,54 +11,54 @@ namespace Rts.Simulation.State;
 /// </summary>
 public sealed record TreeEntity
 {
-    public TreeEntity(EntityId id, GridCell cell, PositionXZ position, TreeEconomyState economy)
+  public TreeEntity(EntityId id, GridCell cell, PositionXZ position, TreeEconomyState economy)
+  {
+    ArgumentNullException.ThrowIfNull(economy);
+    if (id.IsNone || economy.TreeId != id)
     {
-        ArgumentNullException.ThrowIfNull(economy);
-        if (id.IsNone || economy.TreeId != id)
-        {
-            throw new ArgumentException("El árbol y su estado económico deben compartir un EntityId válido.", nameof(economy));
-        }
-
-        if (!position.IsFinite)
-        {
-            throw new ArgumentException("La posición debe ser finita.", nameof(position));
-        }
-
-        Id = id;
-        Cell = cell;
-        Position = position;
-        Economy = economy;
+      throw new ArgumentException("El árbol y su estado económico deben compartir un EntityId válido.", nameof(economy));
     }
 
-    public EntityId Id { get; }
+    if (!position.IsFinite)
+    {
+      throw new ArgumentException("La posición debe ser finita.", nameof(position));
+    }
 
-    public GridCell Cell { get; }
+    Id = id;
+    Cell = cell;
+    Position = position;
+    Economy = economy;
+  }
 
-    public PositionXZ Position { get; }
+  public EntityId Id { get; }
 
-    public TreeEconomyState Economy { get; }
+  public GridCell Cell { get; }
+
+  public PositionXZ Position { get; }
+
+  public TreeEconomyState Economy { get; }
 }
 
 /// <summary>Saldo oficial de un jugador. Invariante: nunca negativo (01 §8).</summary>
 public sealed record PlayerState
 {
-    public PlayerState(PlayerId player, ResourceAmount resources)
+  public PlayerState(PlayerId player, ResourceAmount resources)
+  {
+    if (!player.IsValid)
     {
-        if (!player.IsValid)
-        {
-            throw new ArgumentException($"Jugador inválido: {player}.", nameof(player));
-        }
-
-        if (!resources.IsNonNegative)
-        {
-            throw new ArgumentException("El saldo de un jugador no puede ser negativo.", nameof(resources));
-        }
-
-        Player = player;
-        Resources = resources;
+      throw new ArgumentException($"Jugador inválido: {player}.", nameof(player));
     }
 
-    public PlayerId Player { get; }
+    if (!resources.IsNonNegative)
+    {
+      throw new ArgumentException("El saldo de un jugador no puede ser negativo.", nameof(resources));
+    }
 
-    public ResourceAmount Resources { get; }
+    Player = player;
+    Resources = resources;
+  }
+
+  public PlayerId Player { get; }
+
+  public ResourceAmount Resources { get; }
 }

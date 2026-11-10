@@ -22,77 +22,77 @@ public sealed record MapDefinition(
     EquatableArray<GridCell> TreeCells,
     EquatableArray<PlayerStartDefinition> Starts)
 {
-    /// <summary>
-    /// Problemas del mapa, considerando la huella del Centro Principal (<paramref name="mainCenterSize"/>):
-    /// límites, árboles duplicados o fuera del mapa, exactamente un inicio por jugador, Centros Principales sin
-    /// superponerse entre sí ni con árboles, y unidades iniciales dentro del mapa y fuera de toda huella.
-    /// </summary>
-    public IReadOnlyList<string> GetValidationErrors(FootprintSize mainCenterSize)
+  /// <summary>
+  /// Problemas del mapa, considerando la huella del Centro Principal (<paramref name="mainCenterSize"/>):
+  /// límites, árboles duplicados o fuera del mapa, exactamente un inicio por jugador, Centros Principales sin
+  /// superponerse entre sí ni con árboles, y unidades iniciales dentro del mapa y fuera de toda huella.
+  /// </summary>
+  public IReadOnlyList<string> GetValidationErrors(FootprintSize mainCenterSize)
+  {
+    var errors = new List<string>();
+
+    if (Grid is null)
     {
-        var errors = new List<string>();
-
-        if (Grid is null)
-        {
-            return ["Grid es obligatorio."];
-        }
-
-        var treeSet = new HashSet<GridCell>();
-        foreach (GridCell tree in TreeCells)
-        {
-            if (!Grid.Contains(tree))
-            {
-                errors.Add($"Árbol fuera del mapa: {tree}.");
-            }
-
-            if (!treeSet.Add(tree))
-            {
-                errors.Add($"Árbol duplicado: {tree}.");
-            }
-        }
-
-        if (Starts.Count != 2 || !Starts.Any(s => s?.Player == PlayerId.One) || !Starts.Any(s => s?.Player == PlayerId.Two))
-        {
-            errors.Add("El mapa debe tener exactamente un inicio para P1 y otro para P2.");
-            return errors;
-        }
-
-        var footprints = new List<Footprint>();
-        foreach (PlayerStartDefinition start in Starts)
-        {
-            var footprint = new Footprint(start.MainCenterAnchor, mainCenterSize);
-            if (!Grid.Contains(footprint))
-            {
-                errors.Add($"El Centro Principal de {start.Player} sale del mapa.");
-            }
-
-            if (footprint.Cells().Any(treeSet.Contains))
-            {
-                errors.Add($"El Centro Principal de {start.Player} se superpone con un árbol.");
-            }
-
-            footprints.Add(footprint);
-        }
-
-        if (footprints[0].Intersects(footprints[1]))
-        {
-            errors.Add("Los Centros Principales se superponen.");
-        }
-
-        foreach (PlayerStartDefinition start in Starts)
-        {
-            foreach (InitialUnitDefinition unit in start.InitialUnits)
-            {
-                if (!Enum.IsDefined(unit.UnitType) || !Grid.Contains(unit.Position))
-                {
-                    errors.Add($"Unidad inicial inválida o fuera del mapa para {start.Player}: {unit.UnitType} en {unit.Position}.");
-                }
-                else if (footprints.Any(f => f.Contains(Grid.ToCell(unit.Position))))
-                {
-                    errors.Add($"Unidad inicial de {start.Player} dentro de un Centro Principal: {unit.Position}.");
-                }
-            }
-        }
-
-        return errors;
+      return ["Grid es obligatorio."];
     }
+
+    var treeSet = new HashSet<GridCell>();
+    foreach (GridCell tree in TreeCells)
+    {
+      if (!Grid.Contains(tree))
+      {
+        errors.Add($"Árbol fuera del mapa: {tree}.");
+      }
+
+      if (!treeSet.Add(tree))
+      {
+        errors.Add($"Árbol duplicado: {tree}.");
+      }
+    }
+
+    if (Starts.Count != 2 || !Starts.Any(s => s?.Player == PlayerId.One) || !Starts.Any(s => s?.Player == PlayerId.Two))
+    {
+      errors.Add("El mapa debe tener exactamente un inicio para P1 y otro para P2.");
+      return errors;
+    }
+
+    var footprints = new List<Footprint>();
+    foreach (PlayerStartDefinition start in Starts)
+    {
+      var footprint = new Footprint(start.MainCenterAnchor, mainCenterSize);
+      if (!Grid.Contains(footprint))
+      {
+        errors.Add($"El Centro Principal de {start.Player} sale del mapa.");
+      }
+
+      if (footprint.Cells().Any(treeSet.Contains))
+      {
+        errors.Add($"El Centro Principal de {start.Player} se superpone con un árbol.");
+      }
+
+      footprints.Add(footprint);
+    }
+
+    if (footprints[0].Intersects(footprints[1]))
+    {
+      errors.Add("Los Centros Principales se superponen.");
+    }
+
+    foreach (PlayerStartDefinition start in Starts)
+    {
+      foreach (InitialUnitDefinition unit in start.InitialUnits)
+      {
+        if (!Enum.IsDefined(unit.UnitType) || !Grid.Contains(unit.Position))
+        {
+          errors.Add($"Unidad inicial inválida o fuera del mapa para {start.Player}: {unit.UnitType} en {unit.Position}.");
+        }
+        else if (footprints.Any(f => f.Contains(Grid.ToCell(unit.Position))))
+        {
+          errors.Add($"Unidad inicial de {start.Player} dentro de un Centro Principal: {unit.Position}.");
+        }
+      }
+    }
+
+    return errors;
+  }
 }

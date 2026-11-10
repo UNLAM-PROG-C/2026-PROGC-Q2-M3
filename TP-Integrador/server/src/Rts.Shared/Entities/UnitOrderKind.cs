@@ -6,10 +6,10 @@ namespace Rts.Shared.Entities;
 /// </summary>
 public enum UnitOrderKind
 {
-    Idle = 1,
-    Move = 2,
-    GatherWood = 3,
-    Build = 4,
-    RepairFarm = 5,
-    Attack = 6,
+  Idle = 1,
+  Move = 2,
+  GatherWood = 3,
+  Build = 4,
+  RepairFarm = 5,
+  Attack = 6,
 }

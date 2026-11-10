@@ -10,53 +10,53 @@ namespace Rts.Server.Configuration;
 /// </summary>
 internal sealed class FootprintSizeJsonConverter : JsonConverter<FootprintSize>
 {
-    public override FootprintSize Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+  public override FootprintSize Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+  {
+    if (reader.TokenType != JsonTokenType.StartObject)
     {
-        if (reader.TokenType != JsonTokenType.StartObject)
-        {
-            throw new JsonException("Una huella se escribe como { \"width\": W, \"height\": H }.");
-        }
-
-        int? width = null;
-        int? height = null;
-        while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
-        {
-            string name = reader.GetString() ?? string.Empty;
-            reader.Read();
-            if (name.Equals("width", StringComparison.OrdinalIgnoreCase))
-            {
-                width = reader.GetInt32();
-            }
-            else if (name.Equals("height", StringComparison.OrdinalIgnoreCase))
-            {
-                height = reader.GetInt32();
-            }
-            else
-            {
-                throw new JsonException($"Campo desconocido en una huella: '{name}'.");
-            }
-        }
-
-        if (width is not { } w || height is not { } h)
-        {
-            throw new JsonException("Una huella necesita \"width\" y \"height\".");
-        }
-
-        try
-        {
-            return new FootprintSize(w, h);
-        }
-        catch (ArgumentException ex)
-        {
-            throw new JsonException($"Huella inválida ({w}x{h}): {ex.Message}", ex);
-        }
+      throw new JsonException("Una huella se escribe como { \"width\": W, \"height\": H }.");
     }
 
-    public override void Write(Utf8JsonWriter writer, FootprintSize value, JsonSerializerOptions options)
+    int? width = null;
+    int? height = null;
+    while (reader.Read() && reader.TokenType != JsonTokenType.EndObject)
     {
-        writer.WriteStartObject();
-        writer.WriteNumber("width", value.Width);
-        writer.WriteNumber("height", value.Height);
-        writer.WriteEndObject();
+      string name = reader.GetString() ?? string.Empty;
+      reader.Read();
+      if (name.Equals("width", StringComparison.OrdinalIgnoreCase))
+      {
+        width = reader.GetInt32();
+      }
+      else if (name.Equals("height", StringComparison.OrdinalIgnoreCase))
+      {
+        height = reader.GetInt32();
+      }
+      else
+      {
+        throw new JsonException($"Campo desconocido en una huella: '{name}'.");
+      }
     }
+
+    if (width is not { } w || height is not { } h)
+    {
+      throw new JsonException("Una huella necesita \"width\" y \"height\".");
+    }
+
+    try
+    {
+      return new FootprintSize(w, h);
+    }
+    catch (ArgumentException ex)
+    {
+      throw new JsonException($"Huella inválida ({w}x{h}): {ex.Message}", ex);
+    }
+  }
+
+  public override void Write(Utf8JsonWriter writer, FootprintSize value, JsonSerializerOptions options)
+  {
+    writer.WriteStartObject();
+    writer.WriteNumber("width", value.Width);
+    writer.WriteNumber("height", value.Height);
+    writer.WriteEndObject();
+  }
 }

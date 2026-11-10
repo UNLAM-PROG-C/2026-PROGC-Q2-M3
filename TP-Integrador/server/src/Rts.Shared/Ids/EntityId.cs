@@ -8,16 +8,16 @@ namespace Rts.Shared.Ids;
 /// </summary>
 public readonly record struct EntityId(int Value) : IComparable<EntityId>
 {
-    public static readonly EntityId None = default;
+  public static readonly EntityId None = default;
 
-    public bool IsNone => Value == 0;
+  public bool IsNone => Value == 0;
 
-    public int CompareTo(EntityId other) => Value.CompareTo(other.Value);
+  public int CompareTo(EntityId other) => Value.CompareTo(other.Value);
 
-    public static bool operator <(EntityId left, EntityId right) => left.Value < right.Value;
-    public static bool operator >(EntityId left, EntityId right) => left.Value > right.Value;
-    public static bool operator <=(EntityId left, EntityId right) => left.Value <= right.Value;
-    public static bool operator >=(EntityId left, EntityId right) => left.Value >= right.Value;
+  public static bool operator <(EntityId left, EntityId right) => left.Value < right.Value;
+  public static bool operator >(EntityId left, EntityId right) => left.Value > right.Value;
+  public static bool operator <=(EntityId left, EntityId right) => left.Value <= right.Value;
+  public static bool operator >=(EntityId left, EntityId right) => left.Value >= right.Value;
 
-    public override string ToString() => $"E{Value}";
+  public override string ToString() => $"E{Value}";
 }

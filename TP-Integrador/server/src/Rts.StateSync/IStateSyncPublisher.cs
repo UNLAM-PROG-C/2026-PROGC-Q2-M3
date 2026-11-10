@@ -16,6 +16,6 @@ namespace Rts.StateSync;
 /// </summary>
 public interface IStateSyncPublisher : ITickPublisher
 {
-    /// <summary>Arma y encola un InitialState para P1 y otro para P2 con esa sesión e inicialización.</summary>
-    void PublishInitialState(SessionId session, InitializationId initialization, WorldView world);
+  /// <summary>Arma y encola un InitialState para P1 y otro para P2 con esa sesión e inicialización.</summary>
+  void PublishInitialState(SessionId session, InitializationId initialization, WorldView world);
 }

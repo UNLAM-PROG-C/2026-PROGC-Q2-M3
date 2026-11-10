@@ -8,11 +8,11 @@ namespace Rts.Shared.Events;
 /// </summary>
 public readonly record struct EventStamp(TickId Tick, int IndexInTick) : IComparable<EventStamp>
 {
-    public int CompareTo(EventStamp other)
-    {
-        int byTick = Tick.CompareTo(other.Tick);
-        return byTick != 0 ? byTick : IndexInTick.CompareTo(other.IndexInTick);
-    }
+  public int CompareTo(EventStamp other)
+  {
+    int byTick = Tick.CompareTo(other.Tick);
+    return byTick != 0 ? byTick : IndexInTick.CompareTo(other.IndexInTick);
+  }
 
-    public override string ToString() => $"{Tick}#{IndexInTick}";
+  public override string ToString() => $"{Tick}#{IndexInTick}";
 }

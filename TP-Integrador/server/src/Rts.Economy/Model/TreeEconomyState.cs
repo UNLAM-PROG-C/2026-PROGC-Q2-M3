@@ -10,46 +10,46 @@ namespace Rts.Economy.Model;
 /// </summary>
 public sealed record TreeEconomyState
 {
-    public TreeEconomyState(EntityId treeId, int woodRemaining, TreeStatus status, TickId? depletedAtTick)
+  public TreeEconomyState(EntityId treeId, int woodRemaining, TreeStatus status, TickId? depletedAtTick)
+  {
+    if (treeId.IsNone)
     {
-        if (treeId.IsNone)
-        {
-            throw new ArgumentException("El árbol debe tener un EntityId válido.", nameof(treeId));
-        }
-
-        ArgumentOutOfRangeException.ThrowIfNegative(woodRemaining);
-
-        bool valid = status switch
-        {
-            TreeStatus.Available => woodRemaining > 0 && depletedAtTick is null,
-            TreeStatus.Depleted => woodRemaining == 0 && depletedAtTick is not null,
-            _ => false,
-        };
-
-        if (!valid)
-        {
-            throw new ArgumentException(
-                $"Estado de árbol incoherente: Status={status}, WoodRemaining={woodRemaining}, DepletedAtTick={depletedAtTick?.ToString() ?? "null"}.");
-        }
-
-        TreeId = treeId;
-        WoodRemaining = woodRemaining;
-        Status = status;
-        DepletedAtTick = depletedAtTick;
+      throw new ArgumentException("El árbol debe tener un EntityId válido.", nameof(treeId));
     }
 
-    public EntityId TreeId { get; }
+    ArgumentOutOfRangeException.ThrowIfNegative(woodRemaining);
 
-    public int WoodRemaining { get; }
+    bool valid = status switch
+    {
+      TreeStatus.Available => woodRemaining > 0 && depletedAtTick is null,
+      TreeStatus.Depleted => woodRemaining == 0 && depletedAtTick is not null,
+      _ => false,
+    };
 
-    public TreeStatus Status { get; }
+    if (!valid)
+    {
+      throw new ArgumentException(
+          $"Estado de árbol incoherente: Status={status}, WoodRemaining={woodRemaining}, DepletedAtTick={depletedAtTick?.ToString() ?? "null"}.");
+    }
 
-    /// <summary>Tick en que se agotó; base para calcular la regeneración (contrato 01 §4).</summary>
-    public TickId? DepletedAtTick { get; }
+    TreeId = treeId;
+    WoodRemaining = woodRemaining;
+    Status = status;
+    DepletedAtTick = depletedAtTick;
+  }
 
-    public static TreeEconomyState Available(EntityId treeId, int woodRemaining) =>
-        new(treeId, woodRemaining, TreeStatus.Available, null);
+  public EntityId TreeId { get; }
 
-    public static TreeEconomyState Depleted(EntityId treeId, TickId depletedAtTick) =>
-        new(treeId, 0, TreeStatus.Depleted, depletedAtTick);
+  public int WoodRemaining { get; }
+
+  public TreeStatus Status { get; }
+
+  /// <summary>Tick en que se agotó; base para calcular la regeneración (contrato 01 §4).</summary>
+  public TickId? DepletedAtTick { get; }
+
+  public static TreeEconomyState Available(EntityId treeId, int woodRemaining) =>
+      new(treeId, woodRemaining, TreeStatus.Available, null);
+
+  public static TreeEconomyState Depleted(EntityId treeId, TickId depletedAtTick) =>
+      new(treeId, 0, TreeStatus.Depleted, depletedAtTick);
 }

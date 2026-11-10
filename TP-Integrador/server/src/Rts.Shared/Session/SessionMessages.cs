@@ -19,11 +19,11 @@ public sealed record PlayerAssigned(SessionId Session, PlayerId Player) : ISessi
 /// <summary>Motivo de cancelación de un intento de inicio (DECIDIDO D-057).</summary>
 public enum StartAbortReason
 {
-    /// <summary>El rival se desconectó durante Starting.</summary>
-    OpponentLeft = 1,
+  /// <summary>El rival se desconectó durante Starting.</summary>
+  OpponentLeft = 1,
 
-    /// <summary>Venció <c>ReadyTimeout</c> y el rival no confirmó.</summary>
-    ReadyTimeout = 2,
+  /// <summary>Venció <c>ReadyTimeout</c> y el rival no confirmó.</summary>
+  ReadyTimeout = 2,
 }
 
 /// <summary>

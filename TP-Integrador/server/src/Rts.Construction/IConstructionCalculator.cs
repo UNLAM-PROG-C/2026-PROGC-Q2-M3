@@ -12,5 +12,5 @@ namespace Rts.Construction;
 /// </summary>
 public interface IConstructionCalculator
 {
-    ConstructionTickResult CalculateTick(ConstructionTickInput input);
+  ConstructionTickResult CalculateTick(ConstructionTickInput input);
 }

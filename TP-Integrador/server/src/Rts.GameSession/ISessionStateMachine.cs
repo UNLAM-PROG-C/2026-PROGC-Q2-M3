@@ -11,12 +11,12 @@ namespace Rts.GameSession;
 /// </summary>
 public interface ISessionStateMachine
 {
-    /// <summary>Estado inicial: WaitingForPlayers, sin plazas.</summary>
-    GameSessionState CreateInitial(SessionId session);
+  /// <summary>Estado inicial: WaitingForPlayers, sin plazas.</summary>
+  GameSessionState CreateInitial(SessionId session);
 
-    /// <summary>
-    /// Aplica un evento. Nunca lanza por eventos inesperados (tardíos, duplicados o de conexiones desconocidas): los ignora o
-    /// responde con <c>SessionRequestRejected</c>. Lanza solo si recibe un estado o evento nulo.
-    /// </summary>
-    SessionTransition Apply(GameSessionState state, SessionEvent sessionEvent);
+  /// <summary>
+  /// Aplica un evento. Nunca lanza por eventos inesperados (tardíos, duplicados o de conexiones desconocidas): los ignora o
+  /// responde con <c>SessionRequestRejected</c>. Lanza solo si recibe un estado o evento nulo.
+  /// </summary>
+  SessionTransition Apply(GameSessionState state, SessionEvent sessionEvent);
 }

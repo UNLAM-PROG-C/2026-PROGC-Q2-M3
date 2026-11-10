@@ -10,21 +10,21 @@ namespace Rts.Shared.Commands;
 /// </summary>
 public sealed record TrainUnitCommand : IGameCommand
 {
-    public TrainUnitCommand(EntityId producerId, UnitType unitType)
+  public TrainUnitCommand(EntityId producerId, UnitType unitType)
+  {
+    CommandGuards.EnsureEntity(producerId, nameof(producerId));
+    if (!Enum.IsDefined(unitType))
     {
-        CommandGuards.EnsureEntity(producerId, nameof(producerId));
-        if (!Enum.IsDefined(unitType))
-        {
-            throw new ArgumentException($"Tipo de unidad inválido: {unitType}.", nameof(unitType));
-        }
-
-        ProducerId = producerId;
-        UnitType = unitType;
+      throw new ArgumentException($"Tipo de unidad inválido: {unitType}.", nameof(unitType));
     }
 
-    public CommandType Type => CommandType.TrainUnit;
+    ProducerId = producerId;
+    UnitType = unitType;
+  }
 
-    public EntityId ProducerId { get; }
+  public CommandType Type => CommandType.TrainUnit;
 
-    public UnitType UnitType { get; }
+  public EntityId ProducerId { get; }
+
+  public UnitType UnitType { get; }
 }

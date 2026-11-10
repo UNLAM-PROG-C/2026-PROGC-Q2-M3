@@ -15,54 +15,54 @@ namespace Rts.Construction.Model;
 /// </summary>
 public sealed class OccupancyView
 {
-    private readonly FrozenSet<GridCell> _structures;
-    private readonly FrozenSet<GridCell> _trees;
-    private readonly FrozenSet<GridCell> _units;
+  private readonly FrozenSet<GridCell> _structures;
+  private readonly FrozenSet<GridCell> _trees;
+  private readonly FrozenSet<GridCell> _units;
 
-    public OccupancyView(
-        GridSpec grid,
-        IEnumerable<GridCell> structureCells,
-        IEnumerable<GridCell> treeReservedCells,
-        IEnumerable<GridCell> unitCells)
+  public OccupancyView(
+      GridSpec grid,
+      IEnumerable<GridCell> structureCells,
+      IEnumerable<GridCell> treeReservedCells,
+      IEnumerable<GridCell> unitCells)
+  {
+    ArgumentNullException.ThrowIfNull(grid);
+    Grid = grid;
+    _structures = ToInsideSet(grid, structureCells, nameof(structureCells));
+    _trees = ToInsideSet(grid, treeReservedCells, nameof(treeReservedCells));
+    _units = ToInsideSet(grid, unitCells, nameof(unitCells));
+  }
+
+  public GridSpec Grid { get; }
+
+  public IReadOnlySet<GridCell> StructureCells => _structures;
+
+  public IReadOnlySet<GridCell> TreeReservedCells => _trees;
+
+  public IReadOnlySet<GridCell> UnitCells => _units;
+
+  /// <summary>Copia con una huella agregada como estructura (tras confirmar una colocación dentro del mismo lote).</summary>
+  public OccupancyView WithStructure(Footprint footprint)
+  {
+    if (!Grid.Contains(footprint))
     {
-        ArgumentNullException.ThrowIfNull(grid);
-        Grid = grid;
-        _structures = ToInsideSet(grid, structureCells, nameof(structureCells));
-        _trees = ToInsideSet(grid, treeReservedCells, nameof(treeReservedCells));
-        _units = ToInsideSet(grid, unitCells, nameof(unitCells));
+      throw new ArgumentException("La huella debe estar dentro del mapa.", nameof(footprint));
     }
 
-    public GridSpec Grid { get; }
+    return new OccupancyView(Grid, _structures.Concat(footprint.Cells()), _trees, _units);
+  }
 
-    public IReadOnlySet<GridCell> StructureCells => _structures;
-
-    public IReadOnlySet<GridCell> TreeReservedCells => _trees;
-
-    public IReadOnlySet<GridCell> UnitCells => _units;
-
-    /// <summary>Copia con una huella agregada como estructura (tras confirmar una colocación dentro del mismo lote).</summary>
-    public OccupancyView WithStructure(Footprint footprint)
+  private static FrozenSet<GridCell> ToInsideSet(GridSpec grid, IEnumerable<GridCell> cells, string paramName)
+  {
+    ArgumentNullException.ThrowIfNull(cells, paramName);
+    FrozenSet<GridCell> set = cells.ToFrozenSet();
+    foreach (GridCell cell in set)
     {
-        if (!Grid.Contains(footprint))
-        {
-            throw new ArgumentException("La huella debe estar dentro del mapa.", nameof(footprint));
-        }
-
-        return new OccupancyView(Grid, _structures.Concat(footprint.Cells()), _trees, _units);
+      if (!grid.Contains(cell))
+      {
+        throw new ArgumentException($"Celda fuera del mapa: {cell}.", paramName);
+      }
     }
 
-    private static FrozenSet<GridCell> ToInsideSet(GridSpec grid, IEnumerable<GridCell> cells, string paramName)
-    {
-        ArgumentNullException.ThrowIfNull(cells, paramName);
-        FrozenSet<GridCell> set = cells.ToFrozenSet();
-        foreach (GridCell cell in set)
-        {
-            if (!grid.Contains(cell))
-            {
-                throw new ArgumentException($"Celda fuera del mapa: {cell}.", paramName);
-            }
-        }
-
-        return set;
-    }
+    return set;
+  }
 }

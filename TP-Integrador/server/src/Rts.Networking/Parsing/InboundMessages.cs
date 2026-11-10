@@ -21,16 +21,16 @@ public sealed record GameplayMessage(ClientCommandId ClientCommandId, IGameComma
 /// <summary>Clase de resultado de <see cref="IInboundMessageParser.Parse"/>.</summary>
 public enum ParseOutcome
 {
-    /// <summary>Mensaje válido en <see cref="ParseResult.Message"/>.</summary>
-    Parsed = 1,
+  /// <summary>Mensaje válido en <see cref="ParseResult.Message"/>.</summary>
+  Parsed = 1,
 
-    /// <summary>Mensaje inválido (UTF-8, JSON, sobre, versión, tipo, messageId o payload no gameplay): <c>ProtocolError</c>.</summary>
-    ProtocolViolation = 2,
+  /// <summary>Mensaje inválido (UTF-8, JSON, sobre, versión, tipo, messageId o payload no gameplay): <c>ProtocolError</c>.</summary>
+  ProtocolViolation = 2,
 
-    /// <summary>
-    /// Gameplay con <c>messageId</c> válido pero payload con estructura inválida: <c>CommandRejected(Common.InvalidCommand)</c> (D-075).
-    /// </summary>
-    InvalidCommand = 3,
+  /// <summary>
+  /// Gameplay con <c>messageId</c> válido pero payload con estructura inválida: <c>CommandRejected(Common.InvalidCommand)</c> (D-075).
+  /// </summary>
+  InvalidCommand = 3,
 }
 
 /// <summary>
@@ -39,62 +39,62 @@ public enum ParseOutcome
 /// </summary>
 public sealed record ParseResult
 {
-    private ParseResult(ParseOutcome outcome, InboundMessage? message, ErrorCode? error, long? messageId, ClientCommandId? clientCommandId, string? detail)
+  private ParseResult(ParseOutcome outcome, InboundMessage? message, ErrorCode? error, long? messageId, ClientCommandId? clientCommandId, string? detail)
+  {
+    Outcome = outcome;
+    Message = message;
+    Error = error;
+    MessageId = messageId;
+    ClientCommandId = clientCommandId;
+    Detail = detail;
+  }
+
+  public ParseOutcome Outcome { get; }
+
+  public InboundMessage? Message { get; }
+
+  public ErrorCode? Error { get; }
+
+  /// <summary><c>messageId</c> del sobre, si se pudo leer; se devuelve en el <c>ProtocolError</c> para correlación.</summary>
+  public long? MessageId { get; }
+
+  public ClientCommandId? ClientCommandId { get; }
+
+  /// <summary>Explicación breve para el cliente y los logs.</summary>
+  public string? Detail { get; }
+
+  /// <summary>El mensaje cuenta como falta.</summary>
+  public bool IsViolation => Outcome != ParseOutcome.Parsed;
+
+  public static ParseResult Parsed(InboundMessage message)
+  {
+    ArgumentNullException.ThrowIfNull(message);
+    return new ParseResult(ParseOutcome.Parsed, message, null, null, null, null);
+  }
+
+  public static ParseResult Violation(ErrorCode error, long? messageId, string detail)
+  {
+    RequireError(error);
+    return new ParseResult(ParseOutcome.ProtocolViolation, null, error, messageId, null, detail);
+  }
+
+  public static ParseResult InvalidCommand(ClientCommandId clientCommandId, string detail)
+  {
+    if (!clientCommandId.IsInValidRange)
     {
-        Outcome = outcome;
-        Message = message;
-        Error = error;
-        MessageId = messageId;
-        ClientCommandId = clientCommandId;
-        Detail = detail;
+      throw new ArgumentException($"ClientCommandId fuera de rango: {clientCommandId}.", nameof(clientCommandId));
     }
 
-    public ParseOutcome Outcome { get; }
+    return new ParseResult(ParseOutcome.InvalidCommand, null, CommonErrors.InvalidCommand, clientCommandId.Value, clientCommandId, detail);
+  }
 
-    public InboundMessage? Message { get; }
-
-    public ErrorCode? Error { get; }
-
-    /// <summary><c>messageId</c> del sobre, si se pudo leer; se devuelve en el <c>ProtocolError</c> para correlación.</summary>
-    public long? MessageId { get; }
-
-    public ClientCommandId? ClientCommandId { get; }
-
-    /// <summary>Explicación breve para el cliente y los logs.</summary>
-    public string? Detail { get; }
-
-    /// <summary>El mensaje cuenta como falta.</summary>
-    public bool IsViolation => Outcome != ParseOutcome.Parsed;
-
-    public static ParseResult Parsed(InboundMessage message)
+  private static void RequireError(ErrorCode error)
+  {
+    if (error.IsDefault)
     {
-        ArgumentNullException.ThrowIfNull(message);
-        return new ParseResult(ParseOutcome.Parsed, message, null, null, null, null);
+      throw new ArgumentException("Se requiere un código de error.", nameof(error));
     }
-
-    public static ParseResult Violation(ErrorCode error, long? messageId, string detail)
-    {
-        RequireError(error);
-        return new ParseResult(ParseOutcome.ProtocolViolation, null, error, messageId, null, detail);
-    }
-
-    public static ParseResult InvalidCommand(ClientCommandId clientCommandId, string detail)
-    {
-        if (!clientCommandId.IsInValidRange)
-        {
-            throw new ArgumentException($"ClientCommandId fuera de rango: {clientCommandId}.", nameof(clientCommandId));
-        }
-
-        return new ParseResult(ParseOutcome.InvalidCommand, null, CommonErrors.InvalidCommand, clientCommandId.Value, clientCommandId, detail);
-    }
-
-    private static void RequireError(ErrorCode error)
-    {
-        if (error.IsDefault)
-        {
-            throw new ArgumentException("Se requiere un código de error.", nameof(error));
-        }
-    }
+  }
 }
 
 /// <summary>
@@ -104,5 +104,5 @@ public sealed record ParseResult
 /// </summary>
 public interface IInboundMessageParser
 {
-    ParseResult Parse(ReadOnlySpan<byte> frame);
+  ParseResult Parse(ReadOnlySpan<byte> frame);
 }

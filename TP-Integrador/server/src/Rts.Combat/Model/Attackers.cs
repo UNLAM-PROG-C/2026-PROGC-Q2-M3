@@ -12,33 +12,33 @@ namespace Rts.Combat.Model;
 /// </summary>
 public sealed record SoldierAttacker
 {
-    public SoldierAttacker(EntityId soldierId, EntityId targetId, TickId readyAtTick)
+  public SoldierAttacker(EntityId soldierId, EntityId targetId, TickId readyAtTick)
+  {
+    if (soldierId.IsNone)
     {
-        if (soldierId.IsNone)
-        {
-            throw new ArgumentException("El soldado debe tener un EntityId válido.", nameof(soldierId));
-        }
-
-        if (targetId.IsNone)
-        {
-            throw new ArgumentException("La orden Attack debe tener un objetivo.", nameof(targetId));
-        }
-
-        if (soldierId == targetId)
-        {
-            throw new ArgumentException("Un soldado no puede atacarse a sí mismo.", nameof(targetId));
-        }
-
-        SoldierId = soldierId;
-        TargetId = targetId;
-        ReadyAtTick = readyAtTick;
+      throw new ArgumentException("El soldado debe tener un EntityId válido.", nameof(soldierId));
     }
 
-    public EntityId SoldierId { get; }
+    if (targetId.IsNone)
+    {
+      throw new ArgumentException("La orden Attack debe tener un objetivo.", nameof(targetId));
+    }
 
-    public EntityId TargetId { get; }
+    if (soldierId == targetId)
+    {
+      throw new ArgumentException("Un soldado no puede atacarse a sí mismo.", nameof(targetId));
+    }
 
-    public TickId ReadyAtTick { get; }
+    SoldierId = soldierId;
+    TargetId = targetId;
+    ReadyAtTick = readyAtTick;
+  }
+
+  public EntityId SoldierId { get; }
+
+  public EntityId TargetId { get; }
+
+  public TickId ReadyAtTick { get; }
 }
 
 /// <summary>
@@ -47,18 +47,18 @@ public sealed record SoldierAttacker
 /// </summary>
 public sealed record TowerAttacker
 {
-    public TowerAttacker(EntityId towerId, TickId readyAtTick)
+  public TowerAttacker(EntityId towerId, TickId readyAtTick)
+  {
+    if (towerId.IsNone)
     {
-        if (towerId.IsNone)
-        {
-            throw new ArgumentException("La torre debe tener un EntityId válido.", nameof(towerId));
-        }
-
-        TowerId = towerId;
-        ReadyAtTick = readyAtTick;
+      throw new ArgumentException("La torre debe tener un EntityId válido.", nameof(towerId));
     }
 
-    public EntityId TowerId { get; }
+    TowerId = towerId;
+    ReadyAtTick = readyAtTick;
+  }
 
-    public TickId ReadyAtTick { get; }
+  public EntityId TowerId { get; }
+
+  public TickId ReadyAtTick { get; }
 }

@@ -16,39 +16,39 @@ namespace Rts.Movement.Contracts;
 /// </summary>
 public sealed record MovementTickInput
 {
-    public MovementTickInput(
-        TickId tick,
-        NavigationGrid map,
-        EquatableArray<UnitMovementState> units,
-        EquatableArray<MovementTarget> targets)
+  public MovementTickInput(
+      TickId tick,
+      NavigationGrid map,
+      EquatableArray<UnitMovementState> units,
+      EquatableArray<MovementTarget> targets)
+  {
+    ArgumentNullException.ThrowIfNull(map);
+    EnsureUnique(units.Select(u => u?.UnitId ?? throw new ArgumentNullException(nameof(units))), nameof(units));
+    EnsureUnique(targets.Select(t => t?.Id ?? throw new ArgumentNullException(nameof(targets))), nameof(targets));
+
+    Tick = tick;
+    Map = map;
+    Units = units;
+    Targets = targets;
+  }
+
+  public TickId Tick { get; }
+
+  public NavigationGrid Map { get; }
+
+  public EquatableArray<UnitMovementState> Units { get; }
+
+  public EquatableArray<MovementTarget> Targets { get; }
+
+  private static void EnsureUnique(IEnumerable<EntityId> ids, string paramName)
+  {
+    var seen = new HashSet<EntityId>();
+    foreach (EntityId id in ids)
     {
-        ArgumentNullException.ThrowIfNull(map);
-        EnsureUnique(units.Select(u => u?.UnitId ?? throw new ArgumentNullException(nameof(units))), nameof(units));
-        EnsureUnique(targets.Select(t => t?.Id ?? throw new ArgumentNullException(nameof(targets))), nameof(targets));
-
-        Tick = tick;
-        Map = map;
-        Units = units;
-        Targets = targets;
+      if (!seen.Add(id))
+      {
+        throw new ArgumentException($"ID duplicado en la entrada: {id}.", paramName);
+      }
     }
-
-    public TickId Tick { get; }
-
-    public NavigationGrid Map { get; }
-
-    public EquatableArray<UnitMovementState> Units { get; }
-
-    public EquatableArray<MovementTarget> Targets { get; }
-
-    private static void EnsureUnique(IEnumerable<EntityId> ids, string paramName)
-    {
-        var seen = new HashSet<EntityId>();
-        foreach (EntityId id in ids)
-        {
-            if (!seen.Add(id))
-            {
-                throw new ArgumentException($"ID duplicado en la entrada: {id}.", paramName);
-            }
-        }
-    }
+  }
 }

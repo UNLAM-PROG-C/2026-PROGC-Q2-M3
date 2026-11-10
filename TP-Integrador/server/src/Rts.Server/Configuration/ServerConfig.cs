@@ -16,25 +16,25 @@ namespace Rts.Server.Configuration;
 /// </summary>
 public sealed record ServerConfig
 {
-    /// <summary>Ruta del archivo de mapa. Relativa al archivo de configuración; el cargador la deja absoluta.</summary>
-    public required string MapFile { get; init; }
+  /// <summary>Ruta del archivo de mapa. Relativa al archivo de configuración; el cargador la deja absoluta.</summary>
+  public required string MapFile { get; init; }
 
-    public required SimulationConfig Simulation { get; init; }
+  public required SimulationConfig Simulation { get; init; }
 
-    public required EconomyConfig Economy { get; init; }
+  public required EconomyConfig Economy { get; init; }
 
-    public required CombatConfig Combat { get; init; }
+  public required CombatConfig Combat { get; init; }
 
-    public required MovementConfig Movement { get; init; }
+  public required MovementConfig Movement { get; init; }
 
-    public required ConstructionConfig Construction { get; init; }
+  public required ConstructionConfig Construction { get; init; }
 
-    public required ProductionConfig Production { get; init; }
+  public required ProductionConfig Production { get; init; }
 
-    public required GameSessionConfig GameSession { get; init; }
+  public required GameSessionConfig GameSession { get; init; }
 
-    /// <summary>Opcional: sus valores por defecto son los aprobados (10 Hz).</summary>
-    public StateSyncConfig StateSync { get; init; } = new();
+  /// <summary>Opcional: sus valores por defecto son los aprobados (10 Hz).</summary>
+  public StateSyncConfig StateSync { get; init; } = new();
 
-    public required NetworkingConfig Networking { get; init; }
+  public required NetworkingConfig Networking { get; init; }
 }

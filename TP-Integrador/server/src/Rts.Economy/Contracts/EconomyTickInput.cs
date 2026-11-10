@@ -17,62 +17,62 @@ namespace Rts.Economy.Contracts;
 /// </summary>
 public sealed record EconomyTickInput
 {
-    public EconomyTickInput(
-        TickId tick,
-        EquatableArray<GathererState> gatherers,
-        EquatableArray<TreeEconomyState> trees,
-        EquatableArray<FarmEconomyState> farms)
+  public EconomyTickInput(
+      TickId tick,
+      EquatableArray<GathererState> gatherers,
+      EquatableArray<TreeEconomyState> trees,
+      EquatableArray<FarmEconomyState> farms)
+  {
+    EnsureNoNulls(gatherers, nameof(gatherers));
+    EnsureNoNulls(trees, nameof(trees));
+    EnsureNoNulls(farms, nameof(farms));
+    EnsureUnique(gatherers.Select(g => g.WorkerId), nameof(gatherers));
+    EnsureUnique(trees.Select(t => t.TreeId), nameof(trees));
+    EnsureUnique(farms.Select(f => f.FarmId), nameof(farms));
+
+    var treeIds = trees.Select(t => t.TreeId).ToHashSet();
+    foreach (GathererState gatherer in gatherers)
     {
-        EnsureNoNulls(gatherers, nameof(gatherers));
-        EnsureNoNulls(trees, nameof(trees));
-        EnsureNoNulls(farms, nameof(farms));
-        EnsureUnique(gatherers.Select(g => g.WorkerId), nameof(gatherers));
-        EnsureUnique(trees.Select(t => t.TreeId), nameof(trees));
-        EnsureUnique(farms.Select(f => f.FarmId), nameof(farms));
-
-        var treeIds = trees.Select(t => t.TreeId).ToHashSet();
-        foreach (GathererState gatherer in gatherers)
-        {
-            if (!treeIds.Contains(gatherer.TreeId))
-            {
-                throw new ArgumentException(
-                    $"El recolector {gatherer.WorkerId} apunta al árbol {gatherer.TreeId}, que no está en la entrada.",
-                    nameof(gatherers));
-            }
-        }
-
-        Tick = tick;
-        Gatherers = gatherers;
-        Trees = trees;
-        Farms = farms;
+      if (!treeIds.Contains(gatherer.TreeId))
+      {
+        throw new ArgumentException(
+            $"El recolector {gatherer.WorkerId} apunta al árbol {gatherer.TreeId}, que no está en la entrada.",
+            nameof(gatherers));
+      }
     }
 
-    public TickId Tick { get; }
+    Tick = tick;
+    Gatherers = gatherers;
+    Trees = trees;
+    Farms = farms;
+  }
 
-    public EquatableArray<GathererState> Gatherers { get; }
+  public TickId Tick { get; }
 
-    public EquatableArray<TreeEconomyState> Trees { get; }
+  public EquatableArray<GathererState> Gatherers { get; }
 
-    public EquatableArray<FarmEconomyState> Farms { get; }
+  public EquatableArray<TreeEconomyState> Trees { get; }
 
-    private static void EnsureNoNulls<T>(EquatableArray<T> items, string paramName)
-        where T : class
+  public EquatableArray<FarmEconomyState> Farms { get; }
+
+  private static void EnsureNoNulls<T>(EquatableArray<T> items, string paramName)
+      where T : class
+  {
+    foreach (T item in items)
     {
-        foreach (T item in items)
-        {
-            ArgumentNullException.ThrowIfNull(item, paramName);
-        }
+      ArgumentNullException.ThrowIfNull(item, paramName);
     }
+  }
 
-    private static void EnsureUnique(IEnumerable<EntityId> ids, string paramName)
+  private static void EnsureUnique(IEnumerable<EntityId> ids, string paramName)
+  {
+    var seen = new HashSet<EntityId>();
+    foreach (EntityId id in ids)
     {
-        var seen = new HashSet<EntityId>();
-        foreach (EntityId id in ids)
-        {
-            if (!seen.Add(id))
-            {
-                throw new ArgumentException($"ID duplicado en la entrada: {id}.", paramName);
-            }
-        }
+      if (!seen.Add(id))
+      {
+        throw new ArgumentException($"ID duplicado en la entrada: {id}.", paramName);
+      }
     }
+  }
 }

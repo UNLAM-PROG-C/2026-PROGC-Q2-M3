@@ -16,6 +16,6 @@ namespace Rts.Protocol;
 /// </summary>
 public sealed record NetworkEnvelope(int ProtocolVersion, string Type, long? MessageId, JsonElement? Payload)
 {
-    /// <summary>Versión inicial del protocolo. El valor vigente es configurable en Networking (08 §10).</summary>
-    public const int InitialVersion = 1;
+  /// <summary>Versión inicial del protocolo. El valor vigente es configurable en Networking (08 §10).</summary>
+  public const int InitialVersion = 1;
 }

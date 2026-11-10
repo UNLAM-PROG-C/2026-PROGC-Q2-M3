@@ -11,43 +11,43 @@ namespace Rts.Production.Model;
 /// </summary>
 public sealed class SpawnView
 {
-    private readonly FrozenSet<GridCell> _structures;
-    private readonly FrozenSet<GridCell> _trees;
-    private readonly FrozenSet<GridCell> _units;
+  private readonly FrozenSet<GridCell> _structures;
+  private readonly FrozenSet<GridCell> _trees;
+  private readonly FrozenSet<GridCell> _units;
 
-    public SpawnView(
-        GridSpec grid,
-        IEnumerable<GridCell> structureCells,
-        IEnumerable<GridCell> treeReservedCells,
-        IEnumerable<GridCell> unitCells)
+  public SpawnView(
+      GridSpec grid,
+      IEnumerable<GridCell> structureCells,
+      IEnumerable<GridCell> treeReservedCells,
+      IEnumerable<GridCell> unitCells)
+  {
+    ArgumentNullException.ThrowIfNull(grid);
+    Grid = grid;
+    _structures = ToInsideSet(grid, structureCells, nameof(structureCells));
+    _trees = ToInsideSet(grid, treeReservedCells, nameof(treeReservedCells));
+    _units = ToInsideSet(grid, unitCells, nameof(unitCells));
+  }
+
+  public GridSpec Grid { get; }
+
+  public IReadOnlySet<GridCell> StructureCells => _structures;
+
+  public IReadOnlySet<GridCell> TreeReservedCells => _trees;
+
+  public IReadOnlySet<GridCell> UnitCells => _units;
+
+  private static FrozenSet<GridCell> ToInsideSet(GridSpec grid, IEnumerable<GridCell> cells, string paramName)
+  {
+    ArgumentNullException.ThrowIfNull(cells, paramName);
+    FrozenSet<GridCell> set = cells.ToFrozenSet();
+    foreach (GridCell cell in set)
     {
-        ArgumentNullException.ThrowIfNull(grid);
-        Grid = grid;
-        _structures = ToInsideSet(grid, structureCells, nameof(structureCells));
-        _trees = ToInsideSet(grid, treeReservedCells, nameof(treeReservedCells));
-        _units = ToInsideSet(grid, unitCells, nameof(unitCells));
+      if (!grid.Contains(cell))
+      {
+        throw new ArgumentException($"Celda fuera del mapa: {cell}.", paramName);
+      }
     }
 
-    public GridSpec Grid { get; }
-
-    public IReadOnlySet<GridCell> StructureCells => _structures;
-
-    public IReadOnlySet<GridCell> TreeReservedCells => _trees;
-
-    public IReadOnlySet<GridCell> UnitCells => _units;
-
-    private static FrozenSet<GridCell> ToInsideSet(GridSpec grid, IEnumerable<GridCell> cells, string paramName)
-    {
-        ArgumentNullException.ThrowIfNull(cells, paramName);
-        FrozenSet<GridCell> set = cells.ToFrozenSet();
-        foreach (GridCell cell in set)
-        {
-            if (!grid.Contains(cell))
-            {
-                throw new ArgumentException($"Celda fuera del mapa: {cell}.", paramName);
-            }
-        }
-
-        return set;
-    }
+    return set;
+  }
 }

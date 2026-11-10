@@ -6,5 +6,5 @@ namespace Rts.Shared.Ids;
 /// </summary>
 public readonly record struct ConnectionId(long Value)
 {
-    public override string ToString() => $"Conn{Value}";
+  public override string ToString() => $"Conn{Value}";
 }

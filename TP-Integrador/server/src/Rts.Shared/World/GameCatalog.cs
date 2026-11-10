@@ -14,55 +14,55 @@ namespace Rts.Shared.World;
 /// </summary>
 public sealed record GameCatalog
 {
-    public GameCatalog(
-        TickRate tickRate,
-        EquatableArray<UnitCatalogEntry> units,
-        EquatableArray<BuildingCatalogEntry> buildings,
-        ResourceAmount farmRepairCost,
-        int farmRepairWorkRequired,
-        double gatherRange,
-        double buildRange)
+  public GameCatalog(
+      TickRate tickRate,
+      EquatableArray<UnitCatalogEntry> units,
+      EquatableArray<BuildingCatalogEntry> buildings,
+      ResourceAmount farmRepairCost,
+      int farmRepairWorkRequired,
+      double gatherRange,
+      double buildRange)
+  {
+    ArgumentNullException.ThrowIfNull(tickRate);
+    RequireExactlyOnce(units.Select(u => u.UnitType), nameof(units));
+    RequireExactlyOnce(buildings.Select(b => b.BuildingType), nameof(buildings));
+    ArgumentOutOfRangeException.ThrowIfNegativeOrZero(farmRepairWorkRequired);
+    ArgumentOutOfRangeException.ThrowIfNegativeOrZero(gatherRange);
+    ArgumentOutOfRangeException.ThrowIfNegativeOrZero(buildRange);
+
+    TickRate = tickRate;
+    Units = units;
+    Buildings = buildings;
+    FarmRepairCost = farmRepairCost;
+    FarmRepairWorkRequired = farmRepairWorkRequired;
+    GatherRange = gatherRange;
+    BuildRange = buildRange;
+  }
+
+  /// <summary>Frecuencia de Simulation: Godot la usa para convertir <c>RemainingTicks</c> en tiempo.</summary>
+  public TickRate TickRate { get; }
+
+  public EquatableArray<UnitCatalogEntry> Units { get; }
+
+  public EquatableArray<BuildingCatalogEntry> Buildings { get; }
+
+  public ResourceAmount FarmRepairCost { get; }
+
+  public int FarmRepairWorkRequired { get; }
+
+  public double GatherRange { get; }
+
+  public double BuildRange { get; }
+
+  private static void RequireExactlyOnce<T>(IEnumerable<T> present, string parameter)
+      where T : struct, Enum
+  {
+    T[] values = present.ToArray();
+    if (values.Length != Enum.GetValues<T>().Length || values.Distinct().Count() != values.Length || values.Any(v => !Enum.IsDefined(v)))
     {
-        ArgumentNullException.ThrowIfNull(tickRate);
-        RequireExactlyOnce(units.Select(u => u.UnitType), nameof(units));
-        RequireExactlyOnce(buildings.Select(b => b.BuildingType), nameof(buildings));
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(farmRepairWorkRequired);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(gatherRange);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(buildRange);
-
-        TickRate = tickRate;
-        Units = units;
-        Buildings = buildings;
-        FarmRepairCost = farmRepairCost;
-        FarmRepairWorkRequired = farmRepairWorkRequired;
-        GatherRange = gatherRange;
-        BuildRange = buildRange;
+      throw new ArgumentException($"Se requiere exactamente una entrada por cada {typeof(T).Name}.", parameter);
     }
-
-    /// <summary>Frecuencia de Simulation: Godot la usa para convertir <c>RemainingTicks</c> en tiempo.</summary>
-    public TickRate TickRate { get; }
-
-    public EquatableArray<UnitCatalogEntry> Units { get; }
-
-    public EquatableArray<BuildingCatalogEntry> Buildings { get; }
-
-    public ResourceAmount FarmRepairCost { get; }
-
-    public int FarmRepairWorkRequired { get; }
-
-    public double GatherRange { get; }
-
-    public double BuildRange { get; }
-
-    private static void RequireExactlyOnce<T>(IEnumerable<T> present, string parameter)
-        where T : struct, Enum
-    {
-        T[] values = present.ToArray();
-        if (values.Length != Enum.GetValues<T>().Length || values.Distinct().Count() != values.Length || values.Any(v => !Enum.IsDefined(v)))
-        {
-            throw new ArgumentException($"Se requiere exactamente una entrada por cada {typeof(T).Name}.", parameter);
-        }
-    }
+  }
 }
 
 /// <summary>Valores de un tipo de unidad. <see cref="Attack"/> solo si la unidad ataca (el soldado).</summary>

@@ -16,84 +16,84 @@ namespace Rts.Simulation.State;
 /// </summary>
 public sealed record UnitEntity
 {
-    public UnitEntity(
-        EntityId id,
-        PlayerId owner,
-        UnitType type,
-        PositionXZ position,
-        int hp,
-        MovementOrder order,
-        EquatableArray<PositionXZ> route,
-        MapRevision routeMapRevision,
-        TickId? repathPendingSinceTick,
-        TickId? lastPursuitRepathTick,
-        int gatherTicksAccumulated,
-        TickId readyAtTick)
+  public UnitEntity(
+      EntityId id,
+      PlayerId owner,
+      UnitType type,
+      PositionXZ position,
+      int hp,
+      MovementOrder order,
+      EquatableArray<PositionXZ> route,
+      MapRevision routeMapRevision,
+      TickId? repathPendingSinceTick,
+      TickId? lastPursuitRepathTick,
+      int gatherTicksAccumulated,
+      TickId readyAtTick)
+  {
+    if (id.IsNone || !owner.IsValid || !Enum.IsDefined(type))
     {
-        if (id.IsNone || !owner.IsValid || !Enum.IsDefined(type))
-        {
-            throw new ArgumentException("Unidad con ID, dueño o tipo inválido.");
-        }
-
-        if (!position.IsFinite)
-        {
-            throw new ArgumentException("La posición debe ser finita.", nameof(position));
-        }
-
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(hp);
-        ArgumentNullException.ThrowIfNull(order);
-        ArgumentOutOfRangeException.ThrowIfNegative(gatherTicksAccumulated);
-
-        if (!UnitOrderCompatibility.IsAllowed(type, order.Kind))
-        {
-            throw new ArgumentException($"Un {type} no admite la orden {order.Kind}.", nameof(order));
-        }
-
-        if (order.IsIdle && (!route.IsEmpty || repathPendingSinceTick is not null || gatherTicksAccumulated != 0))
-        {
-            throw new ArgumentException("Una unidad Idle no tiene ruta, repath pendiente ni contador de recolección.", nameof(order));
-        }
-
-        if (gatherTicksAccumulated != 0 && order.Kind != UnitOrderKind.GatherWood)
-        {
-            throw new ArgumentException("Solo una orden GatherWood acumula contador de recolección.", nameof(gatherTicksAccumulated));
-        }
-
-        Id = id;
-        Owner = owner;
-        Type = type;
-        Position = position;
-        Hp = hp;
-        Order = order;
-        Route = route;
-        RouteMapRevision = routeMapRevision;
-        RepathPendingSinceTick = repathPendingSinceTick;
-        LastPursuitRepathTick = lastPursuitRepathTick;
-        GatherTicksAccumulated = gatherTicksAccumulated;
-        ReadyAtTick = readyAtTick;
+      throw new ArgumentException("Unidad con ID, dueño o tipo inválido.");
     }
 
-    public EntityId Id { get; }
+    if (!position.IsFinite)
+    {
+      throw new ArgumentException("La posición debe ser finita.", nameof(position));
+    }
 
-    public PlayerId Owner { get; }
+    ArgumentOutOfRangeException.ThrowIfNegativeOrZero(hp);
+    ArgumentNullException.ThrowIfNull(order);
+    ArgumentOutOfRangeException.ThrowIfNegative(gatherTicksAccumulated);
 
-    public UnitType Type { get; }
+    if (!UnitOrderCompatibility.IsAllowed(type, order.Kind))
+    {
+      throw new ArgumentException($"Un {type} no admite la orden {order.Kind}.", nameof(order));
+    }
 
-    public PositionXZ Position { get; }
+    if (order.IsIdle && (!route.IsEmpty || repathPendingSinceTick is not null || gatherTicksAccumulated != 0))
+    {
+      throw new ArgumentException("Una unidad Idle no tiene ruta, repath pendiente ni contador de recolección.", nameof(order));
+    }
 
-    public int Hp { get; }
+    if (gatherTicksAccumulated != 0 && order.Kind != UnitOrderKind.GatherWood)
+    {
+      throw new ArgumentException("Solo una orden GatherWood acumula contador de recolección.", nameof(gatherTicksAccumulated));
+    }
 
-    public MovementOrder Order { get; }
+    Id = id;
+    Owner = owner;
+    Type = type;
+    Position = position;
+    Hp = hp;
+    Order = order;
+    Route = route;
+    RouteMapRevision = routeMapRevision;
+    RepathPendingSinceTick = repathPendingSinceTick;
+    LastPursuitRepathTick = lastPursuitRepathTick;
+    GatherTicksAccumulated = gatherTicksAccumulated;
+    ReadyAtTick = readyAtTick;
+  }
 
-    public EquatableArray<PositionXZ> Route { get; }
+  public EntityId Id { get; }
 
-    public MapRevision RouteMapRevision { get; }
+  public PlayerId Owner { get; }
 
-    public TickId? RepathPendingSinceTick { get; }
+  public UnitType Type { get; }
 
-    public TickId? LastPursuitRepathTick { get; }
+  public PositionXZ Position { get; }
 
-    public int GatherTicksAccumulated { get; }
+  public int Hp { get; }
 
-    public TickId ReadyAtTick { get; }
+  public MovementOrder Order { get; }
+
+  public EquatableArray<PositionXZ> Route { get; }
+
+  public MapRevision RouteMapRevision { get; }
+
+  public TickId? RepathPendingSinceTick { get; }
+
+  public TickId? LastPursuitRepathTick { get; }
+
+  public int GatherTicksAccumulated { get; }
+
+  public TickId ReadyAtTick { get; }
 }

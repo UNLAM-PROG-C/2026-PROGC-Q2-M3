@@ -16,7 +16,7 @@ public sealed record CommandEnvelope(
     ClientCommandId ClientCommandId,
     IGameCommand Command)
 {
-    public IdempotencyKey Key => new(Player, ClientCommandId);
+  public IdempotencyKey Key => new(Player, ClientCommandId);
 
-    public CommandType Type => Command.Type;
+  public CommandType Type => Command.Type;
 }

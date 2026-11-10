@@ -9,9 +9,9 @@ namespace Rts.Shared.Commands;
 /// </summary>
 public sealed record EntityCommandResult(EntityId Entity, ErrorCode? Error)
 {
-    public bool IsAccepted => Error is null;
+  public bool IsAccepted => Error is null;
 
-    public static EntityCommandResult Accepted(EntityId entity) => new(entity, null);
+  public static EntityCommandResult Accepted(EntityId entity) => new(entity, null);
 
-    public static EntityCommandResult Rejected(EntityId entity, ErrorCode error) => new(entity, error);
+  public static EntityCommandResult Rejected(EntityId entity, ErrorCode error) => new(entity, error);
 }

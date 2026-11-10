@@ -12,7 +12,7 @@ namespace Rts.Shared.Commands;
 /// </summary>
 public interface ICommandSink
 {
-    CommandAdmission Admit(PlayerId player, ClientCommandId clientCommandId, IGameCommand command);
+  CommandAdmission Admit(PlayerId player, ClientCommandId clientCommandId, IGameCommand command);
 }
 
 /// <summary>
@@ -21,33 +21,33 @@ public interface ICommandSink
 /// </summary>
 public interface ICommandSource
 {
-    IReadOnlyList<CommandEnvelope> DequeueBatch(int maxCount);
+  IReadOnlyList<CommandEnvelope> DequeueBatch(int maxCount);
 }
 
 /// <summary>Resultado de admitir un comando en la cola global.</summary>
 public sealed record CommandAdmission
 {
-    private CommandAdmission(CommandSequence? sequence, ErrorCode? error)
+  private CommandAdmission(CommandSequence? sequence, ErrorCode? error)
+  {
+    Sequence = sequence;
+    Error = error;
+  }
+
+  public bool IsAdmitted => Error is null;
+
+  public CommandSequence? Sequence { get; }
+
+  public ErrorCode? Error { get; }
+
+  public static CommandAdmission Admitted(CommandSequence sequence) => new(sequence, null);
+
+  public static CommandAdmission Rejected(ErrorCode error)
+  {
+    if (error.IsDefault)
     {
-        Sequence = sequence;
-        Error = error;
+      throw new ArgumentException("El rechazo requiere código de error.", nameof(error));
     }
 
-    public bool IsAdmitted => Error is null;
-
-    public CommandSequence? Sequence { get; }
-
-    public ErrorCode? Error { get; }
-
-    public static CommandAdmission Admitted(CommandSequence sequence) => new(sequence, null);
-
-    public static CommandAdmission Rejected(ErrorCode error)
-    {
-        if (error.IsDefault)
-        {
-            throw new ArgumentException("El rechazo requiere código de error.", nameof(error));
-        }
-
-        return new CommandAdmission(null, error);
-    }
+    return new CommandAdmission(null, error);
+  }
 }

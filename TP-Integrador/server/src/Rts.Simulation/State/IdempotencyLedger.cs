@@ -11,26 +11,26 @@ namespace Rts.Simulation.State;
 /// </summary>
 public sealed class IdempotencyLedger
 {
-    public static readonly IdempotencyLedger Empty = new(ImmutableDictionary<IdempotencyKey, CommandResult>.Empty);
+  public static readonly IdempotencyLedger Empty = new(ImmutableDictionary<IdempotencyKey, CommandResult>.Empty);
 
-    private readonly ImmutableDictionary<IdempotencyKey, CommandResult> _results;
+  private readonly ImmutableDictionary<IdempotencyKey, CommandResult> _results;
 
-    private IdempotencyLedger(ImmutableDictionary<IdempotencyKey, CommandResult> results) => _results = results;
+  private IdempotencyLedger(ImmutableDictionary<IdempotencyKey, CommandResult> results) => _results = results;
 
-    public int Count => _results.Count;
+  public int Count => _results.Count;
 
-    public bool TryGet(IdempotencyKey key, out CommandResult? result) => _results.TryGetValue(key, out result);
+  public bool TryGet(IdempotencyKey key, out CommandResult? result) => _results.TryGetValue(key, out result);
 
-    /// <summary>Devuelve un registro nuevo con el resultado agregado.</summary>
-    /// <exception cref="InvalidOperationException">Si la clave ya estaba registrada: un comando no se procesa dos veces.</exception>
-    public IdempotencyLedger Record(CommandResult result)
+  /// <summary>Devuelve un registro nuevo con el resultado agregado.</summary>
+  /// <exception cref="InvalidOperationException">Si la clave ya estaba registrada: un comando no se procesa dos veces.</exception>
+  public IdempotencyLedger Record(CommandResult result)
+  {
+    ArgumentNullException.ThrowIfNull(result);
+    if (_results.ContainsKey(result.Key))
     {
-        ArgumentNullException.ThrowIfNull(result);
-        if (_results.ContainsKey(result.Key))
-        {
-            throw new InvalidOperationException($"La clave {result.Key} ya tiene resultado; un comando no se procesa dos veces.");
-        }
-
-        return new IdempotencyLedger(_results.Add(result.Key, result));
+      throw new InvalidOperationException($"La clave {result.Key} ya tiene resultado; un comando no se procesa dos veces.");
     }
+
+    return new IdempotencyLedger(_results.Add(result.Key, result));
+  }
 }

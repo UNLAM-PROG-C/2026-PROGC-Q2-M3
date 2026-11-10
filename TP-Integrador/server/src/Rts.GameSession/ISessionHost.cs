@@ -19,11 +19,11 @@ namespace Rts.GameSession;
 /// </summary>
 public interface ISessionInbox : ISessionEventSink, IMatchResultSink
 {
-    /// <summary>Aviso interno del host (timer, detención, inicialización, drenaje, apagado). Nunca se descarta.</summary>
-    void PostInternal(SessionEvent sessionEvent);
+  /// <summary>Aviso interno del host (timer, detención, inicialización, drenaje, apagado). Nunca se descarta.</summary>
+  void PostInternal(SessionEvent sessionEvent);
 
-    /// <summary>Espera el próximo evento. Solo lo llama el consumidor.</summary>
-    ValueTask<SessionEvent> ReadAsync(CancellationToken cancellationToken);
+  /// <summary>Espera el próximo evento. Solo lo llama el consumidor.</summary>
+  ValueTask<SessionEvent> ReadAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -32,10 +32,10 @@ public interface ISessionInbox : ISessionEventSink, IMatchResultSink
 /// </summary>
 public interface ISessionStateStore : ISessionGate
 {
-    GameSessionState Current { get; }
+  GameSessionState Current { get; }
 
-    /// <summary>Publica el estado nuevo después de cada transición. Solo lo llama el consumidor.</summary>
-    void Publish(GameSessionState state);
+  /// <summary>Publica el estado nuevo después de cada transición. Solo lo llama el consumidor.</summary>
+  void Publish(GameSessionState state);
 }
 
 /// <summary>
@@ -52,9 +52,9 @@ public interface ISessionStateStore : ISessionGate
 /// </summary>
 public interface ISessionHost
 {
-    /// <summary>
-    /// Ejecuta la sesión hasta Ended y devuelve el resultado oficial. Cancelar el token equivale a pedir el apagado
-    /// (<see cref="ShutdownRequested"/>, D-084): la sesión termina de forma ordenada, sin cortar en seco.
-    /// </summary>
-    Task<MatchResult> RunAsync(CancellationToken cancellationToken);
+  /// <summary>
+  /// Ejecuta la sesión hasta Ended y devuelve el resultado oficial. Cancelar el token equivale a pedir el apagado
+  /// (<see cref="ShutdownRequested"/>, D-084): la sesión termina de forma ordenada, sin cortar en seco.
+  /// </summary>
+  Task<MatchResult> RunAsync(CancellationToken cancellationToken);
 }

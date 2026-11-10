@@ -12,10 +12,10 @@ namespace Rts.Economy.Calculations;
 /// </summary>
 internal interface IGatheringCalculation
 {
-    GatheringOutcome Calculate(
-        TickId tick,
-        EquatableArray<GathererState> gatherers,
-        EquatableArray<TreeEconomyState> trees);
+  GatheringOutcome Calculate(
+      TickId tick,
+      EquatableArray<GathererState> gatherers,
+      EquatableArray<TreeEconomyState> trees);
 }
 
 /// <summary>Resultado parcial de <see cref="IGatheringCalculation"/>; se consolida en <c>EconomyTickResult</c> en orden fijo.</summary>

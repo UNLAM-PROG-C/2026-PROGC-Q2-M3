@@ -10,7 +10,7 @@ namespace Rts.Combat.Calculations;
 /// </summary>
 internal interface ISoldierCombatCalculation
 {
-    SoldierCombatOutcome Calculate(CombatTickInput input);
+  SoldierCombatOutcome Calculate(CombatTickInput input);
 }
 
 /// <summary>
@@ -19,7 +19,7 @@ internal interface ISoldierCombatCalculation
 /// </summary>
 internal interface ITowerCombatCalculation
 {
-    EquatableArray<AttackPerformed> Calculate(CombatTickInput input);
+  EquatableArray<AttackPerformed> Calculate(CombatTickInput input);
 }
 
 /// <summary>Resultado parcial de los soldados: ataques efectuados y soldados con objetivo inválido.</summary>

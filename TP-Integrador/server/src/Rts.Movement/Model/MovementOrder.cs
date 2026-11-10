@@ -15,58 +15,58 @@ namespace Rts.Movement.Model;
 /// </summary>
 public sealed record MovementOrder
 {
-    public static readonly MovementOrder Idle = new(OrderId.None, UnitOrderKind.Idle, null, null);
+  public static readonly MovementOrder Idle = new(OrderId.None, UnitOrderKind.Idle, null, null);
 
-    private MovementOrder(OrderId orderId, UnitOrderKind kind, PositionXZ? destination, EntityId? targetId)
+  private MovementOrder(OrderId orderId, UnitOrderKind kind, PositionXZ? destination, EntityId? targetId)
+  {
+    OrderId = orderId;
+    Kind = kind;
+    Destination = destination;
+    TargetId = targetId;
+  }
+
+  public OrderId OrderId { get; }
+
+  public UnitOrderKind Kind { get; }
+
+  public PositionXZ? Destination { get; }
+
+  public EntityId? TargetId { get; }
+
+  public bool IsIdle => Kind == UnitOrderKind.Idle;
+
+  public static MovementOrder Move(OrderId orderId, PositionXZ destination)
+  {
+    EnsureOrderId(orderId);
+    if (!destination.IsFinite)
     {
-        OrderId = orderId;
-        Kind = kind;
-        Destination = destination;
-        TargetId = targetId;
+      throw new ArgumentException("El destino debe ser finito.", nameof(destination));
     }
 
-    public OrderId OrderId { get; }
+    return new MovementOrder(orderId, UnitOrderKind.Move, destination, null);
+  }
 
-    public UnitOrderKind Kind { get; }
-
-    public PositionXZ? Destination { get; }
-
-    public EntityId? TargetId { get; }
-
-    public bool IsIdle => Kind == UnitOrderKind.Idle;
-
-    public static MovementOrder Move(OrderId orderId, PositionXZ destination)
+  public static MovementOrder Task(OrderId orderId, UnitOrderKind kind, EntityId targetId)
+  {
+    EnsureOrderId(orderId);
+    if (!UnitOrderCompatibility.IsTaskOrder(kind))
     {
-        EnsureOrderId(orderId);
-        if (!destination.IsFinite)
-        {
-            throw new ArgumentException("El destino debe ser finito.", nameof(destination));
-        }
-
-        return new MovementOrder(orderId, UnitOrderKind.Move, destination, null);
+      throw new ArgumentException($"{kind} no es una orden de tarea.", nameof(kind));
     }
 
-    public static MovementOrder Task(OrderId orderId, UnitOrderKind kind, EntityId targetId)
+    if (targetId.IsNone)
     {
-        EnsureOrderId(orderId);
-        if (!UnitOrderCompatibility.IsTaskOrder(kind))
-        {
-            throw new ArgumentException($"{kind} no es una orden de tarea.", nameof(kind));
-        }
-
-        if (targetId.IsNone)
-        {
-            throw new ArgumentException("Una orden de tarea requiere objetivo.", nameof(targetId));
-        }
-
-        return new MovementOrder(orderId, kind, null, targetId);
+      throw new ArgumentException("Una orden de tarea requiere objetivo.", nameof(targetId));
     }
 
-    private static void EnsureOrderId(OrderId orderId)
+    return new MovementOrder(orderId, kind, null, targetId);
+  }
+
+  private static void EnsureOrderId(OrderId orderId)
+  {
+    if (orderId.IsNone)
     {
-        if (orderId.IsNone)
-        {
-            throw new ArgumentException("Una orden activa requiere OrderId asignado por el servidor.", nameof(orderId));
-        }
+      throw new ArgumentException("Una orden activa requiere OrderId asignado por el servidor.", nameof(orderId));
     }
+  }
 }

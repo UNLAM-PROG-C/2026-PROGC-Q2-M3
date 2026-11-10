@@ -7,11 +7,11 @@ namespace Rts.Shared.Ids;
 /// </summary>
 public readonly record struct InitializationId(long Value) : IComparable<InitializationId>
 {
-    public static readonly InitializationId First = new(1);
+  public static readonly InitializationId First = new(1);
 
-    public InitializationId Next() => new(Value + 1);
+  public InitializationId Next() => new(Value + 1);
 
-    public int CompareTo(InitializationId other) => Value.CompareTo(other.Value);
+  public int CompareTo(InitializationId other) => Value.CompareTo(other.Value);
 
-    public override string ToString() => $"Init{Value}";
+  public override string ToString() => $"Init{Value}";
 }

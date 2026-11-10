@@ -8,34 +8,34 @@ namespace Rts.GameSession.Model;
 /// </summary>
 public sealed record PlayerSession
 {
-    public PlayerSession(PlayerId player, ConnectionId connection, bool isConnected, bool isReady)
+  public PlayerSession(PlayerId player, ConnectionId connection, bool isConnected, bool isReady)
+  {
+    if (!player.IsValid)
     {
-        if (!player.IsValid)
-        {
-            throw new ArgumentException($"PlayerId inválido: {player}.", nameof(player));
-        }
-
-        if (isReady && !isConnected)
-        {
-            throw new ArgumentException("Un jugador desconectado no puede figurar como listo.", nameof(isReady));
-        }
-
-        Player = player;
-        Connection = connection;
-        IsConnected = isConnected;
-        IsReady = isReady;
+      throw new ArgumentException($"PlayerId inválido: {player}.", nameof(player));
     }
 
-    public PlayerId Player { get; }
+    if (isReady && !isConnected)
+    {
+      throw new ArgumentException("Un jugador desconectado no puede figurar como listo.", nameof(isReady));
+    }
 
-    public ConnectionId Connection { get; }
+    Player = player;
+    Connection = connection;
+    IsConnected = isConnected;
+    IsReady = isReady;
+  }
 
-    /// <summary>Falso solo en Running, Ending o Ended: antes de Running una desconexión libera la plaza (07 §2).</summary>
-    public bool IsConnected { get; }
+  public PlayerId Player { get; }
 
-    /// <summary>Confirmó <c>ClientReady</c> para la inicialización vigente.</summary>
-    public bool IsReady { get; }
+  public ConnectionId Connection { get; }
 
-    /// <summary>Recién registrado tras un Hello válido: conectado y sin Ready.</summary>
-    public static PlayerSession Registered(PlayerId player, ConnectionId connection) => new(player, connection, isConnected: true, isReady: false);
+  /// <summary>Falso solo en Running, Ending o Ended: antes de Running una desconexión libera la plaza (07 §2).</summary>
+  public bool IsConnected { get; }
+
+  /// <summary>Confirmó <c>ClientReady</c> para la inicialización vigente.</summary>
+  public bool IsReady { get; }
+
+  /// <summary>Recién registrado tras un Hello válido: conectado y sin Ready.</summary>
+  public static PlayerSession Registered(PlayerId player, ConnectionId connection) => new(player, connection, isConnected: true, isReady: false);
 }

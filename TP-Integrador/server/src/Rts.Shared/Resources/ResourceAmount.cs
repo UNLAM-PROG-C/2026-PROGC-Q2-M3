@@ -7,25 +7,25 @@ namespace Rts.Shared.Resources;
 /// </summary>
 public readonly record struct ResourceAmount(int Wood, int Food)
 {
-    public static readonly ResourceAmount Zero = default;
+  public static readonly ResourceAmount Zero = default;
 
-    public static ResourceAmount OfWood(int wood) => new(wood, 0);
+  public static ResourceAmount OfWood(int wood) => new(wood, 0);
 
-    public static ResourceAmount OfFood(int food) => new(0, food);
+  public static ResourceAmount OfFood(int food) => new(0, food);
 
-    public bool IsZero => Wood == 0 && Food == 0;
+  public bool IsZero => Wood == 0 && Food == 0;
 
-    /// <summary>Verdadero si ninguna componente es negativa (invariante de los saldos de jugador).</summary>
-    public bool IsNonNegative => Wood >= 0 && Food >= 0;
+  /// <summary>Verdadero si ninguna componente es negativa (invariante de los saldos de jugador).</summary>
+  public bool IsNonNegative => Wood >= 0 && Food >= 0;
 
-    public static ResourceAmount operator +(ResourceAmount left, ResourceAmount right) =>
-        new(checked(left.Wood + right.Wood), checked(left.Food + right.Food));
+  public static ResourceAmount operator +(ResourceAmount left, ResourceAmount right) =>
+      new(checked(left.Wood + right.Wood), checked(left.Food + right.Food));
 
-    public static ResourceAmount operator -(ResourceAmount left, ResourceAmount right) =>
-        new(checked(left.Wood - right.Wood), checked(left.Food - right.Food));
+  public static ResourceAmount operator -(ResourceAmount left, ResourceAmount right) =>
+      new(checked(left.Wood - right.Wood), checked(left.Food - right.Food));
 
-    public static ResourceAmount operator -(ResourceAmount value) =>
-        new(checked(-value.Wood), checked(-value.Food));
+  public static ResourceAmount operator -(ResourceAmount value) =>
+      new(checked(-value.Wood), checked(-value.Food));
 
-    public override string ToString() => $"Wood={Wood}, Food={Food}";
+  public override string ToString() => $"Wood={Wood}, Food={Food}";
 }

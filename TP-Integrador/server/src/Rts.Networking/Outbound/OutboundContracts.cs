@@ -6,17 +6,17 @@ namespace Rts.Networking.Outbound;
 /// <summary>Resultado de encolar en la cola de salida de una conexión.</summary>
 public enum EnqueueOutcome
 {
-    /// <summary>Encolado al final.</summary>
-    Enqueued = 1,
+  /// <summary>Encolado al final.</summary>
+  Enqueued = 1,
 
-    /// <summary>Encolado al final, y se quitó un reemplazable del mismo tipo que todavía no empezó a enviarse (D-064).</summary>
-    Superseded = 2,
+  /// <summary>Encolado al final, y se quitó un reemplazable del mismo tipo que todavía no empezó a enviarse (D-064).</summary>
+  Superseded = 2,
 
-    /// <summary>Un esencial no entró: quien encola debe cerrar la conexión con <c>Network.OutboundSaturated</c> (D-073).</summary>
-    Saturated = 3,
+  /// <summary>Un esencial no entró: quien encola debe cerrar la conexión con <c>Network.OutboundSaturated</c> (D-073).</summary>
+  Saturated = 3,
 
-    /// <summary>La conexión está cerrándose y ya no acepta mensajes; se descarta (no hay entrega a sockets muertos).</summary>
-    Closed = 4,
+  /// <summary>La conexión está cerrándose y ya no acepta mensajes; se descarta (no hay entrega a sockets muertos).</summary>
+  Closed = 4,
 }
 
 /// <summary>
@@ -34,20 +34,20 @@ public enum EnqueueOutcome
 /// </summary>
 public interface IOutboundQueue
 {
-    EnqueueOutcome TryEnqueue(OutboundMessage message);
+  EnqueueOutcome TryEnqueue(OutboundMessage message);
 
-    /// <summary>Espera el próximo mensaje. Devuelve <c>null</c> cuando la cola está completada y vacía.</summary>
-    ValueTask<OutboundMessage?> DequeueAsync(CancellationToken cancellationToken);
+  /// <summary>Espera el próximo mensaje. Devuelve <c>null</c> cuando la cola está completada y vacía.</summary>
+  ValueTask<OutboundMessage?> DequeueAsync(CancellationToken cancellationToken);
 
-    /// <summary>Cantidad de mensajes pendientes (métricas).</summary>
-    int Count { get; }
+  /// <summary>Cantidad de mensajes pendientes (métricas).</summary>
+  int Count { get; }
 
-    /// <summary>Deja de aceptar mensajes; los ya encolados se siguen entregando hasta vaciar la cola.</summary>
-    void Complete();
+  /// <summary>Deja de aceptar mensajes; los ya encolados se siguen entregando hasta vaciar la cola.</summary>
+  void Complete();
 }
 
 /// <summary>Convierte un mensaje de sesión (contrato 07) en su DTO. Todos son <see cref="DeliveryClass.Essential"/>.</summary>
 public interface ISessionMessageEncoder
 {
-    OutboundMessage Encode(ISessionMessage message);
+  OutboundMessage Encode(ISessionMessage message);
 }

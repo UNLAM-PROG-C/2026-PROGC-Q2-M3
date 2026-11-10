@@ -6,7 +6,7 @@ namespace Rts.Shared.Ids;
 /// </summary>
 public readonly record struct SessionId(Guid Value)
 {
-    public static SessionId New() => new(Guid.NewGuid());
+  public static SessionId New() => new(Guid.NewGuid());
 
-    public override string ToString() => Value.ToString("D");
+  public override string ToString() => Value.ToString("D");
 }

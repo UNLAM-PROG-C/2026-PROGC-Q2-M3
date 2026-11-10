@@ -9,8 +9,8 @@ namespace Rts.Networking.Admission;
 /// </summary>
 public interface ICommandRateLimiter
 {
-    /// <summary>Consume una ficha si hay; si no, el comando se rechaza con <c>Network.RateLimited</c>.</summary>
-    bool TryAcquire();
+  /// <summary>Consume una ficha si hay; si no, el comando se rechaza con <c>Network.RateLimited</c>.</summary>
+  bool TryAcquire();
 }
 
 /// <summary>
@@ -20,9 +20,9 @@ public interface ICommandRateLimiter
 /// </summary>
 public interface IViolationTracker
 {
-    /// <summary>Registra una falta. Devuelve <c>true</c> si se superó <c>MaxViolations</c> dentro de <c>ViolationWindow</c>: hay que cerrar con <c>Network.AbuseDetected</c>.</summary>
-    bool Register(ErrorCode violation);
+  /// <summary>Registra una falta. Devuelve <c>true</c> si se superó <c>MaxViolations</c> dentro de <c>ViolationWindow</c>: hay que cerrar con <c>Network.AbuseDetected</c>.</summary>
+  bool Register(ErrorCode violation);
 
-    /// <summary>Faltas dentro de la ventana actual (métricas).</summary>
-    int RecentCount { get; }
+  /// <summary>Faltas dentro de la ventana actual (métricas).</summary>
+  int RecentCount { get; }
 }

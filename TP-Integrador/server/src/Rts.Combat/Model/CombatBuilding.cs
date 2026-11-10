@@ -14,60 +14,60 @@ namespace Rts.Combat.Model;
 /// </summary>
 public sealed record CombatBuilding
 {
-    public CombatBuilding(
-        EntityId id,
-        PlayerId owner,
-        BuildingType type,
-        Footprint footprint,
-        int hp,
-        TickId? operationalFromTick)
+  public CombatBuilding(
+      EntityId id,
+      PlayerId owner,
+      BuildingType type,
+      Footprint footprint,
+      int hp,
+      TickId? operationalFromTick)
+  {
+    if (id.IsNone)
     {
-        if (id.IsNone)
-        {
-            throw new ArgumentException("El edificio debe tener un EntityId válido.", nameof(id));
-        }
-
-        if (!owner.IsValid)
-        {
-            throw new ArgumentException($"Propietario inválido: {owner}.", nameof(owner));
-        }
-
-        if (!Enum.IsDefined(type))
-        {
-            throw new ArgumentException($"Tipo de edificio inválido: {type}.", nameof(type));
-        }
-
-        if (footprint.Size.CellCount <= 0)
-        {
-            throw new ArgumentException("La huella no puede estar vacía.", nameof(footprint));
-        }
-
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(hp);
-
-        Id = id;
-        Owner = owner;
-        Type = type;
-        Footprint = footprint;
-        Hp = hp;
-        OperationalFromTick = operationalFromTick;
+      throw new ArgumentException("El edificio debe tener un EntityId válido.", nameof(id));
     }
 
-    public EntityId Id { get; }
+    if (!owner.IsValid)
+    {
+      throw new ArgumentException($"Propietario inválido: {owner}.", nameof(owner));
+    }
 
-    public PlayerId Owner { get; }
+    if (!Enum.IsDefined(type))
+    {
+      throw new ArgumentException($"Tipo de edificio inválido: {type}.", nameof(type));
+    }
 
-    public BuildingType Type { get; }
+    if (footprint.Size.CellCount <= 0)
+    {
+      throw new ArgumentException("La huella no puede estar vacía.", nameof(footprint));
+    }
 
-    public Footprint Footprint { get; }
+    ArgumentOutOfRangeException.ThrowIfNegativeOrZero(hp);
 
-    /// <summary>HP actual (&gt; 0). En una obra también representa el progreso de construcción.</summary>
-    public int Hp { get; }
+    Id = id;
+    Owner = owner;
+    Type = type;
+    Footprint = footprint;
+    Hp = hp;
+    OperationalFromTick = operationalFromTick;
+  }
 
-    /// <summary>Primer tick operativo; nulo mientras está en obra.</summary>
-    public TickId? OperationalFromTick { get; }
+  public EntityId Id { get; }
 
-    public bool IsCompleted => OperationalFromTick is not null;
+  public PlayerId Owner { get; }
 
-    /// <summary>Verdadero si el edificio está completado y ya es operativo en <paramref name="tick"/>.</summary>
-    public bool IsOperationalAt(TickId tick) => OperationalFromTick is { } from && tick >= from;
+  public BuildingType Type { get; }
+
+  public Footprint Footprint { get; }
+
+  /// <summary>HP actual (&gt; 0). En una obra también representa el progreso de construcción.</summary>
+  public int Hp { get; }
+
+  /// <summary>Primer tick operativo; nulo mientras está en obra.</summary>
+  public TickId? OperationalFromTick { get; }
+
+  public bool IsCompleted => OperationalFromTick is not null;
+
+  /// <summary>Verdadero si el edificio está completado y ya es operativo en <paramref name="tick"/>.</summary>
+  public bool IsOperationalAt(TickId tick) => OperationalFromTick is { } from && tick >= from;
 }

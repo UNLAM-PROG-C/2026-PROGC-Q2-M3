@@ -6,5 +6,5 @@ namespace Rts.Shared.Geometry;
 /// </summary>
 public readonly record struct GridCell(int Column, int Row)
 {
-    public override string ToString() => $"[{Column},{Row}]";
+  public override string ToString() => $"[{Column},{Row}]";
 }

@@ -10,45 +10,45 @@ namespace Rts.Combat.Model;
 /// </summary>
 public sealed record CombatUnit
 {
-    public CombatUnit(EntityId id, PlayerId owner, UnitType type, PositionXZ position, int hp)
+  public CombatUnit(EntityId id, PlayerId owner, UnitType type, PositionXZ position, int hp)
+  {
+    if (id.IsNone)
     {
-        if (id.IsNone)
-        {
-            throw new ArgumentException("La unidad debe tener un EntityId válido.", nameof(id));
-        }
-
-        if (!owner.IsValid)
-        {
-            throw new ArgumentException($"Propietario inválido: {owner}.", nameof(owner));
-        }
-
-        if (!Enum.IsDefined(type))
-        {
-            throw new ArgumentException($"Tipo de unidad inválido: {type}.", nameof(type));
-        }
-
-        if (!position.IsFinite)
-        {
-            throw new ArgumentException("La posición debe ser finita.", nameof(position));
-        }
-
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(hp);
-
-        Id = id;
-        Owner = owner;
-        Type = type;
-        Position = position;
-        Hp = hp;
+      throw new ArgumentException("La unidad debe tener un EntityId válido.", nameof(id));
     }
 
-    public EntityId Id { get; }
+    if (!owner.IsValid)
+    {
+      throw new ArgumentException($"Propietario inválido: {owner}.", nameof(owner));
+    }
 
-    public PlayerId Owner { get; }
+    if (!Enum.IsDefined(type))
+    {
+      throw new ArgumentException($"Tipo de unidad inválido: {type}.", nameof(type));
+    }
 
-    public UnitType Type { get; }
+    if (!position.IsFinite)
+    {
+      throw new ArgumentException("La posición debe ser finita.", nameof(position));
+    }
 
-    public PositionXZ Position { get; }
+    ArgumentOutOfRangeException.ThrowIfNegativeOrZero(hp);
 
-    /// <summary>HP actual (&gt; 0: las unidades destruidas no están en el snapshot).</summary>
-    public int Hp { get; }
+    Id = id;
+    Owner = owner;
+    Type = type;
+    Position = position;
+    Hp = hp;
+  }
+
+  public EntityId Id { get; }
+
+  public PlayerId Owner { get; }
+
+  public UnitType Type { get; }
+
+  public PositionXZ Position { get; }
+
+  /// <summary>HP actual (&gt; 0: las unidades destruidas no están en el snapshot).</summary>
+  public int Hp { get; }
 }

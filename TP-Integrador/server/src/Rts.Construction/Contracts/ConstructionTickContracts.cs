@@ -18,64 +18,64 @@ namespace Rts.Construction.Contracts;
 /// </summary>
 public sealed record ConstructionTickInput
 {
-    public ConstructionTickInput(
-        TickId tick,
-        EquatableArray<BuildingUnderConstruction> buildings,
-        EquatableArray<WorkerContribution> builders,
-        EquatableArray<FarmRepairState> repairs,
-        EquatableArray<WorkerContribution> repairers)
+  public ConstructionTickInput(
+      TickId tick,
+      EquatableArray<BuildingUnderConstruction> buildings,
+      EquatableArray<WorkerContribution> builders,
+      EquatableArray<FarmRepairState> repairs,
+      EquatableArray<WorkerContribution> repairers)
+  {
+    var buildingIds = UniqueSet(buildings.Select(b => b?.BuildingId ?? throw new ArgumentNullException(nameof(buildings))), nameof(buildings));
+    var repairIds = UniqueSet(repairs.Select(r => r?.FarmId ?? throw new ArgumentNullException(nameof(repairs))), nameof(repairs));
+
+    UniqueSet(
+        builders.Concat(repairers).Select(w => w?.WorkerId ?? throw new ArgumentNullException(nameof(builders))),
+        "builders/repairers");
+
+    EnsureTargets(builders, buildingIds, nameof(builders));
+    EnsureTargets(repairers, repairIds, nameof(repairers));
+
+    Tick = tick;
+    Buildings = buildings;
+    Builders = builders;
+    Repairs = repairs;
+    Repairers = repairers;
+  }
+
+  public TickId Tick { get; }
+
+  public EquatableArray<BuildingUnderConstruction> Buildings { get; }
+
+  public EquatableArray<WorkerContribution> Builders { get; }
+
+  public EquatableArray<FarmRepairState> Repairs { get; }
+
+  public EquatableArray<WorkerContribution> Repairers { get; }
+
+  private static HashSet<EntityId> UniqueSet(IEnumerable<EntityId> ids, string paramName)
+  {
+    var set = new HashSet<EntityId>();
+    foreach (EntityId id in ids)
     {
-        var buildingIds = UniqueSet(buildings.Select(b => b?.BuildingId ?? throw new ArgumentNullException(nameof(buildings))), nameof(buildings));
-        var repairIds = UniqueSet(repairs.Select(r => r?.FarmId ?? throw new ArgumentNullException(nameof(repairs))), nameof(repairs));
-
-        UniqueSet(
-            builders.Concat(repairers).Select(w => w?.WorkerId ?? throw new ArgumentNullException(nameof(builders))),
-            "builders/repairers");
-
-        EnsureTargets(builders, buildingIds, nameof(builders));
-        EnsureTargets(repairers, repairIds, nameof(repairers));
-
-        Tick = tick;
-        Buildings = buildings;
-        Builders = builders;
-        Repairs = repairs;
-        Repairers = repairers;
+      if (!set.Add(id))
+      {
+        throw new ArgumentException($"ID duplicado en la entrada: {id}.", paramName);
+      }
     }
 
-    public TickId Tick { get; }
+    return set;
+  }
 
-    public EquatableArray<BuildingUnderConstruction> Buildings { get; }
-
-    public EquatableArray<WorkerContribution> Builders { get; }
-
-    public EquatableArray<FarmRepairState> Repairs { get; }
-
-    public EquatableArray<WorkerContribution> Repairers { get; }
-
-    private static HashSet<EntityId> UniqueSet(IEnumerable<EntityId> ids, string paramName)
+  private static void EnsureTargets(EquatableArray<WorkerContribution> workers, HashSet<EntityId> targets, string paramName)
+  {
+    foreach (WorkerContribution worker in workers)
     {
-        var set = new HashSet<EntityId>();
-        foreach (EntityId id in ids)
-        {
-            if (!set.Add(id))
-            {
-                throw new ArgumentException($"ID duplicado en la entrada: {id}.", paramName);
-            }
-        }
-
-        return set;
+      if (!targets.Contains(worker.TargetId))
+      {
+        throw new ArgumentException($"El trabajador {worker.WorkerId} aporta a {worker.TargetId}, que no está en la entrada.", paramName);
+      }
     }
-
-    private static void EnsureTargets(EquatableArray<WorkerContribution> workers, HashSet<EntityId> targets, string paramName)
-    {
-        foreach (WorkerContribution worker in workers)
-        {
-            if (!targets.Contains(worker.TargetId))
-            {
-                throw new ArgumentException($"El trabajador {worker.WorkerId} aporta a {worker.TargetId}, que no está en la entrada.", paramName);
-            }
-        }
-    }
+  }
 }
 
 /// <summary>
@@ -95,7 +95,7 @@ public sealed record ConstructionTickResult(
     EquatableArray<RepairProgress> RepairProgress,
     EquatableArray<IDomainEventPayload> ProposedEvents)
 {
-    public static ConstructionTickResult Empty(TickId tick) => new(tick, default, default, default);
+  public static ConstructionTickResult Empty(TickId tick) => new(tick, default, default, default);
 }
 
 /// <summary>Progreso de obra propuesto. Si <see cref="IsCompleted"/>, <see cref="Hp"/> es el HP máximo.</summary>

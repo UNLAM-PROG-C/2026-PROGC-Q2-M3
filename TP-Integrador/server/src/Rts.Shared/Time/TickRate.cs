@@ -7,21 +7,21 @@ namespace Rts.Shared.Time;
 /// </summary>
 public sealed record TickRate
 {
-    /// <summary>Valor aprobado: 20 ticks por segundo.</summary>
-    public static readonly TickRate Default = new(20);
+  /// <summary>Valor aprobado: 20 ticks por segundo.</summary>
+  public static readonly TickRate Default = new(20);
 
-    public TickRate(int ticksPerSecond)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(ticksPerSecond);
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(ticksPerSecond, 1000);
-        TicksPerSecond = ticksPerSecond;
-    }
+  public TickRate(int ticksPerSecond)
+  {
+    ArgumentOutOfRangeException.ThrowIfNegativeOrZero(ticksPerSecond);
+    ArgumentOutOfRangeException.ThrowIfGreaterThan(ticksPerSecond, 1000);
+    TicksPerSecond = ticksPerSecond;
+  }
 
-    public int TicksPerSecond { get; }
+  public int TicksPerSecond { get; }
 
-    /// <summary>Intervalo objetivo entre ticks (50 ms a 20 Hz).</summary>
-    public TimeSpan TickInterval => TimeSpan.FromTicks(TimeSpan.TicksPerSecond / TicksPerSecond);
+  /// <summary>Intervalo objetivo entre ticks (50 ms a 20 Hz).</summary>
+  public TimeSpan TickInterval => TimeSpan.FromTicks(TimeSpan.TicksPerSecond / TicksPerSecond);
 
-    /// <summary>Convierte una magnitud expresada por segundo en su equivalente por tick.</summary>
-    public double PerTick(double perSecond) => perSecond / TicksPerSecond;
+  /// <summary>Convierte una magnitud expresada por segundo en su equivalente por tick.</summary>
+  public double PerTick(double perSecond) => perSecond / TicksPerSecond;
 }

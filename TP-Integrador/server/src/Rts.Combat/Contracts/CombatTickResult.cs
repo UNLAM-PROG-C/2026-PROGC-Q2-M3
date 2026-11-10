@@ -23,8 +23,8 @@ public sealed record CombatTickResult(
     EquatableArray<EntityId> SoldiersToIdle,
     EquatableArray<IDomainEventPayload> ProposedEvents)
 {
-    /// <summary>Resultado sin cambios para el tick indicado.</summary>
-    public static CombatTickResult Empty(TickId tick) => new(tick, default, default, default, default, default);
+  /// <summary>Resultado sin cambios para el tick indicado.</summary>
+  public static CombatTickResult Empty(TickId tick) => new(tick, default, default, default, default, default);
 }
 
 /// <summary>Un ataque calculado sobre el snapshot. Cuenta aunque el atacante muera en este mismo tick (02 §7).</summary>
@@ -39,29 +39,29 @@ public sealed record CooldownUpdate(EntityId AttackerId, TickId ReadyAtTick);
 /// </summary>
 public sealed record TargetDamage
 {
-    public TargetDamage(EntityId targetId, int hpBefore, int totalDamage)
+  public TargetDamage(EntityId targetId, int hpBefore, int totalDamage)
+  {
+    if (targetId.IsNone)
     {
-        if (targetId.IsNone)
-        {
-            throw new ArgumentException("El objetivo debe tener un EntityId válido.", nameof(targetId));
-        }
-
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(hpBefore);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(totalDamage);
-
-        TargetId = targetId;
-        HpBefore = hpBefore;
-        TotalDamage = totalDamage;
-        HpAfter = Math.Max(0, hpBefore - totalDamage);
+      throw new ArgumentException("El objetivo debe tener un EntityId válido.", nameof(targetId));
     }
 
-    public EntityId TargetId { get; }
+    ArgumentOutOfRangeException.ThrowIfNegativeOrZero(hpBefore);
+    ArgumentOutOfRangeException.ThrowIfNegativeOrZero(totalDamage);
 
-    public int HpBefore { get; }
+    TargetId = targetId;
+    HpBefore = hpBefore;
+    TotalDamage = totalDamage;
+    HpAfter = Math.Max(0, hpBefore - totalDamage);
+  }
 
-    public int TotalDamage { get; }
+  public EntityId TargetId { get; }
 
-    public int HpAfter { get; }
+  public int HpBefore { get; }
 
-    public bool IsDestroyed => HpAfter == 0;
+  public int TotalDamage { get; }
+
+  public int HpAfter { get; }
+
+  public bool IsDestroyed => HpAfter == 0;
 }

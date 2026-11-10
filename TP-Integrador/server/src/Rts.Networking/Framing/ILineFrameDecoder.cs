@@ -3,22 +3,22 @@ namespace Rts.Networking.Framing;
 /// <summary>Estado de una lectura del decodificador.</summary>
 public enum FrameStatus
 {
-    /// <summary>No hay una línea completa: hay que leer más bytes del socket.</summary>
-    NeedMoreData = 1,
+  /// <summary>No hay una línea completa: hay que leer más bytes del socket.</summary>
+  NeedMoreData = 1,
 
-    /// <summary>Hay una línea completa en <see cref="FrameReadResult.Frame"/>.</summary>
-    Frame = 2,
+  /// <summary>Hay una línea completa en <see cref="FrameReadResult.Frame"/>.</summary>
+  Frame = 2,
 
-    /// <summary>La línea pendiente ya supera el máximo, aunque todavía no llegó su delimitador: se cierra la conexión (D-074).</summary>
-    Oversize = 3,
+  /// <summary>La línea pendiente ya supera el máximo, aunque todavía no llegó su delimitador: se cierra la conexión (D-074).</summary>
+  Oversize = 3,
 }
 
 /// <summary>Resultado de <see cref="ILineFrameDecoder.ReadNext"/>. <see cref="Frame"/> solo tiene datos si el estado es <c>Frame</c>.</summary>
 public readonly record struct FrameReadResult(FrameStatus Status, ReadOnlyMemory<byte> Frame)
 {
-    public static FrameReadResult NeedMoreData => new(FrameStatus.NeedMoreData, ReadOnlyMemory<byte>.Empty);
+  public static FrameReadResult NeedMoreData => new(FrameStatus.NeedMoreData, ReadOnlyMemory<byte>.Empty);
 
-    public static FrameReadResult Oversize => new(FrameStatus.Oversize, ReadOnlyMemory<byte>.Empty);
+  public static FrameReadResult Oversize => new(FrameStatus.Oversize, ReadOnlyMemory<byte>.Empty);
 }
 
 /// <summary>
@@ -34,12 +34,12 @@ public readonly record struct FrameReadResult(FrameStatus Status, ReadOnlyMemory
 /// </summary>
 public interface ILineFrameDecoder
 {
-    /// <summary>Agrega los bytes recién leídos del socket.</summary>
-    void Append(ReadOnlySpan<byte> data);
+  /// <summary>Agrega los bytes recién leídos del socket.</summary>
+  void Append(ReadOnlySpan<byte> data);
 
-    /// <summary>
-    /// Devuelve la próxima línea completa, si la hay. Se llama en bucle hasta obtener <c>NeedMoreData</c>. Después de <c>Oversize</c>
-    /// el decodificador queda inutilizable. La memoria de un <c>Frame</c> es válida hasta la próxima llamada a <see cref="Append"/>.
-    /// </summary>
-    FrameReadResult ReadNext();
+  /// <summary>
+  /// Devuelve la próxima línea completa, si la hay. Se llama en bucle hasta obtener <c>NeedMoreData</c>. Después de <c>Oversize</c>
+  /// el decodificador queda inutilizable. La memoria de un <c>Frame</c> es válida hasta la próxima llamada a <see cref="Append"/>.
+  /// </summary>
+  FrameReadResult ReadNext();
 }

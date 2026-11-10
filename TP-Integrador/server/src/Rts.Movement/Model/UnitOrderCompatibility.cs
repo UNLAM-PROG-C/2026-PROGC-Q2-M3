@@ -9,16 +9,16 @@ namespace Rts.Movement.Model;
 /// </summary>
 public static class UnitOrderCompatibility
 {
-    public static bool IsAllowed(UnitType unitType, UnitOrderKind orderKind) => (unitType, orderKind) switch
-    {
-        (_, UnitOrderKind.Idle) => true,
-        (_, UnitOrderKind.Move) => true,
-        (UnitType.Worker, UnitOrderKind.GatherWood or UnitOrderKind.Build or UnitOrderKind.RepairFarm) => true,
-        (UnitType.Soldier, UnitOrderKind.Attack) => true,
-        _ => false,
-    };
+  public static bool IsAllowed(UnitType unitType, UnitOrderKind orderKind) => (unitType, orderKind) switch
+  {
+    (_, UnitOrderKind.Idle) => true,
+    (_, UnitOrderKind.Move) => true,
+    (UnitType.Worker, UnitOrderKind.GatherWood or UnitOrderKind.Build or UnitOrderKind.RepairFarm) => true,
+    (UnitType.Soldier, UnitOrderKind.Attack) => true,
+    _ => false,
+  };
 
-    /// <summary>Órdenes que apuntan a una entidad y se mantienen activas al llegar al rango (04 §2).</summary>
-    public static bool IsTaskOrder(UnitOrderKind orderKind) =>
-        orderKind is UnitOrderKind.GatherWood or UnitOrderKind.Build or UnitOrderKind.RepairFarm or UnitOrderKind.Attack;
+  /// <summary>Órdenes que apuntan a una entidad y se mantienen activas al llegar al rango (04 §2).</summary>
+  public static bool IsTaskOrder(UnitOrderKind orderKind) =>
+      orderKind is UnitOrderKind.GatherWood or UnitOrderKind.Build or UnitOrderKind.RepairFarm or UnitOrderKind.Attack;
 }

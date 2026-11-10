@@ -6,19 +6,19 @@ namespace Rts.Shared.Geometry;
 /// </summary>
 public readonly record struct FootprintSize
 {
-    public FootprintSize(int width, int height)
-    {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
-        Width = width;
-        Height = height;
-    }
+  public FootprintSize(int width, int height)
+  {
+    ArgumentOutOfRangeException.ThrowIfNegativeOrZero(width);
+    ArgumentOutOfRangeException.ThrowIfNegativeOrZero(height);
+    Width = width;
+    Height = height;
+  }
 
-    public int Width { get; }
+  public int Width { get; }
 
-    public int Height { get; }
+  public int Height { get; }
 
-    public int CellCount => Width * Height;
+  public int CellCount => Width * Height;
 
-    public override string ToString() => $"{Width}x{Height}";
+  public override string ToString() => $"{Width}x{Height}";
 }

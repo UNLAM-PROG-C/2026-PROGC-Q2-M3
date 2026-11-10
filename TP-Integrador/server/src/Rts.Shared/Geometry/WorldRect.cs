@@ -7,44 +7,44 @@ namespace Rts.Shared.Geometry;
 /// </summary>
 public readonly record struct WorldRect
 {
-    public WorldRect(double minX, double minZ, double maxX, double maxZ)
+  public WorldRect(double minX, double minZ, double maxX, double maxZ)
+  {
+    if (!double.IsFinite(minX) || !double.IsFinite(minZ) || !double.IsFinite(maxX) || !double.IsFinite(maxZ))
     {
-        if (!double.IsFinite(minX) || !double.IsFinite(minZ) || !double.IsFinite(maxX) || !double.IsFinite(maxZ))
-        {
-            throw new ArgumentException("Las coordenadas del rectángulo deben ser finitas.");
-        }
-
-        if (minX > maxX || minZ > maxZ)
-        {
-            throw new ArgumentException($"Rectángulo invertido: X [{minX}, {maxX}], Z [{minZ}, {maxZ}].");
-        }
-
-        MinX = minX;
-        MinZ = minZ;
-        MaxX = maxX;
-        MaxZ = maxZ;
+      throw new ArgumentException("Las coordenadas del rectángulo deben ser finitas.");
     }
 
-    public double MinX { get; }
+    if (minX > maxX || minZ > maxZ)
+    {
+      throw new ArgumentException($"Rectángulo invertido: X [{minX}, {maxX}], Z [{minZ}, {maxZ}].");
+    }
 
-    public double MinZ { get; }
+    MinX = minX;
+    MinZ = minZ;
+    MaxX = maxX;
+    MaxZ = maxZ;
+  }
 
-    public double MaxX { get; }
+  public double MinX { get; }
 
-    public double MaxZ { get; }
+  public double MinZ { get; }
 
-    public PositionXZ Center => new((MinX + MaxX) / 2, (MinZ + MaxZ) / 2);
+  public double MaxX { get; }
 
-    /// <summary>Punto del rectángulo más cercano a <paramref name="position"/> (la propia posición si está dentro).</summary>
-    public PositionXZ ClosestPointTo(PositionXZ position) =>
-        new(Math.Clamp(position.X, MinX, MaxX), Math.Clamp(position.Z, MinZ, MaxZ));
+  public double MaxZ { get; }
 
-    public double DistanceSquaredTo(PositionXZ position) => ClosestPointTo(position).DistanceSquaredTo(position);
+  public PositionXZ Center => new((MinX + MaxX) / 2, (MinZ + MaxZ) / 2);
 
-    public double DistanceTo(PositionXZ position) => Math.Sqrt(DistanceSquaredTo(position));
+  /// <summary>Punto del rectángulo más cercano a <paramref name="position"/> (la propia posición si está dentro).</summary>
+  public PositionXZ ClosestPointTo(PositionXZ position) =>
+      new(Math.Clamp(position.X, MinX, MaxX), Math.Clamp(position.Z, MinZ, MaxZ));
 
-    /// <summary>Verdadero si la distancia al borde más cercano es menor o igual a <paramref name="range"/> (comparación inclusiva).</summary>
-    public bool IsWithinRange(PositionXZ position, double range) => DistanceSquaredTo(position) <= range * range;
+  public double DistanceSquaredTo(PositionXZ position) => ClosestPointTo(position).DistanceSquaredTo(position);
 
-    public override string ToString() => $"X[{MinX}, {MaxX}] Z[{MinZ}, {MaxZ}]";
+  public double DistanceTo(PositionXZ position) => Math.Sqrt(DistanceSquaredTo(position));
+
+  /// <summary>Verdadero si la distancia al borde más cercano es menor o igual a <paramref name="range"/> (comparación inclusiva).</summary>
+  public bool IsWithinRange(PositionXZ position, double range) => DistanceSquaredTo(position) <= range * range;
+
+  public override string ToString() => $"X[{MinX}, {MaxX}] Z[{MinZ}, {MaxZ}]";
 }

@@ -12,7 +12,7 @@ namespace Rts.Economy.Calculations;
 /// </summary>
 internal interface IFarmProductionCalculation
 {
-    FarmProductionOutcome Calculate(TickId tick, EquatableArray<FarmEconomyState> farms);
+  FarmProductionOutcome Calculate(TickId tick, EquatableArray<FarmEconomyState> farms);
 }
 
 /// <summary>Resultado parcial de <see cref="IFarmProductionCalculation"/>; se consolida en <c>EconomyTickResult</c> en orden fijo.</summary>

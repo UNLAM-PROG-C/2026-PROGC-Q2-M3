@@ -19,7 +19,7 @@ public sealed record MovementTickResult(
     EquatableArray<OrderEnded> OrdersEnded,
     EquatableArray<IDomainEventPayload> ProposedEvents)
 {
-    public static MovementTickResult Empty(TickId tick) => new(tick, default, default, default);
+  public static MovementTickResult Empty(TickId tick) => new(tick, default, default, default);
 }
 
 /// <summary>Orden terminada por Movement.</summary>

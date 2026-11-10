@@ -18,76 +18,76 @@ namespace Rts.Movement.Model;
 /// </summary>
 public sealed record UnitMovementState
 {
-    public UnitMovementState(
-        EntityId unitId,
-        PlayerId owner,
-        UnitType type,
-        PositionXZ position,
-        MovementOrder order,
-        EquatableArray<PositionXZ> remainingWaypoints,
-        MapRevision routeMapRevision,
-        TickId? repathPendingSinceTick = null,
-        TickId? lastPursuitRepathTick = null)
+  public UnitMovementState(
+      EntityId unitId,
+      PlayerId owner,
+      UnitType type,
+      PositionXZ position,
+      MovementOrder order,
+      EquatableArray<PositionXZ> remainingWaypoints,
+      MapRevision routeMapRevision,
+      TickId? repathPendingSinceTick = null,
+      TickId? lastPursuitRepathTick = null)
+  {
+    if (unitId.IsNone)
     {
-        if (unitId.IsNone)
-        {
-            throw new ArgumentException("La unidad debe tener un EntityId válido.", nameof(unitId));
-        }
-
-        if (!owner.IsValid)
-        {
-            throw new ArgumentException($"Propietario inválido: {owner}.", nameof(owner));
-        }
-
-        if (!Enum.IsDefined(type))
-        {
-            throw new ArgumentException($"Tipo de unidad inválido: {type}.", nameof(type));
-        }
-
-        if (!position.IsFinite || remainingWaypoints.Any(w => !w.IsFinite))
-        {
-            throw new ArgumentException("Posición y waypoints deben ser finitos.", nameof(position));
-        }
-
-        ArgumentNullException.ThrowIfNull(order);
-        if (!UnitOrderCompatibility.IsAllowed(type, order.Kind))
-        {
-            throw new ArgumentException($"Un {type} no admite la orden {order.Kind}.", nameof(order));
-        }
-
-        if (order.IsIdle && (!remainingWaypoints.IsEmpty || repathPendingSinceTick is not null))
-        {
-            throw new ArgumentException("Una unidad Idle no tiene ruta ni repath pendiente.", nameof(order));
-        }
-
-        UnitId = unitId;
-        Owner = owner;
-        Type = type;
-        Position = position;
-        Order = order;
-        RemainingWaypoints = remainingWaypoints;
-        RouteMapRevision = routeMapRevision;
-        RepathPendingSinceTick = repathPendingSinceTick;
-        LastPursuitRepathTick = lastPursuitRepathTick;
+      throw new ArgumentException("La unidad debe tener un EntityId válido.", nameof(unitId));
     }
 
-    public EntityId UnitId { get; }
+    if (!owner.IsValid)
+    {
+      throw new ArgumentException($"Propietario inválido: {owner}.", nameof(owner));
+    }
 
-    public PlayerId Owner { get; }
+    if (!Enum.IsDefined(type))
+    {
+      throw new ArgumentException($"Tipo de unidad inválido: {type}.", nameof(type));
+    }
 
-    public UnitType Type { get; }
+    if (!position.IsFinite || remainingWaypoints.Any(w => !w.IsFinite))
+    {
+      throw new ArgumentException("Posición y waypoints deben ser finitos.", nameof(position));
+    }
 
-    public PositionXZ Position { get; }
+    ArgumentNullException.ThrowIfNull(order);
+    if (!UnitOrderCompatibility.IsAllowed(type, order.Kind))
+    {
+      throw new ArgumentException($"Un {type} no admite la orden {order.Kind}.", nameof(order));
+    }
 
-    public MovementOrder Order { get; }
+    if (order.IsIdle && (!remainingWaypoints.IsEmpty || repathPendingSinceTick is not null))
+    {
+      throw new ArgumentException("Una unidad Idle no tiene ruta ni repath pendiente.", nameof(order));
+    }
 
-    public EquatableArray<PositionXZ> RemainingWaypoints { get; }
+    UnitId = unitId;
+    Owner = owner;
+    Type = type;
+    Position = position;
+    Order = order;
+    RemainingWaypoints = remainingWaypoints;
+    RouteMapRevision = routeMapRevision;
+    RepathPendingSinceTick = repathPendingSinceTick;
+    LastPursuitRepathTick = lastPursuitRepathTick;
+  }
 
-    public MapRevision RouteMapRevision { get; }
+  public EntityId UnitId { get; }
 
-    public TickId? RepathPendingSinceTick { get; }
+  public PlayerId Owner { get; }
 
-    public TickId? LastPursuitRepathTick { get; }
+  public UnitType Type { get; }
 
-    public bool IsRepathPending => RepathPendingSinceTick is not null;
+  public PositionXZ Position { get; }
+
+  public MovementOrder Order { get; }
+
+  public EquatableArray<PositionXZ> RemainingWaypoints { get; }
+
+  public MapRevision RouteMapRevision { get; }
+
+  public TickId? RepathPendingSinceTick { get; }
+
+  public TickId? LastPursuitRepathTick { get; }
+
+  public bool IsRepathPending => RepathPendingSinceTick is not null;
 }

@@ -14,59 +14,59 @@ namespace Rts.Economy.Model;
 /// </summary>
 public sealed record FarmEconomyState
 {
-    public FarmEconomyState(
-        EntityId farmId,
-        PlayerId owner,
-        FarmProductionStatus status,
-        int batchesRemaining,
-        int ticksAccumulated,
-        TickId productionActiveFromTick)
+  public FarmEconomyState(
+      EntityId farmId,
+      PlayerId owner,
+      FarmProductionStatus status,
+      int batchesRemaining,
+      int ticksAccumulated,
+      TickId productionActiveFromTick)
+  {
+    if (farmId.IsNone)
     {
-        if (farmId.IsNone)
-        {
-            throw new ArgumentException("La granja debe tener un EntityId válido.", nameof(farmId));
-        }
-
-        if (!owner.IsValid)
-        {
-            throw new ArgumentException($"Propietario inválido: {owner}.", nameof(owner));
-        }
-
-        ArgumentOutOfRangeException.ThrowIfNegative(batchesRemaining);
-        ArgumentOutOfRangeException.ThrowIfNegative(ticksAccumulated);
-
-        bool valid = status switch
-        {
-            FarmProductionStatus.Producing => batchesRemaining > 0,
-            FarmProductionStatus.Depleted => batchesRemaining == 0 && ticksAccumulated == 0,
-            _ => false,
-        };
-
-        if (!valid)
-        {
-            throw new ArgumentException(
-                $"Estado de granja incoherente: Status={status}, BatchesRemaining={batchesRemaining}, TicksAccumulated={ticksAccumulated}.");
-        }
-
-        FarmId = farmId;
-        Owner = owner;
-        Status = status;
-        BatchesRemaining = batchesRemaining;
-        TicksAccumulated = ticksAccumulated;
-        ProductionActiveFromTick = productionActiveFromTick;
+      throw new ArgumentException("La granja debe tener un EntityId válido.", nameof(farmId));
     }
 
-    public EntityId FarmId { get; }
+    if (!owner.IsValid)
+    {
+      throw new ArgumentException($"Propietario inválido: {owner}.", nameof(owner));
+    }
 
-    public PlayerId Owner { get; }
+    ArgumentOutOfRangeException.ThrowIfNegative(batchesRemaining);
+    ArgumentOutOfRangeException.ThrowIfNegative(ticksAccumulated);
 
-    public FarmProductionStatus Status { get; }
+    bool valid = status switch
+    {
+      FarmProductionStatus.Producing => batchesRemaining > 0,
+      FarmProductionStatus.Depleted => batchesRemaining == 0 && ticksAccumulated == 0,
+      _ => false,
+    };
 
-    /// <summary>Tandas que todavía puede producir en el ciclo actual (5 al completarse o repararse).</summary>
-    public int BatchesRemaining { get; }
+    if (!valid)
+    {
+      throw new ArgumentException(
+          $"Estado de granja incoherente: Status={status}, BatchesRemaining={batchesRemaining}, TicksAccumulated={ticksAccumulated}.");
+    }
 
-    /// <summary>Ticks productivos acumulados desde la última tanda o desde el reinicio del temporizador.</summary>
-    public int TicksAccumulated { get; }
+    FarmId = farmId;
+    Owner = owner;
+    Status = status;
+    BatchesRemaining = batchesRemaining;
+    TicksAccumulated = ticksAccumulated;
+    ProductionActiveFromTick = productionActiveFromTick;
+  }
 
-    public TickId ProductionActiveFromTick { get; }
+  public EntityId FarmId { get; }
+
+  public PlayerId Owner { get; }
+
+  public FarmProductionStatus Status { get; }
+
+  /// <summary>Tandas que todavía puede producir en el ciclo actual (5 al completarse o repararse).</summary>
+  public int BatchesRemaining { get; }
+
+  /// <summary>Ticks productivos acumulados desde la última tanda o desde el reinicio del temporizador.</summary>
+  public int TicksAccumulated { get; }
+
+  public TickId ProductionActiveFromTick { get; }
 }

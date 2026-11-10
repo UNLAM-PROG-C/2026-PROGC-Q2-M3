@@ -9,5 +9,5 @@ namespace Rts.Shared.Commands;
 /// </summary>
 public interface IGameCommand
 {
-    CommandType Type { get; }
+  CommandType Type { get; }
 }

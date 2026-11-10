@@ -10,20 +10,20 @@ namespace Rts.StateSync.Projection;
 /// </summary>
 public interface IStateProjector
 {
-    /// <summary>
-    /// InitialState de un destinatario: todo lo público del mundo, más los recursos y productores <b>solo</b> del destinatario, y el
-    /// catálogo.
-    /// </summary>
-    InitialStateDto BuildInitialState(InitialStateRequest request);
+  /// <summary>
+  /// InitialState de un destinatario: todo lo público del mundo, más los recursos y productores <b>solo</b> del destinatario, y el
+  /// catálogo.
+  /// </summary>
+  InitialStateDto BuildInitialState(InitialStateRequest request);
 
-    /// <summary>
-    /// Mensajes de un tick por destinatario:
-    /// <list type="number">
-    /// <item><c>StateEvents</c> con los eventos que el destinatario puede ver, en orden oficial, y los resultados de sus comandos.
-    /// Se omite si ambas listas quedan vacías.</item>
-    /// <item><c>PositionUpdate</c> con todas las unidades vivas, solo si el tick es múltiplo del intervalo (D-062), como
-    /// <c>Supersedable</c>.</item>
-    /// </list>
-    /// </summary>
-    TickProjection ProjectTick(TickPublication publication);
+  /// <summary>
+  /// Mensajes de un tick por destinatario:
+  /// <list type="number">
+  /// <item><c>StateEvents</c> con los eventos que el destinatario puede ver, en orden oficial, y los resultados de sus comandos.
+  /// Se omite si ambas listas quedan vacías.</item>
+  /// <item><c>PositionUpdate</c> con todas las unidades vivas, solo si el tick es múltiplo del intervalo (D-062), como
+  /// <c>Supersedable</c>.</item>
+  /// </list>
+  /// </summary>
+  TickProjection ProjectTick(TickPublication publication);
 }

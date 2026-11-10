@@ -31,9 +31,9 @@ public sealed record EconomyTickResult(
     EquatableArray<FarmEconomyState> FarmUpdates,
     EquatableArray<IDomainEventPayload> ProposedEvents)
 {
-    /// <summary>Resultado sin cambios para el tick indicado.</summary>
-    public static EconomyTickResult Empty(TickId tick) =>
-        new(tick, default, default, default, default, default, default, default, default);
+  /// <summary>Resultado sin cambios para el tick indicado.</summary>
+  public static EconomyTickResult Empty(TickId tick) =>
+      new(tick, default, default, default, default, default, default, default, default);
 }
 
 /// <summary>Recursos a acreditar a un jugador en un tick.</summary>

@@ -15,18 +15,18 @@ namespace Rts.Protocol;
 /// </summary>
 public static class ProtocolJson
 {
-    /// <summary>Opciones de solo lectura; usar siempre estas para serializar y deserializar mensajes del protocolo.</summary>
-    public static JsonSerializerOptions Options { get; } = CreateOptions();
+  /// <summary>Opciones de solo lectura; usar siempre estas para serializar y deserializar mensajes del protocolo.</summary>
+  public static JsonSerializerOptions Options { get; } = CreateOptions();
 
-    private static JsonSerializerOptions CreateOptions()
+  private static JsonSerializerOptions CreateOptions()
+  {
+    var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
     {
-        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web)
-        {
-            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
-            WriteIndented = false,
-        };
-        options.Converters.Add(new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false));
-        options.MakeReadOnly(populateMissingResolver: true);
-        return options;
-    }
+      DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+      WriteIndented = false,
+    };
+    options.Converters.Add(new JsonStringEnumConverter(namingPolicy: null, allowIntegerValues: false));
+    options.MakeReadOnly(populateMissingResolver: true);
+    return options;
+  }
 }

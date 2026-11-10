@@ -9,35 +9,35 @@ namespace Rts.Movement.Model;
 /// </summary>
 public sealed record MovementTarget
 {
-    private MovementTarget(EntityId id, PositionXZ? point, Footprint? footprint)
+  private MovementTarget(EntityId id, PositionXZ? point, Footprint? footprint)
+  {
+    if (id.IsNone)
     {
-        if (id.IsNone)
-        {
-            throw new ArgumentException("El objetivo debe tener un EntityId válido.", nameof(id));
-        }
-
-        Id = id;
-        Point = point;
-        Footprint = footprint;
+      throw new ArgumentException("El objetivo debe tener un EntityId válido.", nameof(id));
     }
 
-    public EntityId Id { get; }
+    Id = id;
+    Point = point;
+    Footprint = footprint;
+  }
 
-    /// <summary>Posición del objetivo puntual; nulo si el objetivo es un edificio.</summary>
-    public PositionXZ? Point { get; }
+  public EntityId Id { get; }
 
-    /// <summary>Huella del edificio objetivo; nulo si el objetivo es puntual.</summary>
-    public Footprint? Footprint { get; }
+  /// <summary>Posición del objetivo puntual; nulo si el objetivo es un edificio.</summary>
+  public PositionXZ? Point { get; }
 
-    public static MovementTarget AtPoint(EntityId id, PositionXZ point)
+  /// <summary>Huella del edificio objetivo; nulo si el objetivo es puntual.</summary>
+  public Footprint? Footprint { get; }
+
+  public static MovementTarget AtPoint(EntityId id, PositionXZ point)
+  {
+    if (!point.IsFinite)
     {
-        if (!point.IsFinite)
-        {
-            throw new ArgumentException("La posición debe ser finita.", nameof(point));
-        }
-
-        return new MovementTarget(id, point, null);
+      throw new ArgumentException("La posición debe ser finita.", nameof(point));
     }
 
-    public static MovementTarget WithFootprint(EntityId id, Footprint footprint) => new(id, null, footprint);
+    return new MovementTarget(id, point, null);
+  }
+
+  public static MovementTarget WithFootprint(EntityId id, Footprint footprint) => new(id, null, footprint);
 }

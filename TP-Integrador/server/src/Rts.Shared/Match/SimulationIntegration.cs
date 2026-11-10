@@ -9,22 +9,22 @@ namespace Rts.Shared.Match;
 /// </summary>
 public interface ISimulationControl
 {
-    /// <summary>
-    /// Crea el <c>WorldState</c> inicial a partir del mapa y la configuración, durante <c>Starting</c>, y devuelve su vista
-    /// inmutable para el InitialState. Puede llamarse de nuevo en una nueva preparación, reemplazando el mundo anterior.
-    /// No corre ticks.
-    /// </summary>
-    WorldView InitializeMatch();
+  /// <summary>
+  /// Crea el <c>WorldState</c> inicial a partir del mapa y la configuración, durante <c>Starting</c>, y devuelve su vista
+  /// inmutable para el InitialState. Puede llamarse de nuevo en una nueva preparación, reemplazando el mundo anterior.
+  /// No corre ticks.
+  /// </summary>
+  WorldView InitializeMatch();
 
-    /// <summary>Comienza el loop de ticks (al pasar a Running, después de los dos Ready válidos).</summary>
-    void StartTicks();
+  /// <summary>Comienza el loop de ticks (al pasar a Running, después de los dos Ready válidos).</summary>
+  void StartTicks();
 
-    /// <summary>
-    /// Detiene el loop: termina el tick en curso, si lo hay, y no ejecuta más. Es idempotente. GameSession lo pide ante la
-    /// primera desconexión en Running o al fijar un resultado (D-055). Devuelve el último tick confirmado
-    /// (<see cref="TickId.Zero"/> si no corrió ninguno), que GameSession usa como <c>FinalTick</c> del resultado.
-    /// </summary>
-    Task<TickId> StopTicksAsync();
+  /// <summary>
+  /// Detiene el loop: termina el tick en curso, si lo hay, y no ejecuta más. Es idempotente. GameSession lo pide ante la
+  /// primera desconexión en Running o al fijar un resultado (D-055). Devuelve el último tick confirmado
+  /// (<see cref="TickId.Zero"/> si no corrió ninguno), que GameSession usa como <c>FinalTick</c> del resultado.
+  /// </summary>
+  Task<TickId> StopTicksAsync();
 }
 
 /// <summary>
@@ -33,5 +33,5 @@ public interface ISimulationControl
 /// </summary>
 public interface IMatchResultSink
 {
-    void OnSimulationResult(MatchResult result);
+  void OnSimulationResult(MatchResult result);
 }

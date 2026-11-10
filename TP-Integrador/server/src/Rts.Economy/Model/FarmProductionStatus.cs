@@ -6,9 +6,9 @@ namespace Rts.Economy.Model;
 /// </summary>
 public enum FarmProductionStatus
 {
-    /// <summary>Tiene tandas disponibles.</summary>
-    Producing = 1,
+  /// <summary>Tiene tandas disponibles.</summary>
+  Producing = 1,
 
-    /// <summary>Consumió sus tandas: no produce, pero no está destruida (sigue en el mapa y conserva HP).</summary>
-    Depleted = 2,
+  /// <summary>Consumió sus tandas: no produce, pero no está destruida (sigue en el mapa y conserva HP).</summary>
+  Depleted = 2,
 }

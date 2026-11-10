@@ -19,39 +19,39 @@ namespace Rts.Server.Composition;
 /// </summary>
 public static class GameCatalogBuilder
 {
-    /// <exception cref="ArgumentException">Si la configuración no fue validada antes y le falta algún tipo.</exception>
-    public static GameCatalog Build(ServerConfig config)
-    {
-        ArgumentNullException.ThrowIfNull(config);
+  /// <exception cref="ArgumentException">Si la configuración no fue validada antes y le falta algún tipo.</exception>
+  public static GameCatalog Build(ServerConfig config)
+  {
+    ArgumentNullException.ThrowIfNull(config);
 
-        EquatableArray<UnitCatalogEntry> units = Enum.GetValues<UnitType>()
-            .Select(type => new UnitCatalogEntry(
-                type,
-                config.Combat.UnitMaxHp[type],
-                ResourceAmount.OfFood(config.Economy.UnitFoodCosts[type]),
-                config.Production.TrainingDurationTicks[type],
-                config.Movement.SpeedPerSecond[type],
-                type == UnitType.Soldier ? ToView(config.Combat.Soldier) : null))
-            .ToEquatableArray();
+    EquatableArray<UnitCatalogEntry> units = Enum.GetValues<UnitType>()
+        .Select(type => new UnitCatalogEntry(
+            type,
+            config.Combat.UnitMaxHp[type],
+            ResourceAmount.OfFood(config.Economy.UnitFoodCosts[type]),
+            config.Production.TrainingDurationTicks[type],
+            config.Movement.SpeedPerSecond[type],
+            type == UnitType.Soldier ? ToView(config.Combat.Soldier) : null))
+        .ToEquatableArray();
 
-        EquatableArray<BuildingCatalogEntry> buildings = Enum.GetValues<BuildingType>()
-            .Select(type => new BuildingCatalogEntry(
-                type,
-                config.Construction.BuildingMaxHp[type],
-                config.Construction.FootprintSizes[type],
-                config.Economy.BuildingWoodCosts.TryGetValue(type, out int wood) ? ResourceAmount.OfWood(wood) : null,
-                type == BuildingType.Tower ? ToView(config.Combat.Tower) : null))
-            .ToEquatableArray();
+    EquatableArray<BuildingCatalogEntry> buildings = Enum.GetValues<BuildingType>()
+        .Select(type => new BuildingCatalogEntry(
+            type,
+            config.Construction.BuildingMaxHp[type],
+            config.Construction.FootprintSizes[type],
+            config.Economy.BuildingWoodCosts.TryGetValue(type, out int wood) ? ResourceAmount.OfWood(wood) : null,
+            type == BuildingType.Tower ? ToView(config.Combat.Tower) : null))
+        .ToEquatableArray();
 
-        return new GameCatalog(
-            config.Simulation.TickRate,
-            units,
-            buildings,
-            ResourceAmount.OfWood(config.Economy.FarmRepairWoodCost),
-            config.Construction.RepairWorkRequired,
-            config.Movement.GatherRange,
-            config.Movement.BuildRange);
-    }
+    return new GameCatalog(
+        config.Simulation.TickRate,
+        units,
+        buildings,
+        ResourceAmount.OfWood(config.Economy.FarmRepairWoodCost),
+        config.Construction.RepairWorkRequired,
+        config.Movement.GatherRange,
+        config.Movement.BuildRange);
+  }
 
-    private static AttackStatsView ToView(AttackStats stats) => new(stats.Damage, stats.Range, stats.CooldownTicks);
+  private static AttackStatsView ToView(AttackStats stats) => new(stats.Damage, stats.Range, stats.CooldownTicks);
 }

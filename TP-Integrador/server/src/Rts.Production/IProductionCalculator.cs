@@ -13,5 +13,5 @@ namespace Rts.Production;
 /// </summary>
 public interface IProductionCalculator
 {
-    ProductionTickResult CalculateTick(ProductionTickInput input);
+  ProductionTickResult CalculateTick(ProductionTickInput input);
 }

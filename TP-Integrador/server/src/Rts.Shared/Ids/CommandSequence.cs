@@ -7,16 +7,16 @@ namespace Rts.Shared.Ids;
 /// </summary>
 public readonly record struct CommandSequence(long Value) : IComparable<CommandSequence>
 {
-    public static readonly CommandSequence First = new(1);
+  public static readonly CommandSequence First = new(1);
 
-    public CommandSequence Next() => new(Value + 1);
+  public CommandSequence Next() => new(Value + 1);
 
-    public int CompareTo(CommandSequence other) => Value.CompareTo(other.Value);
+  public int CompareTo(CommandSequence other) => Value.CompareTo(other.Value);
 
-    public static bool operator <(CommandSequence left, CommandSequence right) => left.Value < right.Value;
-    public static bool operator >(CommandSequence left, CommandSequence right) => left.Value > right.Value;
-    public static bool operator <=(CommandSequence left, CommandSequence right) => left.Value <= right.Value;
-    public static bool operator >=(CommandSequence left, CommandSequence right) => left.Value >= right.Value;
+  public static bool operator <(CommandSequence left, CommandSequence right) => left.Value < right.Value;
+  public static bool operator >(CommandSequence left, CommandSequence right) => left.Value > right.Value;
+  public static bool operator <=(CommandSequence left, CommandSequence right) => left.Value <= right.Value;
+  public static bool operator >=(CommandSequence left, CommandSequence right) => left.Value >= right.Value;
 
-    public override string ToString() => $"S{Value}";
+  public override string ToString() => $"S{Value}";
 }

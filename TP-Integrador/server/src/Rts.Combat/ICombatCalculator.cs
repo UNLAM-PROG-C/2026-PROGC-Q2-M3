@@ -14,5 +14,5 @@ namespace Rts.Combat;
 /// </summary>
 public interface ICombatCalculator
 {
-    CombatTickResult CalculateTick(CombatTickInput input);
+  CombatTickResult CalculateTick(CombatTickInput input);
 }

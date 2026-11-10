@@ -31,13 +31,13 @@ public sealed record TickOutcome(
 /// </summary>
 public interface ISimulationEngine
 {
-    /// <summary>Último estado confirmado; nulo antes de inicializar.</summary>
-    WorldState? Current { get; }
+  /// <summary>Último estado confirmado; nulo antes de inicializar.</summary>
+  WorldState? Current { get; }
 
-    /// <summary>Crea el mundo inicial (tick 0) desde el mapa y la configuración, y devuelve su vista.</summary>
-    WorldView InitializeMatch();
+  /// <summary>Crea el mundo inicial (tick 0) desde el mapa y la configuración, y devuelve su vista.</summary>
+  WorldView InitializeMatch();
 
-    /// <summary>Ejecuta un tick completo.</summary>
-    /// <exception cref="InvalidOperationException">Si no se inicializó o la partida ya terminó.</exception>
-    TickOutcome AdvanceTick();
+  /// <summary>Ejecuta un tick completo.</summary>
+  /// <exception cref="InvalidOperationException">Si no se inicializó o la partida ya terminó.</exception>
+  TickOutcome AdvanceTick();
 }

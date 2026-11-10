@@ -6,16 +6,16 @@ namespace Rts.Shared.Ids;
 /// </summary>
 public readonly record struct MapRevision(long Value) : IComparable<MapRevision>
 {
-    public static readonly MapRevision Initial = default;
+  public static readonly MapRevision Initial = default;
 
-    public MapRevision Next() => new(Value + 1);
+  public MapRevision Next() => new(Value + 1);
 
-    public int CompareTo(MapRevision other) => Value.CompareTo(other.Value);
+  public int CompareTo(MapRevision other) => Value.CompareTo(other.Value);
 
-    public static bool operator <(MapRevision left, MapRevision right) => left.Value < right.Value;
-    public static bool operator >(MapRevision left, MapRevision right) => left.Value > right.Value;
-    public static bool operator <=(MapRevision left, MapRevision right) => left.Value <= right.Value;
-    public static bool operator >=(MapRevision left, MapRevision right) => left.Value >= right.Value;
+  public static bool operator <(MapRevision left, MapRevision right) => left.Value < right.Value;
+  public static bool operator >(MapRevision left, MapRevision right) => left.Value > right.Value;
+  public static bool operator <=(MapRevision left, MapRevision right) => left.Value <= right.Value;
+  public static bool operator >=(MapRevision left, MapRevision right) => left.Value >= right.Value;
 
-    public override string ToString() => $"R{Value}";
+  public override string ToString() => $"R{Value}";
 }

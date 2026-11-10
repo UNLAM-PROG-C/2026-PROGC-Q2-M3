@@ -17,6 +17,6 @@ namespace Rts.Simulation;
 /// </summary>
 public interface ISimulationLoop : ISimulationControl
 {
-    /// <summary>Verdadero mientras el loop ejecuta ticks.</summary>
-    bool IsRunning { get; }
+  /// <summary>Verdadero mientras el loop ejecuta ticks.</summary>
+  bool IsRunning { get; }
 }

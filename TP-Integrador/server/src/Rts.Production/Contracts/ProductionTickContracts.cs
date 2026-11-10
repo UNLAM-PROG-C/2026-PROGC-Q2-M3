@@ -10,21 +10,21 @@ namespace Rts.Production.Contracts;
 /// <summary>Comida disponible de un jugador al entrar a la fase Production (ya incluye lo producido por Economy en este tick, 05 §3).</summary>
 public sealed record PlayerFood
 {
-    public PlayerFood(PlayerId player, int food)
+  public PlayerFood(PlayerId player, int food)
+  {
+    if (!player.IsValid)
     {
-        if (!player.IsValid)
-        {
-            throw new ArgumentException($"Jugador inválido: {player}.", nameof(player));
-        }
-
-        ArgumentOutOfRangeException.ThrowIfNegative(food);
-        Player = player;
-        Food = food;
+      throw new ArgumentException($"Jugador inválido: {player}.", nameof(player));
     }
 
-    public PlayerId Player { get; }
+    ArgumentOutOfRangeException.ThrowIfNegative(food);
+    Player = player;
+    Food = food;
+  }
 
-    public int Food { get; }
+  public PlayerId Player { get; }
+
+  public int Food { get; }
 }
 
 /// <summary>
@@ -39,52 +39,52 @@ public sealed record PlayerFood
 /// </summary>
 public sealed record ProductionTickInput
 {
-    public ProductionTickInput(
-        TickId tick,
-        EquatableArray<ProducerState> producers,
-        EquatableArray<PlayerFood> food,
-        SpawnView spawn)
+  public ProductionTickInput(
+      TickId tick,
+      EquatableArray<ProducerState> producers,
+      EquatableArray<PlayerFood> food,
+      SpawnView spawn)
+  {
+    ArgumentNullException.ThrowIfNull(spawn);
+
+    var producerIds = new HashSet<EntityId>();
+    foreach (ProducerState producer in producers)
     {
-        ArgumentNullException.ThrowIfNull(spawn);
-
-        var producerIds = new HashSet<EntityId>();
-        foreach (ProducerState producer in producers)
-        {
-            ArgumentNullException.ThrowIfNull(producer, nameof(producers));
-            if (!producerIds.Add(producer.ProducerId))
-            {
-                throw new ArgumentException($"Productor duplicado: {producer.ProducerId}.", nameof(producers));
-            }
-        }
-
-        var players = new HashSet<PlayerId>();
-        foreach (PlayerFood entry in food)
-        {
-            ArgumentNullException.ThrowIfNull(entry, nameof(food));
-            if (!players.Add(entry.Player))
-            {
-                throw new ArgumentException($"Comida duplicada para {entry.Player}.", nameof(food));
-            }
-        }
-
-        foreach (ProducerState producer in producers.Where(p => !players.Contains(p.Owner)))
-        {
-            throw new ArgumentException($"Falta la comida de {producer.Owner}, dueño de {producer.ProducerId}.", nameof(food));
-        }
-
-        Tick = tick;
-        Producers = producers;
-        Food = food;
-        Spawn = spawn;
+      ArgumentNullException.ThrowIfNull(producer, nameof(producers));
+      if (!producerIds.Add(producer.ProducerId))
+      {
+        throw new ArgumentException($"Productor duplicado: {producer.ProducerId}.", nameof(producers));
+      }
     }
 
-    public TickId Tick { get; }
+    var players = new HashSet<PlayerId>();
+    foreach (PlayerFood entry in food)
+    {
+      ArgumentNullException.ThrowIfNull(entry, nameof(food));
+      if (!players.Add(entry.Player))
+      {
+        throw new ArgumentException($"Comida duplicada para {entry.Player}.", nameof(food));
+      }
+    }
 
-    public EquatableArray<ProducerState> Producers { get; }
+    foreach (ProducerState producer in producers.Where(p => !players.Contains(p.Owner)))
+    {
+      throw new ArgumentException($"Falta la comida de {producer.Owner}, dueño de {producer.ProducerId}.", nameof(food));
+    }
 
-    public EquatableArray<PlayerFood> Food { get; }
+    Tick = tick;
+    Producers = producers;
+    Food = food;
+    Spawn = spawn;
+  }
 
-    public SpawnView Spawn { get; }
+  public TickId Tick { get; }
+
+  public EquatableArray<ProducerState> Producers { get; }
+
+  public EquatableArray<PlayerFood> Food { get; }
+
+  public SpawnView Spawn { get; }
 }
 
 /// <summary>
@@ -103,7 +103,7 @@ public sealed record ProductionTickResult(
     EquatableArray<ProducerState> ProducerUpdates,
     EquatableArray<IDomainEventPayload> ProposedEvents)
 {
-    public static ProductionTickResult Empty(TickId tick) => new(tick, default, default, default, default);
+  public static ProductionTickResult Empty(TickId tick) => new(tick, default, default, default, default);
 }
 
 /// <summary>Inicio de entrenamiento: Simulation cobra <see cref="PaidFood"/> y activa la tarea en un único commit (05 §3).</summary>

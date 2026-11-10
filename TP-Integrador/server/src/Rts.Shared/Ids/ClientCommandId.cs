@@ -7,10 +7,10 @@ namespace Rts.Shared.Ids;
 /// </summary>
 public readonly record struct ClientCommandId(long Value)
 {
-    /// <summary>Máximo entero representable exactamente como double (2^53).</summary>
-    public const long MaxValue = 1L << 53;
+  /// <summary>Máximo entero representable exactamente como double (2^53).</summary>
+  public const long MaxValue = 1L << 53;
 
-    public bool IsInValidRange => Value is >= 1 and <= MaxValue;
+  public bool IsInValidRange => Value is >= 1 and <= MaxValue;
 
-    public override string ToString() => $"C{Value}";
+  public override string ToString() => $"C{Value}";
 }

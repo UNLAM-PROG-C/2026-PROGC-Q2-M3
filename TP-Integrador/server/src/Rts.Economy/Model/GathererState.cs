@@ -13,36 +13,36 @@ namespace Rts.Economy.Model;
 /// </summary>
 public sealed record GathererState
 {
-    public GathererState(EntityId workerId, PlayerId owner, EntityId treeId, int ticksAccumulated)
+  public GathererState(EntityId workerId, PlayerId owner, EntityId treeId, int ticksAccumulated)
+  {
+    if (workerId.IsNone)
     {
-        if (workerId.IsNone)
-        {
-            throw new ArgumentException("El trabajador debe tener un EntityId válido.", nameof(workerId));
-        }
-
-        if (!owner.IsValid)
-        {
-            throw new ArgumentException($"Propietario inválido: {owner}.", nameof(owner));
-        }
-
-        if (treeId.IsNone)
-        {
-            throw new ArgumentException("El árbol objetivo debe tener un EntityId válido.", nameof(treeId));
-        }
-
-        ArgumentOutOfRangeException.ThrowIfNegative(ticksAccumulated);
-
-        WorkerId = workerId;
-        Owner = owner;
-        TreeId = treeId;
-        TicksAccumulated = ticksAccumulated;
+      throw new ArgumentException("El trabajador debe tener un EntityId válido.", nameof(workerId));
     }
 
-    public EntityId WorkerId { get; }
+    if (!owner.IsValid)
+    {
+      throw new ArgumentException($"Propietario inválido: {owner}.", nameof(owner));
+    }
 
-    public PlayerId Owner { get; }
+    if (treeId.IsNone)
+    {
+      throw new ArgumentException("El árbol objetivo debe tener un EntityId válido.", nameof(treeId));
+    }
 
-    public EntityId TreeId { get; }
+    ArgumentOutOfRangeException.ThrowIfNegative(ticksAccumulated);
 
-    public int TicksAccumulated { get; }
+    WorkerId = workerId;
+    Owner = owner;
+    TreeId = treeId;
+    TicksAccumulated = ticksAccumulated;
+  }
+
+  public EntityId WorkerId { get; }
+
+  public PlayerId Owner { get; }
+
+  public EntityId TreeId { get; }
+
+  public int TicksAccumulated { get; }
 }

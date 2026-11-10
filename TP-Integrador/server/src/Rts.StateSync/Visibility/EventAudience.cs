@@ -6,29 +6,29 @@ namespace Rts.StateSync.Visibility;
 /// <summary>Destinatarios de un evento: ambos jugadores o uno solo (09 §4).</summary>
 public readonly record struct EventAudience
 {
-    private EventAudience(PlayerId? onlyPlayer) => OnlyPlayer = onlyPlayer;
+  private EventAudience(PlayerId? onlyPlayer) => OnlyPlayer = onlyPlayer;
 
-    /// <summary>Visible para ambos jugadores.</summary>
-    public static EventAudience AllPlayers => new(null);
+  /// <summary>Visible para ambos jugadores.</summary>
+  public static EventAudience AllPlayers => new(null);
 
-    /// <summary>Jugador único destinatario, o <c>null</c> si es para ambos.</summary>
-    public PlayerId? OnlyPlayer { get; }
+  /// <summary>Jugador único destinatario, o <c>null</c> si es para ambos.</summary>
+  public PlayerId? OnlyPlayer { get; }
 
-    public bool IsForAllPlayers => OnlyPlayer is null;
+  public bool IsForAllPlayers => OnlyPlayer is null;
 
-    /// <summary>Visible solo para ese jugador (dueño del dato o emisor del comando).</summary>
-    public static EventAudience Only(PlayerId player)
+  /// <summary>Visible solo para ese jugador (dueño del dato o emisor del comando).</summary>
+  public static EventAudience Only(PlayerId player)
+  {
+    if (!player.IsValid)
     {
-        if (!player.IsValid)
-        {
-            throw new ArgumentException($"PlayerId inválido: {player}.", nameof(player));
-        }
-
-        return new EventAudience(player);
+      throw new ArgumentException($"PlayerId inválido: {player}.", nameof(player));
     }
 
-    /// <summary>Indica si el jugador recibe el evento.</summary>
-    public bool Includes(PlayerId player) => OnlyPlayer is not { } only || only == player;
+    return new EventAudience(player);
+  }
+
+  /// <summary>Indica si el jugador recibe el evento.</summary>
+  public bool Includes(PlayerId player) => OnlyPlayer is not { } only || only == player;
 }
 
 /// <summary>
@@ -38,5 +38,5 @@ public readonly record struct EventAudience
 /// </summary>
 public interface IEventAudiencePolicy
 {
-    EventAudience GetAudience(IDomainEventPayload payload);
+  EventAudience GetAudience(IDomainEventPayload payload);
 }

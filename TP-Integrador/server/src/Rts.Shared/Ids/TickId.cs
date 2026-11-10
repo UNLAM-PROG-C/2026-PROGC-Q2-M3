@@ -6,21 +6,21 @@ namespace Rts.Shared.Ids;
 /// </summary>
 public readonly record struct TickId(long Value) : IComparable<TickId>
 {
-    public static readonly TickId Zero = default;
+  public static readonly TickId Zero = default;
 
-    public TickId Next() => new(Value + 1);
+  public TickId Next() => new(Value + 1);
 
-    public TickId Plus(long ticks) => new(Value + ticks);
+  public TickId Plus(long ticks) => new(Value + ticks);
 
-    public int CompareTo(TickId other) => Value.CompareTo(other.Value);
+  public int CompareTo(TickId other) => Value.CompareTo(other.Value);
 
-    /// <summary>Cantidad de ticks transcurridos entre <paramref name="earlier"/> y <paramref name="later"/>.</summary>
-    public static long operator -(TickId later, TickId earlier) => later.Value - earlier.Value;
+  /// <summary>Cantidad de ticks transcurridos entre <paramref name="earlier"/> y <paramref name="later"/>.</summary>
+  public static long operator -(TickId later, TickId earlier) => later.Value - earlier.Value;
 
-    public static bool operator <(TickId left, TickId right) => left.Value < right.Value;
-    public static bool operator >(TickId left, TickId right) => left.Value > right.Value;
-    public static bool operator <=(TickId left, TickId right) => left.Value <= right.Value;
-    public static bool operator >=(TickId left, TickId right) => left.Value >= right.Value;
+  public static bool operator <(TickId left, TickId right) => left.Value < right.Value;
+  public static bool operator >(TickId left, TickId right) => left.Value > right.Value;
+  public static bool operator <=(TickId left, TickId right) => left.Value <= right.Value;
+  public static bool operator >=(TickId left, TickId right) => left.Value >= right.Value;
 
-    public override string ToString() => $"T{Value}";
+  public override string ToString() => $"T{Value}";
 }

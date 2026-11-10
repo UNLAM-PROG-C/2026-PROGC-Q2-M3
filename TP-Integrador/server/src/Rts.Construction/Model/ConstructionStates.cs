@@ -9,38 +9,38 @@ namespace Rts.Construction.Model;
 /// </summary>
 public sealed record BuildingUnderConstruction
 {
-    public BuildingUnderConstruction(EntityId buildingId, PlayerId owner, BuildingType buildingType, int hp)
+  public BuildingUnderConstruction(EntityId buildingId, PlayerId owner, BuildingType buildingType, int hp)
+  {
+    if (buildingId.IsNone)
     {
-        if (buildingId.IsNone)
-        {
-            throw new ArgumentException("El edificio debe tener un EntityId válido.", nameof(buildingId));
-        }
-
-        if (!owner.IsValid)
-        {
-            throw new ArgumentException($"Propietario inválido: {owner}.", nameof(owner));
-        }
-
-        if (!Enum.IsDefined(buildingType) || buildingType == BuildingType.MainCenter)
-        {
-            throw new ArgumentException($"{buildingType} no puede estar en obra.", nameof(buildingType));
-        }
-
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(hp);
-
-        BuildingId = buildingId;
-        Owner = owner;
-        BuildingType = buildingType;
-        Hp = hp;
+      throw new ArgumentException("El edificio debe tener un EntityId válido.", nameof(buildingId));
     }
 
-    public EntityId BuildingId { get; }
+    if (!owner.IsValid)
+    {
+      throw new ArgumentException($"Propietario inválido: {owner}.", nameof(owner));
+    }
 
-    public PlayerId Owner { get; }
+    if (!Enum.IsDefined(buildingType) || buildingType == BuildingType.MainCenter)
+    {
+      throw new ArgumentException($"{buildingType} no puede estar en obra.", nameof(buildingType));
+    }
 
-    public BuildingType BuildingType { get; }
+    ArgumentOutOfRangeException.ThrowIfNegativeOrZero(hp);
 
-    public int Hp { get; }
+    BuildingId = buildingId;
+    Owner = owner;
+    BuildingType = buildingType;
+    Hp = hp;
+  }
+
+  public EntityId BuildingId { get; }
+
+  public PlayerId Owner { get; }
+
+  public BuildingType BuildingType { get; }
+
+  public int Hp { get; }
 }
 
 /// <summary>
@@ -49,31 +49,31 @@ public sealed record BuildingUnderConstruction
 /// </summary>
 public sealed record FarmRepairState
 {
-    public FarmRepairState(EntityId farmId, PlayerId owner, int workDone)
+  public FarmRepairState(EntityId farmId, PlayerId owner, int workDone)
+  {
+    if (farmId.IsNone)
     {
-        if (farmId.IsNone)
-        {
-            throw new ArgumentException("La granja debe tener un EntityId válido.", nameof(farmId));
-        }
-
-        if (!owner.IsValid)
-        {
-            throw new ArgumentException($"Propietario inválido: {owner}.", nameof(owner));
-        }
-
-        ArgumentOutOfRangeException.ThrowIfNegative(workDone);
-
-        FarmId = farmId;
-        Owner = owner;
-        WorkDone = workDone;
+      throw new ArgumentException("La granja debe tener un EntityId válido.", nameof(farmId));
     }
 
-    public EntityId FarmId { get; }
+    if (!owner.IsValid)
+    {
+      throw new ArgumentException($"Propietario inválido: {owner}.", nameof(owner));
+    }
 
-    public PlayerId Owner { get; }
+    ArgumentOutOfRangeException.ThrowIfNegative(workDone);
 
-    /// <summary>Trabajo acumulado; la reparación termina al alcanzar <c>RepairWorkRequired</c>.</summary>
-    public int WorkDone { get; }
+    FarmId = farmId;
+    Owner = owner;
+    WorkDone = workDone;
+  }
+
+  public EntityId FarmId { get; }
+
+  public PlayerId Owner { get; }
+
+  /// <summary>Trabajo acumulado; la reparación termina al alcanzar <c>RepairWorkRequired</c>.</summary>
+  public int WorkDone { get; }
 }
 
 /// <summary>
@@ -82,18 +82,18 @@ public sealed record FarmRepairState
 /// </summary>
 public sealed record WorkerContribution
 {
-    public WorkerContribution(EntityId workerId, EntityId targetId)
+  public WorkerContribution(EntityId workerId, EntityId targetId)
+  {
+    if (workerId.IsNone || targetId.IsNone)
     {
-        if (workerId.IsNone || targetId.IsNone)
-        {
-            throw new ArgumentException("Trabajador y objetivo deben tener EntityId válidos.");
-        }
-
-        WorkerId = workerId;
-        TargetId = targetId;
+      throw new ArgumentException("Trabajador y objetivo deben tener EntityId válidos.");
     }
 
-    public EntityId WorkerId { get; }
+    WorkerId = workerId;
+    TargetId = targetId;
+  }
 
-    public EntityId TargetId { get; }
+  public EntityId WorkerId { get; }
+
+  public EntityId TargetId { get; }
 }

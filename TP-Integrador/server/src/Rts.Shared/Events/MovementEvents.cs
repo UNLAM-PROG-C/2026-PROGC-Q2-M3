@@ -25,46 +25,46 @@ public sealed record UnitOrderChanged(EntityId UnitId, OrderId OrderId, UnitOrde
 /// </summary>
 public sealed record RepathRequested : IDomainEventPayload
 {
-    public RepathRequested(
-        EntityId unitId,
-        PlayerId owner,
-        OrderId orderId,
-        MapRevision mapRevision,
-        PositionXZ? destination,
-        EntityId? targetId,
-        bool isPaused)
+  public RepathRequested(
+      EntityId unitId,
+      PlayerId owner,
+      OrderId orderId,
+      MapRevision mapRevision,
+      PositionXZ? destination,
+      EntityId? targetId,
+      bool isPaused)
+  {
+    if (unitId.IsNone || orderId.IsNone || !owner.IsValid)
     {
-        if (unitId.IsNone || orderId.IsNone || !owner.IsValid)
-        {
-            throw new ArgumentException("Se requieren una unidad, un dueño y una orden válidos.");
-        }
-
-        if ((destination is null) == (targetId is null))
-        {
-            throw new ArgumentException("Debe indicarse exactamente uno: destino u objetivo.");
-        }
-
-        UnitId = unitId;
-        Owner = owner;
-        OrderId = orderId;
-        MapRevision = mapRevision;
-        Destination = destination;
-        TargetId = targetId;
-        IsPaused = isPaused;
+      throw new ArgumentException("Se requieren una unidad, un dueño y una orden válidos.");
     }
 
-    public EntityId UnitId { get; }
+    if ((destination is null) == (targetId is null))
+    {
+      throw new ArgumentException("Debe indicarse exactamente uno: destino u objetivo.");
+    }
 
-    /// <summary>Dueño de la unidad: único destinatario del evento.</summary>
-    public PlayerId Owner { get; }
+    UnitId = unitId;
+    Owner = owner;
+    OrderId = orderId;
+    MapRevision = mapRevision;
+    Destination = destination;
+    TargetId = targetId;
+    IsPaused = isPaused;
+  }
 
-    public OrderId OrderId { get; }
+  public EntityId UnitId { get; }
 
-    public MapRevision MapRevision { get; }
+  /// <summary>Dueño de la unidad: único destinatario del evento.</summary>
+  public PlayerId Owner { get; }
 
-    public PositionXZ? Destination { get; }
+  public OrderId OrderId { get; }
 
-    public EntityId? TargetId { get; }
+  public MapRevision MapRevision { get; }
 
-    public bool IsPaused { get; }
+  public PositionXZ? Destination { get; }
+
+  public EntityId? TargetId { get; }
+
+  public bool IsPaused { get; }
 }

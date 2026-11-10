@@ -6,5 +6,5 @@ namespace Rts.Shared.Ids;
 /// </summary>
 public readonly record struct IdempotencyKey(PlayerId Player, ClientCommandId ClientCommandId)
 {
-    public override string ToString() => $"{Player}/{ClientCommandId}";
+  public override string ToString() => $"{Player}/{ClientCommandId}";
 }

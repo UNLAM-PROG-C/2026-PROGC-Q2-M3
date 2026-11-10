@@ -19,85 +19,85 @@ namespace Rts.Simulation.State;
 /// </summary>
 public sealed record BuildingEntity
 {
-    public BuildingEntity(
-        EntityId id,
-        PlayerId owner,
-        BuildingType type,
-        Footprint footprint,
-        int hp,
-        TickId? operationalFromTick,
-        FarmEconomyState? farmEconomy,
-        FarmRepairState? repair,
-        ProducerState? production,
-        TickId? towerReadyAtTick)
+  public BuildingEntity(
+      EntityId id,
+      PlayerId owner,
+      BuildingType type,
+      Footprint footprint,
+      int hp,
+      TickId? operationalFromTick,
+      FarmEconomyState? farmEconomy,
+      FarmRepairState? repair,
+      ProducerState? production,
+      TickId? towerReadyAtTick)
+  {
+    if (id.IsNone || !owner.IsValid || !Enum.IsDefined(type))
     {
-        if (id.IsNone || !owner.IsValid || !Enum.IsDefined(type))
-        {
-            throw new ArgumentException("Edificio con ID, dueño o tipo inválido.");
-        }
-
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(hp);
-        bool completed = operationalFromTick is not null;
-
-        if (type == BuildingType.MainCenter && !completed)
-        {
-            throw new ArgumentException("El Centro Principal existe completado desde el inicio.", nameof(operationalFromTick));
-        }
-
-        bool isCompletedFarm = completed && type == BuildingType.Farm;
-        if ((farmEconomy is not null) != isCompletedFarm || (farmEconomy is not null && (farmEconomy.FarmId != id || farmEconomy.Owner != owner)))
-        {
-            throw new ArgumentException("El estado económico existe exactamente para las granjas completadas y debe corresponderles.", nameof(farmEconomy));
-        }
-
-        if (repair is not null && (farmEconomy is not { Status: FarmProductionStatus.Depleted } || repair.FarmId != id || repair.Owner != owner))
-        {
-            throw new ArgumentException("Solo una granja completada y agotada puede estar en reparación.", nameof(repair));
-        }
-
-        bool isCompletedProducer = completed && ProducerCatalog.IsProducer(type);
-        if ((production is not null) != isCompletedProducer ||
-            (production is not null && (production.ProducerId != id || production.Owner != owner || production.ProducerType != type || production.Footprint != footprint)))
-        {
-            throw new ArgumentException("El estado de producción existe exactamente para los productores completados y debe corresponderles.", nameof(production));
-        }
-
-        if ((towerReadyAtTick is not null) != (completed && type == BuildingType.Tower))
-        {
-            throw new ArgumentException("El cooldown de torre existe exactamente para las torres completadas.", nameof(towerReadyAtTick));
-        }
-
-        Id = id;
-        Owner = owner;
-        Type = type;
-        Footprint = footprint;
-        Hp = hp;
-        OperationalFromTick = operationalFromTick;
-        FarmEconomy = farmEconomy;
-        Repair = repair;
-        Production = production;
-        TowerReadyAtTick = towerReadyAtTick;
+      throw new ArgumentException("Edificio con ID, dueño o tipo inválido.");
     }
 
-    public EntityId Id { get; }
+    ArgumentOutOfRangeException.ThrowIfNegativeOrZero(hp);
+    bool completed = operationalFromTick is not null;
 
-    public PlayerId Owner { get; }
+    if (type == BuildingType.MainCenter && !completed)
+    {
+      throw new ArgumentException("El Centro Principal existe completado desde el inicio.", nameof(operationalFromTick));
+    }
 
-    public BuildingType Type { get; }
+    bool isCompletedFarm = completed && type == BuildingType.Farm;
+    if ((farmEconomy is not null) != isCompletedFarm || (farmEconomy is not null && (farmEconomy.FarmId != id || farmEconomy.Owner != owner)))
+    {
+      throw new ArgumentException("El estado económico existe exactamente para las granjas completadas y debe corresponderles.", nameof(farmEconomy));
+    }
 
-    public Footprint Footprint { get; }
+    if (repair is not null && (farmEconomy is not { Status: FarmProductionStatus.Depleted } || repair.FarmId != id || repair.Owner != owner))
+    {
+      throw new ArgumentException("Solo una granja completada y agotada puede estar en reparación.", nameof(repair));
+    }
 
-    public int Hp { get; }
+    bool isCompletedProducer = completed && ProducerCatalog.IsProducer(type);
+    if ((production is not null) != isCompletedProducer ||
+        (production is not null && (production.ProducerId != id || production.Owner != owner || production.ProducerType != type || production.Footprint != footprint)))
+    {
+      throw new ArgumentException("El estado de producción existe exactamente para los productores completados y debe corresponderles.", nameof(production));
+    }
 
-    public TickId? OperationalFromTick { get; }
+    if ((towerReadyAtTick is not null) != (completed && type == BuildingType.Tower))
+    {
+      throw new ArgumentException("El cooldown de torre existe exactamente para las torres completadas.", nameof(towerReadyAtTick));
+    }
 
-    public bool IsCompleted => OperationalFromTick is not null;
+    Id = id;
+    Owner = owner;
+    Type = type;
+    Footprint = footprint;
+    Hp = hp;
+    OperationalFromTick = operationalFromTick;
+    FarmEconomy = farmEconomy;
+    Repair = repair;
+    Production = production;
+    TowerReadyAtTick = towerReadyAtTick;
+  }
 
-    public FarmEconomyState? FarmEconomy { get; }
+  public EntityId Id { get; }
 
-    public FarmRepairState? Repair { get; }
+  public PlayerId Owner { get; }
 
-    public ProducerState? Production { get; }
+  public BuildingType Type { get; }
 
-    public TickId? TowerReadyAtTick { get; }
+  public Footprint Footprint { get; }
+
+  public int Hp { get; }
+
+  public TickId? OperationalFromTick { get; }
+
+  public bool IsCompleted => OperationalFromTick is not null;
+
+  public FarmEconomyState? FarmEconomy { get; }
+
+  public FarmRepairState? Repair { get; }
+
+  public ProducerState? Production { get; }
+
+  public TickId? TowerReadyAtTick { get; }
 }

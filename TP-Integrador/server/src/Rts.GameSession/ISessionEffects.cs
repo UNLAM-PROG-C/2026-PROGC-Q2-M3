@@ -13,15 +13,15 @@ namespace Rts.GameSession;
 /// </summary>
 public interface ISessionEffects
 {
-    /// <summary>Encola un mensaje de sesión para la conexión.</summary>
-    void Send(ConnectionId connection, ISessionMessage message);
+  /// <summary>Encola un mensaje de sesión para la conexión.</summary>
+  void Send(ConnectionId connection, ISessionMessage message);
 
-    /// <summary>Encola un aviso final con el motivo y cierra la conexión después de un drenaje breve.</summary>
-    void Close(ConnectionId connection, ErrorCode reason);
+  /// <summary>Encola un aviso final con el motivo y cierra la conexión después de un drenaje breve.</summary>
+  void Close(ConnectionId connection, ErrorCode reason);
 
-    /// <summary>State Sync arma y encola un InitialState por destinatario con esa sesión e inicialización (09 §3, contrato 09 §4).</summary>
-    void PublishInitialState(SessionId session, InitializationId initialization, WorldView world, SessionRecipient player1, SessionRecipient player2);
+  /// <summary>State Sync arma y encola un InitialState por destinatario con esa sesión e inicialización (09 §3, contrato 09 §4).</summary>
+  void PublishInitialState(SessionId session, InitializationId initialization, WorldView world, SessionRecipient player1, SessionRecipient player2);
 
-    /// <summary>Drena las colas de salida con el plazo de Networking y cierra todo. Termina aunque haya sockets muertos.</summary>
-    Task DrainAndCloseAllAsync();
+  /// <summary>Drena las colas de salida con el plazo de Networking y cierra todo. Termina aunque haya sockets muertos.</summary>
+  Task DrainAndCloseAllAsync();
 }

@@ -19,49 +19,49 @@ namespace Rts.Movement.Contracts;
 /// </summary>
 public sealed record UnitOrderRequest
 {
-    public UnitOrderRequest(
-        UnitMovementState unit,
-        UnitOrderKind kind,
-        PositionXZ? destination,
-        MovementTarget? target,
-        EquatableArray<PositionXZ> waypoints,
-        NavigationGrid map)
+  public UnitOrderRequest(
+      UnitMovementState unit,
+      UnitOrderKind kind,
+      PositionXZ? destination,
+      MovementTarget? target,
+      EquatableArray<PositionXZ> waypoints,
+      NavigationGrid map)
+  {
+    ArgumentNullException.ThrowIfNull(unit);
+    ArgumentNullException.ThrowIfNull(map);
+
+    bool shapeIsValid = kind switch
     {
-        ArgumentNullException.ThrowIfNull(unit);
-        ArgumentNullException.ThrowIfNull(map);
+      UnitOrderKind.Idle => destination is null && target is null && waypoints.IsEmpty,
+      UnitOrderKind.Move => destination is not null && target is null,
+      _ when UnitOrderCompatibility.IsTaskOrder(kind) => destination is null && target is not null,
+      _ => false,
+    };
 
-        bool shapeIsValid = kind switch
-        {
-            UnitOrderKind.Idle => destination is null && target is null && waypoints.IsEmpty,
-            UnitOrderKind.Move => destination is not null && target is null,
-            _ when UnitOrderCompatibility.IsTaskOrder(kind) => destination is null && target is not null,
-            _ => false,
-        };
-
-        if (!shapeIsValid)
-        {
-            throw new ArgumentException($"Pedido de orden mal formado para {kind}.");
-        }
-
-        Unit = unit;
-        Kind = kind;
-        Destination = destination;
-        Target = target;
-        Waypoints = waypoints;
-        Map = map;
+    if (!shapeIsValid)
+    {
+      throw new ArgumentException($"Pedido de orden mal formado para {kind}.");
     }
 
-    public UnitMovementState Unit { get; }
+    Unit = unit;
+    Kind = kind;
+    Destination = destination;
+    Target = target;
+    Waypoints = waypoints;
+    Map = map;
+  }
 
-    public UnitOrderKind Kind { get; }
+  public UnitMovementState Unit { get; }
 
-    public PositionXZ? Destination { get; }
+  public UnitOrderKind Kind { get; }
 
-    public MovementTarget? Target { get; }
+  public PositionXZ? Destination { get; }
 
-    public EquatableArray<PositionXZ> Waypoints { get; }
+  public MovementTarget? Target { get; }
 
-    public NavigationGrid Map { get; }
+  public EquatableArray<PositionXZ> Waypoints { get; }
+
+  public NavigationGrid Map { get; }
 }
 
 /// <summary>
@@ -71,30 +71,30 @@ public sealed record UnitOrderRequest
 /// </summary>
 public sealed record UnitOrderEvaluation
 {
-    private UnitOrderEvaluation(EntityId unitId, ErrorCode? error, EquatableArray<PositionXZ> acceptedRoute)
+  private UnitOrderEvaluation(EntityId unitId, ErrorCode? error, EquatableArray<PositionXZ> acceptedRoute)
+  {
+    UnitId = unitId;
+    Error = error;
+    AcceptedRoute = acceptedRoute;
+  }
+
+  public EntityId UnitId { get; }
+
+  public bool IsAccepted => Error is null;
+
+  public ErrorCode? Error { get; }
+
+  public EquatableArray<PositionXZ> AcceptedRoute { get; }
+
+  public static UnitOrderEvaluation Accepted(EntityId unitId, EquatableArray<PositionXZ> route) => new(unitId, null, route);
+
+  public static UnitOrderEvaluation Rejected(EntityId unitId, ErrorCode error)
+  {
+    if (error.IsDefault)
     {
-        UnitId = unitId;
-        Error = error;
-        AcceptedRoute = acceptedRoute;
+      throw new ArgumentException("El rechazo requiere código de error.", nameof(error));
     }
 
-    public EntityId UnitId { get; }
-
-    public bool IsAccepted => Error is null;
-
-    public ErrorCode? Error { get; }
-
-    public EquatableArray<PositionXZ> AcceptedRoute { get; }
-
-    public static UnitOrderEvaluation Accepted(EntityId unitId, EquatableArray<PositionXZ> route) => new(unitId, null, route);
-
-    public static UnitOrderEvaluation Rejected(EntityId unitId, ErrorCode error)
-    {
-        if (error.IsDefault)
-        {
-            throw new ArgumentException("El rechazo requiere código de error.", nameof(error));
-        }
-
-        return new UnitOrderEvaluation(unitId, error, default);
-    }
+    return new UnitOrderEvaluation(unitId, error, default);
+  }
 }
