@@ -17,6 +17,7 @@ public class ConfigAndMapTests
     MaxCommandsPerTick = 30,
     CommandQueueCapacity = 1000,
     BarrierTimeout = TimeSpan.FromSeconds(2),
+    TickStallTimeout = TimeSpan.FromSeconds(5),
   };
 
   private static MapDefinition SymmetricMap() => new(
@@ -51,6 +52,14 @@ public class ConfigAndMapTests
 
     Assert.Equal(3, config.GetValidationErrors().Count);
     Assert.Throws<ArgumentException>(config.Validate);
+  }
+
+  [Fact]
+  public void Config_RejectsStallTimeoutNotAboveTheBarrierTimeout()
+  {
+    SimulationConfig config = ValidConfig() with { TickStallTimeout = ValidConfig().BarrierTimeout };
+
+    Assert.Contains(config.GetValidationErrors(), error => error.Contains(nameof(SimulationConfig.TickStallTimeout)));
   }
 
   [Fact]

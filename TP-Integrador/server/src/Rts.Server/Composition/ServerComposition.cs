@@ -41,9 +41,11 @@ internal static class ServerComposition
     //
     // 5. Simulation: el mapa, el motor con los cinco módulos de dominio y el loop de 20 Hz. Publica en State Sync y avisa su
     //    resultado al buzón.
-    //      MapDefinition map = MapLoader.Load(config.MapFile);
-    //      var engine = new SimulationEngine(config.Simulation, map, commands, <calculadores y reglas de dominio>);
-    //      var simulation = new SimulationLoop(engine, stateSync, inbox, TimeProvider.System, loggers);
+    //      MapDefinition map = MapLoader.Load(config.MapFile, <tamaño del Centro Principal según Construction>);
+    //      var modules = new DomainModules(<reglas y calculadores de los cinco módulos de dominio>);
+    //      ISimulationEngine engine = SimulationFactory.CreateEngine(
+    //          config.Simulation, map, config.Economy.MaxWoodPerTree, commands, modules, TimeProvider.System);
+    //      ISimulationLoop simulation = SimulationFactory.CreateLoop(engine, config.Simulation, stateSync, inbox, TimeProvider.System);
     //
     // 6. Consumidor de sesión (GameSession): el único que necesita a casi todos, por eso va al final.
     //      var effects = new SessionEffectsAdapter(network, stateSync);

@@ -30,6 +30,13 @@ public sealed record SimulationConfig
   public required TimeSpan BarrierTimeout { get; init; }
 
   /// <summary>
+  /// Plazo de seguridad de un tick completo para el supervisor del loop (06 §6): si un tick sigue en curso pasado este plazo, se
+  /// considera bloqueado y es una falla crítica. Debe superar a <see cref="BarrierTimeout"/>, para que una barrera vencida se informe
+  /// primero como falla del propio tick, con su fase.
+  /// </summary>
+  public required TimeSpan TickStallTimeout { get; init; }
+
+  /// <summary>
   /// Ejecuta Economy y Combat en paralelo (verdadero, lo aprobado) o en secuencia (falso, solo para medir y comparar en la
   /// defensa). El resultado tiene que ser idéntico en ambos modos (RECOMENDADO D-051).
   /// </summary>
@@ -60,6 +67,11 @@ public sealed record SimulationConfig
     if (BarrierTimeout <= TimeSpan.Zero || (TickRate is not null && BarrierTimeout <= TickRate.TickInterval))
     {
       errors.Add($"{nameof(BarrierTimeout)} debe ser positivo y mayor que el intervalo de tick ({BarrierTimeout}).");
+    }
+
+    if (TickStallTimeout <= BarrierTimeout)
+    {
+      errors.Add($"{nameof(TickStallTimeout)} ({TickStallTimeout}) debe ser mayor que {nameof(BarrierTimeout)} ({BarrierTimeout}).");
     }
 
     if (!Enum.IsDefined(Diagnostics))
