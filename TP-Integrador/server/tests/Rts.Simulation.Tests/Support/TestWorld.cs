@@ -71,6 +71,18 @@ internal static class TestWorld
     return world.With(units: world.Units.SetItem(unitId, gathering), lastOrderId: orderId);
   }
 
+  /// <summary>El mundo con la unidad con una orden de tarea sobre <paramref name="targetId"/>, sin ruta.</summary>
+  public static WorldState WithTaskOrder(WorldState world, EntityId unitId, UnitOrderKind kind, EntityId targetId)
+  {
+    OrderId orderId = world.LastOrderId.Next();
+    UnitEntity unit = world.Units[unitId];
+    var task = new UnitEntity(
+        unit.Id, unit.Owner, unit.Type, unit.Position, unit.Hp, MovementOrder.Task(orderId, kind, targetId),
+        EquatableArray<PositionXZ>.Empty, world.MapRevision, repathPendingSinceTick: null, lastPursuitRepathTick: null,
+        gatherTicksAccumulated: 0, unit.ReadyAtTick);
+    return world.With(units: world.Units.SetItem(unitId, task), lastOrderId: orderId);
+  }
+
   /// <summary>Árbol disponible del mundo de prueba (para comprobar que el mapa no cambia).</summary>
   public static TreeEconomyState TreeState(WorldState world) => world.Trees[Tree].Economy;
 }

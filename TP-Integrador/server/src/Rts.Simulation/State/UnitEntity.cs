@@ -113,6 +113,24 @@ public sealed record UnitEntity
       Id, Owner, Type, Position, Hp, order, route, routeMapRevision,
       repathPendingSinceTick: null, lastPursuitRepathTick: null, gatherTicksAccumulated: 0, ReadyAtTick);
 
+  /// <summary>
+  /// Copia de la unidad con la parte de Movement reemplazada por la que propuso la fase 2 (posición, orden, ruta, repath).
+  /// HP y cooldown no cambian. El contador de recolección solo se conserva si la orden sigue siendo la misma (mismo OrderId).
+  /// </summary>
+  /// <exception cref="InvalidOperationException">Si la propuesta es de otra unidad o le cambia el dueño o el tipo.</exception>
+  internal UnitEntity WithMovement(UnitMovementState movement)
+  {
+    if (movement.UnitId != Id || movement.Owner != Owner || movement.Type != Type)
+    {
+      throw new InvalidOperationException($"Movement propuso un estado incoherente para la unidad {Id}.");
+    }
+
+    int gatherTicks = movement.Order.OrderId == Order.OrderId ? GatherTicksAccumulated : 0;
+    return new UnitEntity(
+        Id, Owner, Type, movement.Position, Hp, movement.Order, movement.RemainingWaypoints, movement.RouteMapRevision,
+        movement.RepathPendingSinceTick, movement.LastPursuitRepathTick, gatherTicks, ReadyAtTick);
+  }
+
   /// <summary>La parte de la unidad que ve Movement.</summary>
   internal UnitMovementState ToMovementState() => new(
       Id, Owner, Type, Position, Order, Route, RouteMapRevision, RepathPendingSinceTick, LastPursuitRepathTick);

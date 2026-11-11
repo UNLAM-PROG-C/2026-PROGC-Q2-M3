@@ -1,10 +1,12 @@
 using Rts.Shared.Commands;
 using Rts.Shared.Entities;
 using Rts.Shared.Events;
+using Rts.Shared.Geometry;
 using Rts.Shared.Ids;
 using Rts.Shared.Time;
 using Rts.Simulation.Commands;
 using Rts.Simulation.Engine;
+using Rts.Simulation.Phases;
 using Rts.Simulation.Tests.Fakes;
 using Rts.Simulation.Tests.Support;
 
@@ -50,4 +52,41 @@ public class CommandFlowTests
     Assert.Equal(first.Publication.CommandResults[1], Assert.Single(second.Publication.CommandResults));
     Assert.Equal(1, second.Metrics.DuplicatesReplied);
   }
+
+  [Fact]
+  public void Move_IsOrderedInPhaseOneAndWalkedInPhaseTwoUntilItArrives()
+  {
+    var queue = new CommandQueue(QueueCapacity);
+    var phases = new ITickPhase[]
+    {
+      new CommandBatchPhase(queue, MaxCommandsPerTick, [new MoveCommandHandler(new FakeMovementRules())]),
+      new MovementPhase(new FakeMovementCalculator()),
+    };
+    var engine = new SimulationEngine(TestWorld.Factory(), phases, TickRate.Default, TimeProvider.System);
+    engine.InitializeMatch();
+    var waypoint = new PositionXZ(12.5, 12.5);
+    var move = new MoveCommand(
+        TestWorld.SomeDestination, MapRevision.Initial, [new UnitRouteCandidate(TestWorld.P1WorkerA, [waypoint, TestWorld.SomeDestination])]);
+    OrderId moveOrder = OrderId.None.Next();
+
+    queue.Admit(PlayerId.One, MoveId, move);
+    TickOutcome first = engine.AdvanceTick();
+    TickOutcome second = engine.AdvanceTick();
+
+    // Tick 1: la fase 1 da la orden y la fase 2 da el primer paso.
+    Assert.Equal(
+        [new UnitOrderChanged(TestWorld.P1WorkerA, moveOrder, UnitOrderKind.Move)],
+        first.Publication!.Events.Select(stamped => stamped.Payload));
+    Assert.Equal(waypoint, PositionOf(first, TestWorld.P1WorkerA));
+
+    // Tick 2: sin comandos, la fase 2 sola la lleva al destino y la orden termina.
+    Assert.Equal(
+        [new UnitOrderChanged(TestWorld.P1WorkerA, OrderId.None, UnitOrderKind.Idle)],
+        second.Publication!.Events.Select(stamped => stamped.Payload));
+    Assert.Equal(TestWorld.SomeDestination, PositionOf(second, TestWorld.P1WorkerA));
+    Assert.True(engine.Current!.Units[TestWorld.P1WorkerA].Order.IsIdle);
+  }
+
+  private static PositionXZ PositionOf(TickOutcome outcome, EntityId unitId) =>
+      outcome.Publication!.Positions.Single(position => position.UnitId == unitId).Position;
 }
