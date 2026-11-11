@@ -96,4 +96,12 @@ public sealed record UnitEntity
   public int GatherTicksAccumulated { get; }
 
   public TickId ReadyAtTick { get; }
+
+  /// <summary>
+  /// Copia de la unidad sin orden (Idle): sin ruta, sin repath pendiente y con el contador de recolección descartado (01 §5).
+  /// Conserva posición, HP y cooldown: cancelar una orden no revierte progreso ni recursos (04 §3).
+  /// </summary>
+  internal UnitEntity AsIdle() => new(
+      Id, Owner, Type, Position, Hp, MovementOrder.Idle, route: EquatableArray<PositionXZ>.Empty, RouteMapRevision,
+      repathPendingSinceTick: null, lastPursuitRepathTick: null, gatherTicksAccumulated: 0, ReadyAtTick);
 }

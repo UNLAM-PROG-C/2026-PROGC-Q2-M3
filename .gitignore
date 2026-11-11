@@ -45,3 +45,5 @@ TestResults/
 ## Godot (cliente futuro)
 .godot/
 .devcontainer/
+# Notas personales (no son documentación del proyecto)
+TP-Integrador/docs/personal-luca/

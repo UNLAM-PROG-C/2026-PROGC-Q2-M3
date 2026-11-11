@@ -25,7 +25,8 @@ public sealed record TickOutcome(
 /// <item>Un solo hilo llama a <see cref="AdvanceTick"/>; nunca hay dos ticks a la vez (06 §3).</item>
 /// <item>El tick es atómico: o se confirma completo (nuevo <see cref="Current"/>) o se descarta completo ante una falla
 /// crítica (D-044, contrato 06 §4).</item>
-/// <item>No hace I/O de red: entrega la publicación a <c>ITickPublisher</c>, que no bloquea.</item>
+/// <item>No hace I/O de red: devuelve la publicación en <see cref="TickOutcome"/> y el loop la entrega a <c>ITickPublisher</c>,
+/// que no bloquea (contrato 10 §4: el loop recibe el publicador).</item>
 /// <item>Después de un resultado de gameplay o de una falla crítica, no ejecuta más ticks.</item>
 /// </list>
 /// </summary>

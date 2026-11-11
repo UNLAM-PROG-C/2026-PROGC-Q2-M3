@@ -1,0 +1,41 @@
+// MAPA TEMPORAL para la vertical slice y las pruebas (formato D-052, contrato 06 §8).
+// El mapa real lo diseñan Agus e Ivan en la Fase 4 (work-plan §3).
+// Simetría por rotación de 180°: la celda (c, r) de P1 corresponde a (47 - c, 47 - r) de P2,
+// y la posición (x, z) a (48 - x, 48 - z). La huella del Centro Principal (4x4) sale de server.example.json.
+{
+  "cellSize": 1.0,
+  "columns": 48,
+  "rows": 48,
+  "trees": [
+    // Bosque cercano a P1 y su espejo cercano a P2.
+    { "column": 14, "row": 4 }, { "column": 15, "row": 4 }, { "column": 16, "row": 4 },
+    { "column": 14, "row": 5 }, { "column": 15, "row": 5 }, { "column": 16, "row": 5 },
+    { "column": 33, "row": 43 }, { "column": 32, "row": 43 }, { "column": 31, "row": 43 },
+    { "column": 33, "row": 42 }, { "column": 32, "row": 42 }, { "column": 31, "row": 42 },
+    // Segundo bosque de cada lado.
+    { "column": 4, "row": 14 }, { "column": 5, "row": 14 }, { "column": 4, "row": 15 }, { "column": 5, "row": 15 },
+    { "column": 43, "row": 33 }, { "column": 42, "row": 33 }, { "column": 43, "row": 32 }, { "column": 42, "row": 32 },
+    // Bosque central disputado (simétrico consigo mismo).
+    { "column": 22, "row": 23 }, { "column": 23, "row": 23 }, { "column": 24, "row": 24 }, { "column": 25, "row": 24 }
+  ],
+  "starts": [
+    {
+      "player": 1,
+      "mainCenterAnchor": { "column": 4, "row": 4 },
+      "initialUnits": [
+        { "type": "Worker", "x": 9.5, "z": 5.5 },
+        { "type": "Worker", "x": 9.5, "z": 6.5 },
+        { "type": "Worker", "x": 9.5, "z": 7.5 }
+      ]
+    },
+    {
+      "player": 2,
+      "mainCenterAnchor": { "column": 40, "row": 40 },
+      "initialUnits": [
+        { "type": "Worker", "x": 38.5, "z": 42.5 },
+        { "type": "Worker", "x": 38.5, "z": 41.5 },
+        { "type": "Worker", "x": 38.5, "z": 40.5 }
+      ]
+    }
+  ]
+}

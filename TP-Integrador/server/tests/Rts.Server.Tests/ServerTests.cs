@@ -4,7 +4,9 @@ using Rts.Server.Validation;
 using Rts.Shared.Entities;
 using Rts.Shared.Match;
 using Rts.Shared.Resources;
+using Rts.Shared.Geometry;
 using Rts.Shared.World;
+using Rts.Simulation.Map;
 
 namespace Rts.Server.Tests;
 
@@ -14,14 +16,26 @@ public sealed class ServerTests : IDisposable
 
   public void Dispose() => Directory.Delete(_directory, recursive: true);
 
-  /// <summary>Copia el ejemplo a una carpeta temporal con un archivo de mapa vacío al lado, y lo carga.</summary>
+  /// <summary>Copia el ejemplo y el mapa temporal a una carpeta temporal, con la misma estructura que <c>config/</c>, y lo carga.</summary>
   private ServerConfig LoadExample()
   {
     string configPath = Path.Combine(_directory, "server.json");
     File.Copy(Path.Combine(AppContext.BaseDirectory, "server.example.json"), configPath);
     Directory.CreateDirectory(Path.Combine(_directory, "maps"));
-    File.WriteAllText(Path.Combine(_directory, "maps", "default.json"), "{}");
+    File.Copy(Path.Combine(AppContext.BaseDirectory, "maps", "default.json"), Path.Combine(_directory, "maps", "default.json"));
     return ServerConfigLoader.Load(configPath);
+  }
+
+  [Fact]
+  public void ExampleMap_LoadsAndIsValidForTheExampleConfig()
+  {
+    ServerConfig config = LoadExample();
+    FootprintSize mainCenterSize = config.Construction.FootprintSizes[BuildingType.MainCenter];
+
+    MapDefinition map = MapLoader.Load(config.MapFile, mainCenterSize);
+
+    Assert.Equal(2, map.Starts.Count);
+    Assert.NotEmpty(map.TreeCells);
   }
 
   [Fact]
