@@ -1,3 +1,4 @@
+using Rts.Movement.Model;
 using Rts.Shared.Commands;
 using Rts.Shared.Events;
 using Rts.Shared.Ids;
@@ -18,6 +19,7 @@ internal sealed class TickContext
 {
   private readonly List<DomainEvent> _events = [];
   private readonly List<CommandResult> _commandResults = [];
+  private NavigationGrid? _navigation;
 
   public TickContext(WorldState previous)
   {
@@ -42,6 +44,23 @@ internal sealed class TickContext
 
   /// <summary>Tiempo que la fase 5 esperó en la barrera Economy ∥ Combat (métrica, 06 §10).</summary>
   public TimeSpan BarrierWait { get; set; }
+
+  /// <summary>
+  /// Mapa de navegación de <see cref="World"/>. Se arma la primera vez que se pide y se reutiliza mientras la
+  /// <c>MapRevision</c> no cambie; si una colocación cambia la revisión, se vuelve a armar.
+  /// </summary>
+  public NavigationGrid Navigation
+  {
+    get
+    {
+      if (_navigation is null || _navigation.Revision != World.MapRevision)
+      {
+        _navigation = NavigationMap.From(World);
+      }
+
+      return _navigation;
+    }
+  }
 
   /// <summary>Confirma un evento: le asigna el sello <c>(Tick, índice)</c> siguiente.</summary>
   public void Emit(IDomainEventPayload payload)

@@ -104,4 +104,16 @@ public sealed record UnitEntity
   internal UnitEntity AsIdle() => new(
       Id, Owner, Type, Position, Hp, MovementOrder.Idle, route: EquatableArray<PositionXZ>.Empty, RouteMapRevision,
       repathPendingSinceTick: null, lastPursuitRepathTick: null, gatherTicksAccumulated: 0, ReadyAtTick);
+
+  /// <summary>
+  /// Copia de la unidad con una orden nueva y su ruta validada contra <paramref name="routeMapRevision"/> (04 §3).
+  /// La orden anterior se descarta entera: sin repath pendiente, sin marca de persecución y sin contador de recolección.
+  /// </summary>
+  internal UnitEntity WithNewOrder(MovementOrder order, EquatableArray<PositionXZ> route, MapRevision routeMapRevision) => new(
+      Id, Owner, Type, Position, Hp, order, route, routeMapRevision,
+      repathPendingSinceTick: null, lastPursuitRepathTick: null, gatherTicksAccumulated: 0, ReadyAtTick);
+
+  /// <summary>La parte de la unidad que ve Movement.</summary>
+  internal UnitMovementState ToMovementState() => new(
+      Id, Owner, Type, Position, Order, Route, RouteMapRevision, RepathPendingSinceTick, LastPursuitRepathTick);
 }
