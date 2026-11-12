@@ -2,6 +2,7 @@ using Rts.Movement.Model;
 using Rts.Shared.Commands;
 using Rts.Shared.Events;
 using Rts.Shared.Ids;
+using Rts.Simulation.Phases;
 using Rts.Simulation.State;
 
 namespace Rts.Simulation.Engine;
@@ -44,6 +45,12 @@ internal sealed class TickContext
 
   /// <summary>Tiempo que la fase 5 esperó en la barrera Economy ∥ Combat (métrica, 06 §10).</summary>
   public TimeSpan BarrierWait { get; set; }
+
+  /// <summary>Fase 4: la foto inmutable de <c>W</c> que leen Economy y Combat. Es la misma referencia, sin copia (D-044).</summary>
+  public WorldState? Snapshot { get; set; }
+
+  /// <summary>Fase 5 → 6: el cálculo de Economy y Combat lanzado y todavía no confirmado.</summary>
+  public DomainWork? DomainWork { get; set; }
 
   /// <summary>
   /// Mapa de navegación de <see cref="World"/>. Se arma la primera vez que se pide y se reutiliza mientras la
