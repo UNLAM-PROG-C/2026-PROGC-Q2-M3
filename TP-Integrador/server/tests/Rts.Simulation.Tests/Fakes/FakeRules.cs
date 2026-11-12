@@ -20,6 +20,8 @@ namespace Rts.Simulation.Tests.Fakes;
 internal sealed class FakeEconomyRules : IEconomyRules
 {
   public static readonly ResourceAmount TestInitialBalance = new(Wood: 200, Food: 100);
+  public static readonly ResourceAmount WorkerCost = ResourceAmount.OfFood(3);
+  public static readonly ResourceAmount SoldierCost = ResourceAmount.OfFood(5);
 
   public ResourceAmount InitialBalance => TestInitialBalance;
 
@@ -27,9 +29,14 @@ internal sealed class FakeEconomyRules : IEconomyRules
 
   public ResourceAmount GetFarmRepairCost() => throw NotYet();
 
-  public ResourceAmount GetTrainingCost(UnitType unitType) => throw NotYet();
+  public ResourceAmount GetTrainingCost(UnitType unitType) => unitType == UnitType.Worker ? WorkerCost : SoldierCost;
 
-  public SpendEvaluation EvaluateSpend(ResourceAmount balance, ResourceAmount cost) => throw NotYet();
+  /// <summary>Regla simple de prueba: alcanza si ninguna componente del saldo queda negativa.</summary>
+  public SpendEvaluation EvaluateSpend(ResourceAmount balance, ResourceAmount cost)
+  {
+    ResourceAmount after = balance - cost;
+    return after.IsNonNegative ? SpendEvaluation.Affordable(after) : SpendEvaluation.Insufficient(balance, EconomyErrors.InsufficientResources);
+  }
 
   public bool CanAfford(ResourceAmount balance, ResourceAmount cost) => throw NotYet();
 

@@ -125,6 +125,10 @@ public sealed record BuildingEntity
     return new BuildingEntity(Id, Owner, Type, Footprint, Hp, operationalFrom, farm, repair: null, producer, towerReady);
   }
 
+  /// <summary>Copia del productor con la cola y la tarea que confirmó Production. El constructor verifica que le corresponda.</summary>
+  internal BuildingEntity WithProduction(ProducerState production) => new(
+      Id, Owner, Type, Footprint, Hp, OperationalFromTick, FarmEconomy, Repair, production, TowerReadyAtTick);
+
   /// <summary>Copia de la granja en reparación con el progreso que calculó Construction.</summary>
   internal BuildingEntity WithRepair(FarmRepairState repair) => new(
       Id, Owner, Type, Footprint, Hp, OperationalFromTick, FarmEconomy, repair, Production, TowerReadyAtTick);
