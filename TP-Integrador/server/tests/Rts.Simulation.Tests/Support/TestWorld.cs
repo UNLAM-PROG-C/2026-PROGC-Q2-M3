@@ -83,6 +83,39 @@ internal static class TestWorld
     return world.With(units: world.Units.SetItem(unitId, task), lastOrderId: orderId);
   }
 
+  /// <summary>Un punto a 1 unidad del centro del árbol: dentro del rango de prueba de <c>FakeMovementRules</c>.</summary>
+  public static readonly PositionXZ NextToTree = new(11.5, 20.5);
+
+  public const int FarmBatches = 5;
+  public const int FarmHp = 200;
+  private static readonly FootprintSize FarmSize = new(2, 2);
+
+  /// <summary>El mundo con la unidad parada en <paramref name="position"/> (todo lo demás igual).</summary>
+  public static WorldState WithUnitAt(WorldState world, EntityId unitId, PositionXZ position)
+  {
+    UnitEntity unit = world.Units[unitId];
+    var moved = new UnitEntity(
+        unit.Id, unit.Owner, unit.Type, position, unit.Hp, unit.Order, unit.Route, unit.RouteMapRevision,
+        unit.RepathPendingSinceTick, unit.LastPursuitRepathTick, unit.GatherTicksAccumulated, unit.ReadyAtTick);
+    return world.With(units: world.Units.SetItem(unitId, moved));
+  }
+
+  /// <summary>
+  /// El mundo con una granja nueva de <paramref name="owner"/>: completada y produciendo (con su estado de Economy), o en obra
+  /// (sin él). Devuelve también su ID.
+  /// </summary>
+  public static (WorldState World, EntityId FarmId) WithFarm(WorldState world, PlayerId owner, GridCell anchor, bool completed = true)
+  {
+    EntityId farmId = world.LastEntityId.Next();
+    FarmEconomyState? economy = completed
+        ? new FarmEconomyState(farmId, owner, FarmProductionStatus.Producing, FarmBatches, ticksAccumulated: 0, TickId.Zero)
+        : null;
+    var farm = new BuildingEntity(
+        farmId, owner, BuildingType.Farm, new Footprint(anchor, FarmSize), FarmHp, completed ? TickId.Zero : null,
+        economy, repair: null, production: null, towerReadyAtTick: null);
+    return (world.With(buildings: world.Buildings.SetItem(farmId, farm), lastEntityId: farmId), farmId);
+  }
+
   /// <summary>Árbol disponible del mundo de prueba (para comprobar que el mapa no cambia).</summary>
   public static TreeEconomyState TreeState(WorldState world) => world.Trees[Tree].Economy;
 }

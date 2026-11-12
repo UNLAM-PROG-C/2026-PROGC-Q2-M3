@@ -53,6 +53,12 @@ internal sealed class TickContext
   public DomainWork? DomainWork { get; set; }
 
   /// <summary>
+  /// Fase 6: unidades cuya orden se canceló al confirmar Economy o Combat (ya están Idle en <see cref="World"/>). La cascada de la
+  /// barrera emite su <c>UnitOrderChanged</c> al final, por <c>UnitId</c>, y solo si siguen vivas (06 §5).
+  /// </summary>
+  public SortedSet<EntityId> CanceledOrders { get; } = [];
+
+  /// <summary>
   /// Mapa de navegación de <see cref="World"/>. Se arma la primera vez que se pide y se reutiliza mientras la
   /// <c>MapRevision</c> no cambie; si una colocación cambia la revisión, se vuelve a armar.
   /// </summary>

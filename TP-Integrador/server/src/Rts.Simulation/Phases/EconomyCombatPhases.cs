@@ -1,5 +1,7 @@
 using Rts.Combat.Contracts;
 using Rts.Economy.Contracts;
+using Rts.Shared.Entities;
+using Rts.Shared.Events;
 using Rts.Shared.Ids;
 using Rts.Simulation.Diagnostics;
 using Rts.Simulation.Engine;
@@ -109,6 +111,24 @@ internal sealed class BarrierAndCommitPhase : ITickPhase
 
     _economy.Commit(context, economy); // Orden fijo (06 §4): "la comida se acredita y después se destruye".
     _combat.Commit(context, combat);
+    EmitCanceledOrders(context);
+  }
+
+  /// <summary>
+  /// Cascada (06 §5): un <c>UnitOrderChanged</c> por cada orden cancelada en esta fase, por <c>UnitId</c>, después de los eventos de
+  /// Economy y Combat. Una unidad que murió en el mismo tick no lo recibe: ya no existe.
+  /// </summary>
+  private static void EmitCanceledOrders(TickContext context)
+  {
+    foreach (EntityId unitId in context.CanceledOrders)
+    {
+      if (context.World.Units.ContainsKey(unitId))
+      {
+        context.Emit(new UnitOrderChanged(unitId, OrderId.None, UnitOrderKind.Idle));
+      }
+    }
+
+    context.CanceledOrders.Clear();
   }
 
   /// <summary>Verdadero si la tarea terminó (bien o con error) dentro del plazo; los errores se informan después, por rama.</summary>

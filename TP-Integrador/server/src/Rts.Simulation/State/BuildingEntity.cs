@@ -100,4 +100,8 @@ public sealed record BuildingEntity
   public ProducerState? Production { get; }
 
   public TickId? TowerReadyAtTick { get; }
+
+  /// <summary>Copia de la granja con el estado productivo que confirmó Economy. El constructor verifica que siga siendo coherente.</summary>
+  internal BuildingEntity WithFarmEconomy(FarmEconomyState farmEconomy) => new(
+      Id, Owner, Type, Footprint, Hp, OperationalFromTick, farmEconomy, Repair, Production, TowerReadyAtTick);
 }

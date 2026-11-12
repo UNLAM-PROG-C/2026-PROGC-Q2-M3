@@ -37,6 +37,9 @@ public sealed record TreeEntity
   public PositionXZ Position { get; }
 
   public TreeEconomyState Economy { get; }
+
+  /// <summary>Copia del árbol con el estado económico que confirmó Economy; celda y posición no cambian.</summary>
+  internal TreeEntity WithEconomy(TreeEconomyState economy) => new(Id, Cell, Position, economy);
 }
 
 /// <summary>Saldo oficial de un jugador. Invariante: nunca negativo (01 §8).</summary>
@@ -61,4 +64,7 @@ public sealed record PlayerState
   public PlayerId Player { get; }
 
   public ResourceAmount Resources { get; }
+
+  /// <summary>Saldo después de sumar <paramref name="delta"/>. Si quedara negativo, el constructor lo rechaza.</summary>
+  internal PlayerState Plus(ResourceAmount delta) => new(Player, Resources + delta);
 }

@@ -131,6 +131,11 @@ public sealed record UnitEntity
         movement.RepathPendingSinceTick, movement.LastPursuitRepathTick, gatherTicks, ReadyAtTick);
   }
 
+  /// <summary>Copia con el contador de recolección que calculó Economy. Solo vale con una orden GatherWood (lo verifica el constructor).</summary>
+  internal UnitEntity WithGatherTicks(int gatherTicks) => new(
+      Id, Owner, Type, Position, Hp, Order, Route, RouteMapRevision,
+      RepathPendingSinceTick, LastPursuitRepathTick, gatherTicks, ReadyAtTick);
+
   /// <summary>La parte de la unidad que ve Movement.</summary>
   internal UnitMovementState ToMovementState() => new(
       Id, Owner, Type, Position, Order, Route, RouteMapRevision, RepathPendingSinceTick, LastPursuitRepathTick);

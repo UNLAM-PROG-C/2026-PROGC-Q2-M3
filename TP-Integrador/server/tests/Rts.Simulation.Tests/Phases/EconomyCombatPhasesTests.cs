@@ -1,5 +1,7 @@
 using Rts.Combat.Contracts;
 using Rts.Economy.Contracts;
+using Rts.Shared.Entities;
+using Rts.Shared.Events;
 using Rts.Shared.Ids;
 using Rts.Shared.Time;
 using Rts.Simulation.Diagnostics;
@@ -117,6 +119,25 @@ public class EconomyCombatPhasesTests
 
     Assert.True(context.BarrierWait >= ShortBarrier);
     Assert.DoesNotContain(log, entry => entry.StartsWith("commit", StringComparison.Ordinal));
+  }
+
+  [Fact]
+  public void Cascade_EmitsCanceledOrdersByUnitIdAndSkipsUnitsThatDiedInTheSameTick()
+  {
+    var (economy, combat, _) = Branches();
+    economy.OnCommit = context =>
+    {
+      context.CanceledOrders.Add(TestWorld.P1WorkerB);
+      context.CanceledOrders.Add(TestWorld.P1WorkerA);
+    };
+    combat.OnCommit = context => context.World = context.World.With(units: context.World.Units.Remove(TestWorld.P1WorkerA)); // Murió.
+    var context = new TickContext(TestWorld.Create());
+
+    Run(context, Phases(economy, combat, parallel: true));
+
+    Assert.Equal(
+        [new UnitOrderChanged(TestWorld.P1WorkerB, OrderId.None, UnitOrderKind.Idle)],
+        context.Events.Select(stamped => stamped.Payload));
   }
 
   [Fact]
