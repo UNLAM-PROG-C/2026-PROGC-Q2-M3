@@ -1,0 +1,9 @@
+[gd_scene format=3 uid="uid://bs827caik5upc"]
+
+[ext_resource type="PackedScene" uid="uid://cu00o60h3at6d" path="res://assets/buildings/blue/building_castle_blue.gltf" id="1_rp2fc"]
+
+[node name="Base" type="Node3D" unique_id=1895642044]
+
+[node name="Colored" type="Node3D" parent="." unique_id=504408727]
+
+[node name="building_castle_blue2" parent="Colored" unique_id=261119981 instance=ExtResource("1_rp2fc")]

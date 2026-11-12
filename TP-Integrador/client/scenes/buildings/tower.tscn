@@ -1,0 +1,10 @@
+[gd_scene format=3 uid="uid://qa0vbjhydpwf"]
+
+[ext_resource type="PackedScene" uid="uid://d2po8dbg0jmgl" path="res://assets/buildings/blue/building_tower_B_blue.gltf" id="1_pb3th"]
+
+[node name="Tower" type="Node3D" unique_id=468697195]
+
+[node name="Colored" type="Node3D" parent="." unique_id=1383930870]
+
+[node name="building_tower_B_blue2" parent="Colored" unique_id=501454773 instance=ExtResource("1_pb3th")]
+transform = Transform3D(0.8, 0, 0, 0, 0.8, 0, 0, 0, 0.8, 0, 0, 0)
