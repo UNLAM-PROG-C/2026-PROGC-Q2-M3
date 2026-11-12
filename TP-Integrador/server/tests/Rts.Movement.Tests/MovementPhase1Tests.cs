@@ -229,4 +229,3 @@ public class MovementPhase1Tests
     Assert.Equal(r1, r2);
   }
 }
-

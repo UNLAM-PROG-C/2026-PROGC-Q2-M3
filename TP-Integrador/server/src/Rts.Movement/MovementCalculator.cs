@@ -35,7 +35,10 @@ public sealed class MovementCalculator : IMovementCalculator
 
     foreach (UnitMovementState unit in input.Units.OrderBy(u => u.UnitId))
     {
-      ProcessUnit(unit, updates, ordersEnded, events);
+      if (!unit.Order.IsIdle && !unit.IsRepathPending && unit.Order.Kind == UnitOrderKind.Move)
+      {
+        AdvanceMoveUnit(unit, updates, ordersEnded, events);
+      }
     }
 
     return new MovementTickResult(
@@ -43,23 +46,6 @@ public sealed class MovementCalculator : IMovementCalculator
         new EquatableArray<UnitMovementState>(updates.ToImmutable()),
         new EquatableArray<OrderEnded>(ordersEnded.ToImmutable()),
         new EquatableArray<IDomainEventPayload>(events.ToImmutable()));
-  }
-
-  private void ProcessUnit(
-      UnitMovementState unit,
-      ImmutableArray<UnitMovementState>.Builder updates,
-      ImmutableArray<OrderEnded>.Builder ordersEnded,
-      ImmutableArray<IDomainEventPayload>.Builder events)
-  {
-    if (unit.Order.IsIdle || unit.IsRepathPending)
-    {
-      return;
-    }
-
-    if (unit.Order.Kind == UnitOrderKind.Move)
-    {
-      AdvanceMoveUnit(unit, updates, ordersEnded, events);
-    }
   }
 
   private void AdvanceMoveUnit(
@@ -148,4 +134,3 @@ public sealed class MovementCalculator : IMovementCalculator
     events.Add(new UnitOrderChanged(unit.UnitId, OrderId.None, UnitOrderKind.Idle));
   }
 }
-
