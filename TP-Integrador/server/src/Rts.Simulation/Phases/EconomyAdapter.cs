@@ -13,7 +13,8 @@ using Rts.Simulation.State;
 namespace Rts.Simulation.Phases;
 
 /// <summary>
-/// Rama Economy de la fase paralela (06 §4, contrato 01 §3 y §5).
+/// Adapter entre Simulation y el módulo Economy: ocupa la rama Economy de la fase paralela (06 §4, contrato 01 §3 y §5).
+/// Economy (el módulo) solo calcula; este adapter arma su entrada desde el mundo y aplica su propuesta.
 /// <list type="bullet">
 /// <item><b>Calcular</b> (otra tarea): arma <see cref="EconomyTickInput"/> desde el snapshot (solo recolectores <b>en rango</b>,
 /// todos los árboles y las granjas completadas) y llama al calculador de Economy.</item>
@@ -21,12 +22,12 @@ namespace Rts.Simulation.Phases;
 /// recolectores que se quedan sin árbol pasan a Idle; su evento lo emite la cascada de la barrera.</item>
 /// </list>
 /// </summary>
-internal sealed class EconomyBranch : IDomainBranch<EconomyTickResult>
+internal sealed class EconomyAdapter : IDomainBranch<EconomyTickResult>
 {
   private readonly IEconomyCalculator _calculator;
   private readonly IMovementRules _movement;
 
-  public EconomyBranch(IEconomyCalculator calculator, IMovementRules movement)
+  public EconomyAdapter(IEconomyCalculator calculator, IMovementRules movement)
   {
     _calculator = calculator ?? throw new ArgumentNullException(nameof(calculator));
     _movement = movement ?? throw new ArgumentNullException(nameof(movement));

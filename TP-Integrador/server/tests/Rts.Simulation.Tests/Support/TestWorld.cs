@@ -116,6 +116,33 @@ internal static class TestWorld
     return (world.With(buildings: world.Buildings.SetItem(farmId, farm), lastEntityId: farmId), farmId);
   }
 
+  public const int TowerHp = 300;
+  private static readonly FootprintSize TowerSize = new(1, 1);
+
+  /// <summary>El mundo con un soldado nuevo, quieto o con orden Attack sobre <paramref name="attackTarget"/>. Devuelve también su ID.</summary>
+  public static (WorldState World, EntityId SoldierId) WithSoldier(
+      WorldState world, PlayerId owner, PositionXZ position, EntityId? attackTarget = null)
+  {
+    EntityId soldierId = world.LastEntityId.Next();
+    OrderId lastOrderId = attackTarget is null ? world.LastOrderId : world.LastOrderId.Next();
+    MovementOrder order = attackTarget is { } target ? MovementOrder.Task(lastOrderId, UnitOrderKind.Attack, target) : MovementOrder.Idle;
+    var soldier = new UnitEntity(
+        soldierId, owner, UnitType.Soldier, position, FakeCombatRules.SoldierMaxHp, order, EquatableArray<PositionXZ>.Empty,
+        world.MapRevision, repathPendingSinceTick: null, lastPursuitRepathTick: null, gatherTicksAccumulated: 0, TickId.Zero);
+    return (world.With(units: world.Units.SetItem(soldierId, soldier), lastEntityId: soldierId, lastOrderId: lastOrderId), soldierId);
+  }
+
+  /// <summary>El mundo con una torre nueva de <paramref name="owner"/>: completada (lista para disparar) o en obra. Devuelve su ID.</summary>
+  public static (WorldState World, EntityId TowerId) WithTower(WorldState world, PlayerId owner, GridCell anchor, bool completed = true)
+  {
+    EntityId towerId = world.LastEntityId.Next();
+    TickId? completedAt = completed ? TickId.Zero : null;
+    var tower = new BuildingEntity(
+        towerId, owner, BuildingType.Tower, new Footprint(anchor, TowerSize), TowerHp, completedAt,
+        farmEconomy: null, repair: null, production: null, towerReadyAtTick: completedAt);
+    return (world.With(buildings: world.Buildings.SetItem(towerId, tower), lastEntityId: towerId), towerId);
+  }
+
   /// <summary>Árbol disponible del mundo de prueba (para comprobar que el mapa no cambia).</summary>
   public static TreeEconomyState TreeState(WorldState world) => world.Trees[Tree].Economy;
 }

@@ -136,6 +136,16 @@ public sealed record UnitEntity
       Id, Owner, Type, Position, Hp, Order, Route, RouteMapRevision,
       RepathPendingSinceTick, LastPursuitRepathTick, gatherTicks, ReadyAtTick);
 
+  /// <summary>Copia con el HP que dejó el daño de Combat (si llega a 0, la unidad se quita, no se copia).</summary>
+  internal UnitEntity WithHp(int hp) => new(
+      Id, Owner, Type, Position, hp, Order, Route, RouteMapRevision,
+      RepathPendingSinceTick, LastPursuitRepathTick, GatherTicksAccumulated, ReadyAtTick);
+
+  /// <summary>Copia con el nuevo cooldown que calculó Combat para este atacante.</summary>
+  internal UnitEntity WithReadyAt(TickId readyAtTick) => new(
+      Id, Owner, Type, Position, Hp, Order, Route, RouteMapRevision,
+      RepathPendingSinceTick, LastPursuitRepathTick, GatherTicksAccumulated, readyAtTick);
+
   /// <summary>La parte de la unidad que ve Movement.</summary>
   internal UnitMovementState ToMovementState() => new(
       Id, Owner, Type, Position, Order, Route, RouteMapRevision, RepathPendingSinceTick, LastPursuitRepathTick);

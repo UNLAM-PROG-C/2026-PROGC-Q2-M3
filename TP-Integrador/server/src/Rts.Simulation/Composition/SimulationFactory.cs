@@ -15,9 +15,9 @@ namespace Rts.Simulation.Composition;
 /// Única puerta pública para armar Simulation con sus piezas reales (contrato 10 §4, paso 5). Es el único lugar que sabe
 /// <b>qué fases</b> corren, <b>en qué orden</b> y <b>qué handler</b> atiende cada comando. El resto del código recibe todo armado.
 /// <para>
-/// Fases implementadas: 1 (lote de comandos: Stop y Move) y 2 (Movement); la 9 (publicación) la hace el motor. Las fases 3 a 8
-/// y los demás handlers se agregan acá a medida que se implementan; mientras tanto, esos comandos se rechazan con
-/// <c>Simulation.UnsupportedCommand</c>.
+/// Fases implementadas: 1 (lote de comandos: Stop y Move), 2 (Movement), 4 a 6 (snapshot, Economy ∥ Combat y barrera); la 9
+/// (publicación) la hace el motor. Las fases 3, 7 y 8 y los demás handlers se agregan acá a medida que se implementan; mientras
+/// tanto, esos comandos se rechazan con <c>Simulation.UnsupportedCommand</c>.
 /// </para>
 /// </summary>
 public static class SimulationFactory
@@ -48,10 +48,16 @@ public static class SimulationFactory
       new MoveCommandHandler(modules.MovementRules),
     ];
 
+    var economy = new EconomyAdapter(modules.EconomyCalculator, modules.MovementRules);
+    var combat = new CombatAdapter(modules.CombatCalculator);
+
     ITickPhase[] phases =
     [
       new CommandBatchPhase(commands, config.MaxCommandsPerTick, handlers),
       new MovementPhase(modules.MovementCalculator),
+      new SnapshotPhase(),
+      new EconomyCombatLaunchPhase(economy, combat, config.RunDomainPhaseInParallel),
+      new BarrierAndCommitPhase(economy, combat, config.BarrierTimeout, time),
     ];
 
     return new SimulationEngine(initialWorld, phases, config.TickRate, time);

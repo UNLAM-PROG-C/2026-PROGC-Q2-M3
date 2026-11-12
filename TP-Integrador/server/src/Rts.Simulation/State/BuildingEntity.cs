@@ -101,6 +101,14 @@ public sealed record BuildingEntity
 
   public TickId? TowerReadyAtTick { get; }
 
+  /// <summary>Copia con el HP que dejó el daño de Combat. Un edificio completado y dañado sigue completado (02 §4).</summary>
+  internal BuildingEntity WithHp(int hp) => new(
+      Id, Owner, Type, Footprint, hp, OperationalFromTick, FarmEconomy, Repair, Production, TowerReadyAtTick);
+
+  /// <summary>Copia de la torre con el nuevo cooldown que calculó Combat.</summary>
+  internal BuildingEntity WithTowerReadyAt(TickId readyAtTick) => new(
+      Id, Owner, Type, Footprint, Hp, OperationalFromTick, FarmEconomy, Repair, Production, readyAtTick);
+
   /// <summary>Copia de la granja con el estado productivo que confirmó Economy. El constructor verifica que siga siendo coherente.</summary>
   internal BuildingEntity WithFarmEconomy(FarmEconomyState farmEconomy) => new(
       Id, Owner, Type, Footprint, Hp, OperationalFromTick, farmEconomy, Repair, Production, TowerReadyAtTick);

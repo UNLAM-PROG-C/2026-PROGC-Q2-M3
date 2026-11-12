@@ -14,7 +14,7 @@ using Rts.Simulation.Tests.Support;
 
 namespace Rts.Simulation.Tests.Phases;
 
-public class EconomyBranchTests
+public class EconomyAdapterTests
 {
   private const int GatherTicksSoFar = 7;
   private const int WoodPerGather = 5;
@@ -53,7 +53,7 @@ public class EconomyBranchTests
     var calculator = new FakeEconomyCalculator();
     TickId tick = world.Tick.Next();
 
-    new EconomyBranch(calculator, new FakeMovementRules()).Calculate(world, tick);
+    new EconomyAdapter(calculator, new FakeMovementRules()).Calculate(world, tick);
 
     EconomyTickInput input = Assert.Single(calculator.Inputs);
     Assert.Equal(tick, input.Tick);
@@ -75,7 +75,7 @@ public class EconomyBranchTests
         trees: [TreeEconomyState.Available(TestWorld.Tree, WoodLeft)],
         farms: [farmAfter]);
 
-    new EconomyBranch(new FakeEconomyCalculator(), new FakeMovementRules()).Commit(context, result);
+    new EconomyAdapter(new FakeEconomyCalculator(), new FakeMovementRules()).Commit(context, result);
 
     WorldState after = context.World;
     Assert.Equal(FakeEconomyRules.TestInitialBalance + ResourceAmount.OfWood(WoodPerGather), after.Players[PlayerId.One].Resources);
@@ -100,7 +100,7 @@ public class EconomyBranchTests
     };
     var context = new TickContext(world);
 
-    RunEconomyCombatPhases(context, new EconomyBranch(calculator, new FakeMovementRules()));
+    RunEconomyCombatPhases(context, new EconomyAdapter(calculator, new FakeMovementRules()));
 
     Assert.True(context.World.Units[TestWorld.P1WorkerA].Order.IsIdle);
     Assert.True(context.World.Units[TestWorld.P1WorkerB].Order.IsIdle); // También el que todavía caminaba.
@@ -117,7 +117,7 @@ public class EconomyBranchTests
   public void Commit_IncoherentResult_Throws()
   {
     var (world, _) = GatheringWorld();
-    var branch = new EconomyBranch(new FakeEconomyCalculator(), new FakeMovementRules());
+    var branch = new EconomyAdapter(new FakeEconomyCalculator(), new FakeMovementRules());
     var wrongTick = new TickContext(world);
     var unknownTree = new TickContext(world);
 
@@ -127,7 +127,7 @@ public class EconomyBranchTests
   }
 
   /// <summary>Fases 4, 5 y 6 con la rama Economy real y una rama Combat que no hace nada.</summary>
-  private static void RunEconomyCombatPhases(TickContext context, EconomyBranch economy)
+  private static void RunEconomyCombatPhases(TickContext context, EconomyAdapter economy)
   {
     var combat = new NoCombat();
     ITickPhase[] phases =

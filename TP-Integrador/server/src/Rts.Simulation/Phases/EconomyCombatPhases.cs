@@ -109,16 +109,21 @@ internal sealed class BarrierAndCommitPhase : ITickPhase
     EconomyTickResult economy = ResultOf(work.Economy, EconomyName);
     CombatTickResult combat = ResultOf(work.Combat, CombatName);
 
+    MapRevision revisionBefore = context.World.MapRevision;
     _economy.Commit(context, economy); // Orden fijo (06 §4): "la comida se acredita y después se destruye".
     _combat.Commit(context, combat);
-    EmitCanceledOrders(context);
+    EmitCascade(context, revisionBefore);
   }
 
   /// <summary>
-  /// Cascada (06 §5): un <c>UnitOrderChanged</c> por cada orden cancelada en esta fase, por <c>UnitId</c>, después de los eventos de
-  /// Economy y Combat. Una unidad que murió en el mismo tick no lo recibe: ya no existe.
+  /// Cascada (06 §5), después de los eventos de Economy y de Combat:
+  /// <list type="number">
+  /// <item>un <c>UnitOrderChanged</c> por cada orden cancelada en esta fase, por <c>UnitId</c>. Una unidad que murió en el mismo tick
+  /// no lo recibe: ya no existe;</item>
+  /// <item><c>MapRevisionChanged</c>, una sola vez, si cayó algún edificio.</item>
+  /// </list>
   /// </summary>
-  private static void EmitCanceledOrders(TickContext context)
+  private static void EmitCascade(TickContext context, MapRevision revisionBefore)
   {
     foreach (EntityId unitId in context.CanceledOrders)
     {
@@ -129,6 +134,10 @@ internal sealed class BarrierAndCommitPhase : ITickPhase
     }
 
     context.CanceledOrders.Clear();
+    if (context.World.MapRevision != revisionBefore)
+    {
+      context.Emit(new MapRevisionChanged(context.World.MapRevision));
+    }
   }
 
   /// <summary>Verdadero si la tarea terminó (bien o con error) dentro del plazo; los errores se informan después, por rama.</summary>
