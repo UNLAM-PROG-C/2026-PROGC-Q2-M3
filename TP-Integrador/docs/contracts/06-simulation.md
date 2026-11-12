@@ -101,8 +101,8 @@ Sea `S` el último `WorldState` confirmado y `W` el estado de trabajo, inicialme
 
 - Un hilo dedicado llama a `AdvanceTick` cada `TickRate.TickInterval` (50 ms), con reloj monotónico. Nunca hay dos ticks a la vez.
 - **Sobrecarga (DECIDIDO D-047):** si un tick se pasa del intervalo, se registra `IsOverrun`, el próximo arranca de inmediato y el reloj se **re-ancla**. No hay ráfagas de recuperación.
-- **Agenda sin deriva (RECOMENDADO D-087):** cada tick se agenda en `anterior + intervalo`, no en `ahora + intervalo`, así un despertar tardío del hilo no se acumula. La espera entre ticks es interrumpible por un pedido de detención. La decisión de arrancar otro tick y el pedido de detención comparten un lock: un Stop llega antes del tick (que no arranca) o durante él (que se termina y se entrega).
-- **Supervisión (RECOMENDADO D-088):** si un tick queda bloqueado más allá de `TickStallTimeout`, se informa una falla crítica desde fuera del hilo del tick. La revisa un temporizador una vez por intervalo, no un hilo propio. Al vencer: avisa `CriticalError` con el último tick confirmado, completa `StopTicksAsync` y abandona el tick, cuyo resultado se descarta si termina más tarde. El fin de partida se avisa una sola vez, lo detecte el loop o el supervisor.
+- **Agenda sin deriva (DECIDIDO D-087):** cada tick se agenda en `anterior + intervalo`, no en `ahora + intervalo`, así un despertar tardío del hilo no se acumula. La espera entre ticks es interrumpible por un pedido de detención. La decisión de arrancar otro tick y el pedido de detención comparten un lock: un Stop llega antes del tick (que no arranca) o durante él (que se termina y se entrega).
+- **Supervisión (DECIDIDO D-088):** si un tick queda bloqueado más allá de `TickStallTimeout`, se informa una falla crítica desde fuera del hilo del tick. La revisa un temporizador una vez por intervalo, no un hilo propio. Al vencer: avisa `CriticalError` con el último tick confirmado, completa `StopTicksAsync` y abandona el tick, cuyo resultado se descarta si termina más tarde. El fin de partida se avisa una sola vez, lo detecte el loop o el supervisor.
 - `StartTicks` se llama al pasar a Running. `StopTicksAsync` termina el tick en curso, si lo hay, y detiene el loop; es idempotente. Devuelve el último tick confirmado (`TickId.Zero` si no corrió ninguno), que GameSession usa como `FinalTick` de un resultado por desconexión (RECOMENDADO D-061).
 - Ante `GameplayResult` o `Failure`, el loop llama a `IMatchResultSink.OnSimulationResult` y deja de ejecutar ticks.
 - **Orden exigido por D-055:** si el tick en curso al pedir la detención produce un resultado, el loop publica ese tick y llama al sink **antes** de completar `StopTicksAsync`. Así el resultado del mundo llega a GameSession antes que el aviso de detención ([contrato 07 §6](07-game-session.md#6-desconexiones-en-running-lote-y-precedencia)).
@@ -152,10 +152,10 @@ Formato del archivo (RECOMENDADO D-052; lo lee `MapLoader.Load`, que rechaza cam
 | Parámetro | Validación | Valor |
 |---|---|---|
 | `TickRate` | > 0 | **20 Hz** (DECIDIDO) |
-| `MaxCommandsPerTick` | > 0 | PENDIENTE |
-| `CommandQueueCapacity` | ≥ `MaxCommandsPerTick` | PENDIENTE |
-| `BarrierTimeout` | > intervalo de tick (holgado) | PENDIENTE |
-| `TickStallTimeout` | > `BarrierTimeout` | PENDIENTE (plazo de seguridad del supervisor del loop, §6, D-088) |
+| `MaxCommandsPerTick` | > 0 | **32** (DECIDIDO D-091) |
+| `CommandQueueCapacity` | ≥ `MaxCommandsPerTick` | **256** (DECIDIDO D-091) |
+| `BarrierTimeout` | > intervalo de tick (holgado) | **1 s** (DECIDIDO D-091) |
+| `TickStallTimeout` | > `BarrierTimeout` | **2 s** = 2 × `BarrierTimeout` (DECIDIDO D-091; plazo del supervisor del loop, §6, D-088) |
 | `RunDomainPhaseInParallel` | — | `true` (D-051: `false` solo para medir) |
 | `Diagnostics` | `Summary` / `Debug` | `Summary` |
 
@@ -199,5 +199,5 @@ Estas pruebas de 06 §10 se escriben al implementar:
 - ~~Implementación del motor, el loop, la cola y el cargador de mapa.~~ Hecho en la Fase 1 (ver Estado).
 - Fase 2: fases 3 a 8 del tick y los handlers que faltan (ver Estado).
 - Fase 3: registro de métricas, sobrecargas y fallas críticas (§10).
-- Valores (§9) y diseño del mapa simétrico real. `server/config/maps/default.json` es un mapa **temporal** de 48×48 para pruebas.
+- ~~Valores (§9)~~ elegidos en D-091. Queda el diseño del mapa simétrico real. `server/config/maps/default.json` es un mapa **temporal** de 48×48 para pruebas.
 - ~~Precedencia fina entre el resultado de Simulation y desconexiones casi simultáneas.~~ Resuelta por D-055 (ver [contrato 07 §6](07-game-session.md#6-desconexiones-en-running-lote-y-precedencia)).
