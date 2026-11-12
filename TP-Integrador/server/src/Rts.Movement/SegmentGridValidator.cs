@@ -86,4 +86,3 @@ internal static class SegmentGridValidator
     return minRatio <= maxRatio + Epsilon;
   }
 }
-

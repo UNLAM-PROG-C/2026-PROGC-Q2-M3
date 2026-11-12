@@ -27,9 +27,11 @@ public sealed class MovementRules : IMovementRules
     _tickRate = tickRate;
   }
 
+  /// <inheritdoc />
   public double GetDistancePerTick(UnitType unitType) =>
       _tickRate.PerTick(_config.SpeedPerSecond[unitType]);
 
+  /// <inheritdoc />
   public double GetInteractionRange(UnitOrderKind taskKind) => taskKind switch
   {
     UnitOrderKind.GatherWood => _config.GatherRange,
@@ -39,6 +41,7 @@ public sealed class MovementRules : IMovementRules
         nameof(taskKind), taskKind, "Orden sin rango de interacción."),
   };
 
+  /// <inheritdoc />
   public bool IsWithinInteractionRange(
       GridSpec grid, PositionXZ position, MovementTarget target, double range)
   {
@@ -49,6 +52,7 @@ public sealed class MovementRules : IMovementRules
         : grid.ToWorldRect(target.Footprint!.Value).IsWithinRange(position, range);
   }
 
+  /// <inheritdoc />
   public RouteValidation ValidateRoute(
       NavigationGrid map, PositionXZ start, EquatableArray<PositionXZ> waypoints)
   {
@@ -67,19 +71,27 @@ public sealed class MovementRules : IMovementRules
     return RouteValidation.Valid;
   }
 
+  /// <inheritdoc />
   public UnitOrderEvaluation EvaluateUnitOrder(UnitOrderRequest request)
   {
     ArgumentNullException.ThrowIfNull(request);
-    if (!UnitOrderCompatibility.IsAllowed(request.Unit.Type, request.Kind))
+    if (request.Kind == UnitOrderKind.Idle)
     {
-      return UnitOrderEvaluation.Rejected(request.Unit.UnitId, CommonErrors.IncompatibleEntity);
+      return UnitOrderEvaluation.Accepted(request.Unit.UnitId, default);
     }
 
-    return request.Kind == UnitOrderKind.Idle
-        ? UnitOrderEvaluation.Accepted(request.Unit.UnitId, default)
-        : EvaluateActiveOrder(request);
+    ErrorCode? error =
+        CheckCompatibility(request)
+        ?? CheckOrderBoundsAndLimits(request)
+        ?? ValidateRoute(request.Map, request.Unit.Position, request.Waypoints).Error
+        ?? CheckGoalReached(request);
+
+    return error is { } code
+        ? UnitOrderEvaluation.Rejected(request.Unit.UnitId, code)
+        : UnitOrderEvaluation.Accepted(request.Unit.UnitId, request.Waypoints);
   }
 
+  /// <inheritdoc />
   public bool CheckReachability(
       NavigationGrid map, PositionXZ start, MovementTarget target, double range)
   {
@@ -88,6 +100,7 @@ public sealed class MovementRules : IMovementRules
     return true;
   }
 
+  /// <inheritdoc />
   public UnitOrderEvaluation EvaluateRepathResponse(
       UnitMovementState unit,
       OrderId orderId,
@@ -108,44 +121,34 @@ public sealed class MovementRules : IMovementRules
         : UnitOrderEvaluation.Accepted(unit.UnitId, waypoints);
   }
 
-  private UnitOrderEvaluation EvaluateActiveOrder(UnitOrderRequest request)
+  private static ErrorCode? CheckCompatibility(UnitOrderRequest request) =>
+      UnitOrderCompatibility.IsAllowed(request.Unit.Type, request.Kind)
+          ? null
+          : CommonErrors.IncompatibleEntity;
+
+  private ErrorCode? CheckOrderBoundsAndLimits(UnitOrderRequest request)
   {
     if (request.Destination is { } dest && !request.Map.Grid.Contains(dest))
     {
-      return UnitOrderEvaluation.Rejected(request.Unit.UnitId, MovementErrors.DestinationOutOfBounds);
+      return MovementErrors.DestinationOutOfBounds;
     }
 
-    if (request.Waypoints.Count > _config.MaxWaypointsPerRoute)
-    {
-      return UnitOrderEvaluation.Rejected(request.Unit.UnitId, MovementErrors.TooManyWaypoints);
-    }
-
-    return ValidateRouteAndGoal(request);
+    return request.Waypoints.Count > _config.MaxWaypointsPerRoute
+        ? MovementErrors.TooManyWaypoints
+        : null;
   }
 
-  private UnitOrderEvaluation ValidateRouteAndGoal(UnitOrderRequest request)
-  {
-    RouteValidation validation = ValidateRoute(request.Map, request.Unit.Position, request.Waypoints);
-    if (validation.Error is { } error)
-    {
-      return UnitOrderEvaluation.Rejected(request.Unit.UnitId, error);
-    }
-
-    return DoesRouteReachGoal(request)
-        ? UnitOrderEvaluation.Accepted(request.Unit.UnitId, request.Waypoints)
-        : UnitOrderEvaluation.Rejected(request.Unit.UnitId, MovementErrors.RouteDoesNotReachGoal);
-  }
-
-  private bool DoesRouteReachGoal(UnitOrderRequest request)
+  private ErrorCode? CheckGoalReached(UnitOrderRequest request)
   {
     PositionXZ routeEnd = request.Waypoints.IsEmpty
         ? request.Unit.Position
         : request.Waypoints[^1];
 
-    return request.Kind == UnitOrderKind.Move
+    bool reached = request.Kind == UnitOrderKind.Move
         ? routeEnd.IsWithinRange(request.Destination!.Value, _config.ArrivalTolerance)
         : IsWithinInteractionRange(
             request.Map.Grid, routeEnd, request.Target!, GetInteractionRange(request.Kind));
+
+    return reached ? null : MovementErrors.RouteDoesNotReachGoal;
   }
 }
-
