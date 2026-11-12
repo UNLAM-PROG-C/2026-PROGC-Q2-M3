@@ -44,7 +44,7 @@ internal static class ServerComposition
     //      MapDefinition map = MapLoader.Load(config.MapFile, <tamaño del Centro Principal según Construction>);
     //      var modules = new DomainModules(<reglas y calculadores de los cinco módulos de dominio>);
     //      ISimulationEngine engine = SimulationFactory.CreateEngine(
-    //          config.Simulation, map, config.Economy.MaxWoodPerTree, commands, modules, TimeProvider.System);
+    //          config.Simulation, map, EconomyParameters.FromConfig(config.Economy), commands, modules, TimeProvider.System);
     //      ISimulationLoop simulation = SimulationFactory.CreateLoop(engine, config.Simulation, stateSync, inbox, TimeProvider.System);
     //
     // 6. Consumidor de sesión (GameSession): el único que necesita a casi todos, por eso va al final.

@@ -109,6 +109,36 @@ public sealed record BuildingEntity
   internal BuildingEntity WithTowerReadyAt(TickId readyAtTick) => new(
       Id, Owner, Type, Footprint, Hp, OperationalFromTick, FarmEconomy, Repair, Production, readyAtTick);
 
+  /// <summary>
+  /// Copia de la obra terminada en el tick N, operativa desde <paramref name="operationalFrom"/> (N+1), con el estado de su tipo
+  /// (03 §6): una granja empieza a producir con todas sus tandas, una torre queda lista para disparar y un productor arranca vacío.
+  /// </summary>
+  internal BuildingEntity AsCompleted(TickId operationalFrom, int batchesPerFarmCycle)
+  {
+    FarmEconomyState? farm = Type == BuildingType.Farm
+        ? new FarmEconomyState(Id, Owner, FarmProductionStatus.Producing, batchesPerFarmCycle, ticksAccumulated: 0, operationalFrom)
+        : null;
+    ProducerState? producer = ProducerCatalog.IsProducer(Type)
+        ? new ProducerState(Id, Owner, Type, Footprint, operationalFrom, activeJob: null, pending: [])
+        : null;
+    TickId? towerReady = Type == BuildingType.Tower ? operationalFrom : null;
+    return new BuildingEntity(Id, Owner, Type, Footprint, Hp, operationalFrom, farm, repair: null, producer, towerReady);
+  }
+
+  /// <summary>Copia de la granja en reparación con el progreso que calculó Construction.</summary>
+  internal BuildingEntity WithRepair(FarmRepairState repair) => new(
+      Id, Owner, Type, Footprint, Hp, OperationalFromTick, FarmEconomy, repair, Production, TowerReadyAtTick);
+
+  /// <summary>
+  /// Copia de la granja con la reparación terminada en el tick N (D-014): sin estado de reparación y produciendo de nuevo desde
+  /// <paramref name="productionFrom"/> (N+1), con todas las tandas y el temporizador en 0. El HP no cambia.
+  /// </summary>
+  internal BuildingEntity AsRepaired(TickId productionFrom, int batchesPerFarmCycle)
+  {
+    var farm = new FarmEconomyState(Id, Owner, FarmProductionStatus.Producing, batchesPerFarmCycle, ticksAccumulated: 0, productionFrom);
+    return new BuildingEntity(Id, Owner, Type, Footprint, Hp, OperationalFromTick, farm, repair: null, Production, TowerReadyAtTick);
+  }
+
   /// <summary>Copia de la granja con el estado productivo que confirmó Economy. El constructor verifica que siga siendo coherente.</summary>
   internal BuildingEntity WithFarmEconomy(FarmEconomyState farmEconomy) => new(
       Id, Owner, Type, Footprint, Hp, OperationalFromTick, farmEconomy, Repair, Production, TowerReadyAtTick);

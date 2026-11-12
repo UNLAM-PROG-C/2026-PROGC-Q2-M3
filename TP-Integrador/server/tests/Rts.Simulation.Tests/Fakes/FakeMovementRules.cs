@@ -41,14 +41,11 @@ internal sealed class FakeMovementRules : IMovementRules
 
   public RouteValidation ValidateRoute(NavigationGrid map, PositionXZ start, EquatableArray<PositionXZ> waypoints) => throw NotYet();
 
-  /// <summary>Distancia recta hasta un objetivo puntual (árbol o unidad). Las huellas todavía no las usa ninguna prueba.</summary>
-  public bool IsWithinInteractionRange(GridSpec grid, PositionXZ position, MovementTarget target, double range)
-  {
-    PositionXZ point = target.Point ?? throw NotYet();
-    double dx = point.X - position.X;
-    double dz = point.Z - position.Z;
-    return Math.Sqrt((dx * dx) + (dz * dz)) <= range;
-  }
+  /// <summary>Distancia recta hasta un punto (árbol o unidad) o hasta el borde más cercano de una huella (edificio, D-019).</summary>
+  public bool IsWithinInteractionRange(GridSpec grid, PositionXZ position, MovementTarget target, double range) =>
+      target.Footprint is { } footprint
+          ? grid.ToWorldRect(footprint).IsWithinRange(position, range)
+          : target.Point!.Value.DistanceSquaredTo(position) <= range * range;
 
   public bool CheckReachability(NavigationGrid map, PositionXZ start, MovementTarget target, double range) => throw NotYet();
 

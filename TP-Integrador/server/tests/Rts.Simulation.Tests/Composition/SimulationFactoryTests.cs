@@ -18,7 +18,7 @@ public class SimulationFactoryTests
 
   private static ISimulationEngine CreateEngine(CommandQueue queue, SimulationConfig? config = null) =>
       SimulationFactory.CreateEngine(
-          config ?? ConfigAndMapTests.ValidConfig(), TestWorld.Map, TestWorld.MaxWoodPerTree, queue, UnusedModules.Create(),
+          config ?? ConfigAndMapTests.ValidConfig(), TestWorld.Map, TestWorld.Economy, queue, UnusedModules.Create(),
           TimeProvider.System);
 
   [Fact]

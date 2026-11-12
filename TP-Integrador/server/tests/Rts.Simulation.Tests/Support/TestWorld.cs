@@ -1,9 +1,11 @@
+using Rts.Construction.Model;
 using Rts.Economy.Model;
 using Rts.Movement.Model;
 using Rts.Shared.Collections;
 using Rts.Shared.Entities;
 using Rts.Shared.Geometry;
 using Rts.Shared.Ids;
+using Rts.Simulation.Composition;
 using Rts.Simulation.Initialization;
 using Rts.Simulation.Map;
 using Rts.Simulation.State;
@@ -41,6 +43,9 @@ internal static class TestWorld
         new PlayerStartDefinition(PlayerId.Two, new GridCell(34, 34),
           [new InitialUnitDefinition(UnitType.Worker, new PositionXZ(32.5, 36.5))]),
       ]);
+
+  /// <summary>Valores de Economy de prueba: madera por árbol y tandas por ciclo de granja.</summary>
+  public static readonly EconomyParameters Economy = new(MaxWoodPerTree, FarmBatches);
 
   public static InitialWorldFactory Factory() =>
       new(Map, MaxWoodPerTree, new FakeEconomyRules(), new FakeConstructionRules(), new FakeCombatRules());
@@ -141,6 +146,29 @@ internal static class TestWorld
         towerId, owner, BuildingType.Tower, new Footprint(anchor, TowerSize), TowerHp, completedAt,
         farmEconomy: null, repair: null, production: null, towerReadyAtTick: completedAt);
     return (world.With(buildings: world.Buildings.SetItem(towerId, tower), lastEntityId: towerId), towerId);
+  }
+
+  private static readonly FootprintSize SiteSize = new(2, 2);
+
+  /// <summary>El mundo con una obra nueva (todavía no completada) del tipo y HP indicados. Devuelve también su ID.</summary>
+  public static (WorldState World, EntityId SiteId) WithSite(WorldState world, PlayerId owner, BuildingType type, GridCell anchor, int hp)
+  {
+    EntityId siteId = world.LastEntityId.Next();
+    var site = new BuildingEntity(
+        siteId, owner, type, new Footprint(anchor, SiteSize), hp, operationalFromTick: null,
+        farmEconomy: null, repair: null, production: null, towerReadyAtTick: null);
+    return (world.With(buildings: world.Buildings.SetItem(siteId, site), lastEntityId: siteId), siteId);
+  }
+
+  /// <summary>El mundo con una granja completada, agotada y en reparación con <paramref name="workDone"/> de avance. Devuelve su ID.</summary>
+  public static (WorldState World, EntityId FarmId) WithRepairingFarm(WorldState world, PlayerId owner, GridCell anchor, int workDone)
+  {
+    EntityId farmId = world.LastEntityId.Next();
+    var depleted = new FarmEconomyState(farmId, owner, FarmProductionStatus.Depleted, batchesRemaining: 0, ticksAccumulated: 0, TickId.Zero);
+    var farm = new BuildingEntity(
+        farmId, owner, BuildingType.Farm, new Footprint(anchor, FarmSize), FarmHp, TickId.Zero,
+        depleted, new FarmRepairState(farmId, owner, workDone), production: null, towerReadyAtTick: null);
+    return (world.With(buildings: world.Buildings.SetItem(farmId, farm), lastEntityId: farmId), farmId);
   }
 
   /// <summary>Árbol disponible del mundo de prueba (para comprobar que el mapa no cambia).</summary>

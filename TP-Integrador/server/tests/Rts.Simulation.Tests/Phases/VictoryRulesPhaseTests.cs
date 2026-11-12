@@ -66,7 +66,7 @@ public class VictoryRulesPhaseTests
       },
     };
     ISimulationEngine engine = SimulationFactory.CreateEngine(
-        config, TestWorld.Map, TestWorld.MaxWoodPerTree, new CommandQueue(config.CommandQueueCapacity),
+        config, TestWorld.Map, TestWorld.Economy, new CommandQueue(config.CommandQueueCapacity),
         UnusedModules.Create(combatCalculator: combat), TimeProvider.System);
     engine.InitializeMatch();
 

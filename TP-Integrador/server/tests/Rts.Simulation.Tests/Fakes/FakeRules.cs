@@ -40,12 +40,23 @@ internal sealed class FakeConstructionRules : IConstructionRules
 {
   public static readonly FootprintSize MainCenterSize = new(4, 4);
   public const int MainCenterMaxHp = 1000;
+  public const int FarmMaxHp = 400;
+  public const int BarracksMaxHp = 600;
+  public const int TowerMaxHp = 500;
+  public const int FenceMaxHp = 50;
 
   public FootprintSize GetFootprintSize(BuildingType buildingType) =>
       buildingType == BuildingType.MainCenter ? MainCenterSize : throw NotYet();
 
-  public int GetMaxHp(BuildingType buildingType) =>
-      buildingType == BuildingType.MainCenter ? MainCenterMaxHp : throw NotYet();
+  public int GetMaxHp(BuildingType buildingType) => buildingType switch
+  {
+    BuildingType.MainCenter => MainCenterMaxHp,
+    BuildingType.Farm => FarmMaxHp,
+    BuildingType.Barracks => BarracksMaxHp,
+    BuildingType.Tower => TowerMaxHp,
+    BuildingType.Fence => FenceMaxHp,
+    _ => throw NotYet(),
+  };
 
   public int GetInitialHp(BuildingType buildingType) => throw NotYet();
 

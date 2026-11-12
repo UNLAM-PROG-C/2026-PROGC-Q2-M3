@@ -16,7 +16,7 @@
 | `MapLoader`, `MapLoadException` | `Rts.Simulation.Map` | Lee y valida el archivo de mapa (formato D-052, §8) |
 | `SimulationConfig`, `DiagnosticsLevel` | `Rts.Simulation.Configuration` | Parámetros |
 | `SimulationPhase`, `PhaseTiming`, `TickMetrics`, `SimulationFailure` | `Rts.Simulation.Diagnostics` | Métricas y fallas |
-| `SimulationFactory` (`CreateEngine`, `CreateLoop`), `DomainModules` | `Rts.Simulation.Composition` | Única forma pública de armar el motor y el loop (D-089) |
+| `SimulationFactory` (`CreateEngine`, `CreateLoop`), `DomainModules`, `EconomyParameters` | `Rts.Simulation.Composition` | Única forma pública de armar el motor y el loop (D-089) |
 | `CommandQueue` | `Rts.Simulation.Commands` | Cola global: implementa `ICommandSink` e `ICommandSource` (§7) |
 | `SimulationErrors` | `Rts.Simulation` | Códigos de error propios de Simulation (D-090) |
 
