@@ -1,0 +1,105 @@
+[gd_scene format=3 uid="uid://c3w0t2eyvgb35"]
+
+[ext_resource type="PackedScene" uid="uid://ctb8ipxe3g57d" path="res://scenes/camera/rts_camera.tscn" id="1_6hxkn"]
+[ext_resource type="Texture2D" uid="uid://dgo1ucaqxvrh1" path="res://assets/textures/skybox.jpg" id="2_h102v"]
+[ext_resource type="Texture2D" uid="uid://dqnitvm2lrcd6" path="res://assets/textures/Cartoon_green_texture_grass.jpg" id="3_qv032"]
+[ext_resource type="Script" uid="uid://do67d6bbvdif1" path="res://scripts/edge_margin_overlay.gd" id="4_m6klh"]
+[ext_resource type="PackedScene" uid="uid://c2reyx2wvlt48" path="res://scenes/buildings/farm.tscn" id="5_1dyep"]
+[ext_resource type="PackedScene" uid="uid://cl2ldw36phrmp" path="res://scenes/buildings/barracks.tscn" id="6_oc31c"]
+[ext_resource type="PackedScene" uid="uid://qa0vbjhydpwf" path="res://scenes/buildings/tower.tscn" id="7_m11fr"]
+[ext_resource type="PackedScene" uid="uid://dhsiqvu0k3sr2" path="res://scenes/buildings/wall.tscn" id="8_txehh"]
+[ext_resource type="PackedScene" uid="uid://bs827caik5upc" path="res://scenes/buildings/base.tscn" id="9_r6x5q"]
+[ext_resource type="PackedScene" uid="uid://d2uxoqgjy3ssg" path="res://scenes/tests/test_units.tscn" id="10_rok5d"]
+
+[sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_tipki"]
+panorama = ExtResource("2_h102v")
+energy_multiplier = 0.45
+
+[sub_resource type="Sky" id="Sky_o5qli"]
+sky_material = SubResource("PanoramaSkyMaterial_tipki")
+
+[sub_resource type="Environment" id="Environment_w47wj"]
+background_mode = 2
+background_color = Color(0.32266605, 0.65667504, 0.89629006, 1)
+sky = SubResource("Sky_o5qli")
+ambient_light_source = 2
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_energy = 0.4
+tonemap_mode = 3
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_o5qli"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_0wfyh"]
+albedo_color = Color(0.89594275, 0.8959428, 0.8959428, 1)
+albedo_texture = ExtResource("3_qv032")
+uv1_scale = Vector3(2.5, 2.5, 2.5)
+
+[node name="TestGrounds" type="Node3D" unique_id=422354478]
+
+[node name="RTSCamera" parent="." unique_id=1070349766 instance=ExtResource("1_6hxkn")]
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=233994639]
+transform = Transform3D(0.7253744, 0.3337209, -0.60204846, 0, 0.8746197, 0.4848096, 0.68835455, -0.35166848, 0.6344268, 0, 0, 0)
+light_energy = 0.3
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=804677673]
+environment = SubResource("Environment_w47wj")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1589162256]
+transform = Transform3D(10, 0, 0, 0, 1, 0, 0, 0, 10, 0, 0, 0)
+mesh = SubResource("PlaneMesh_o5qli")
+surface_material_override/0 = SubResource("StandardMaterial3D_0wfyh")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=772620509]
+
+[node name="EdgeMarginOverlay" type="Control" parent="CanvasLayer" unique_id=943632573 node_paths=PackedStringArray("rts_camera")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("4_m6klh")
+rts_camera = NodePath("../../RTSCamera")
+line_width = 5.0
+
+[node name="Farm" parent="." unique_id=1518792934 instance=ExtResource("5_1dyep")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1.1133926, 0, -1.2985964)
+
+[node name="Barracks" parent="." unique_id=98682975 instance=ExtResource("6_oc31c")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2.9482276, 0, -1.0830798)
+
+[node name="Tower2" parent="." unique_id=468697195 instance=ExtResource("7_m11fr")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4.2559423, 0, 1.5484202)
+
+[node name="Tower2" parent="Tower2" unique_id=842449140 instance=ExtResource("7_m11fr")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 6.459352, 0, -4.5930214)
+
+[node name="Wall" parent="." unique_id=1155080435 instance=ExtResource("8_txehh")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.0924397, 0, 2.5112822)
+
+[node name="Wall2" parent="." unique_id=1119337449 instance=ExtResource("8_txehh")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.0442734, 0, 0.6759856)
+
+[node name="Wall3" parent="." unique_id=2089311838 instance=ExtResource("8_txehh")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -6.089294, 0, -1.2034824)
+
+[node name="Wall" parent="Wall3" unique_id=1365847597 instance=ExtResource("8_txehh")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.233282, 0, 3.6832242)
+
+[node name="Wall2" parent="Wall3" unique_id=2132011066 instance=ExtResource("8_txehh")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.281448, 0, 1.8479276)
+
+[node name="Wall3" parent="Wall3" unique_id=1909874622 instance=ExtResource("8_txehh")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 10.236427, 0, -0.031540394)
+
+[node name="Base" parent="." unique_id=1895642044 instance=ExtResource("9_r6x5q")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5746175, -0.06491947, -3.272162)
+
+[node name="TestUnits2" parent="." unique_id=1866081070 instance=ExtResource("10_rok5d")]
+transform = Transform3D(0.99999994, 0, 0, 0, 1, 0, 0, 0, 0.99999994, -0.658, 0, 0.2783394)
+
+[node name="TestUnits" parent="." unique_id=409479003 instance=ExtResource("10_rok5d")]
+transform = Transform3D(0.70710677, 0, 0.70710677, 0, 1, 0, -0.70710677, 0, 0.70710677, -0.8054142, 0, 1.6925178)

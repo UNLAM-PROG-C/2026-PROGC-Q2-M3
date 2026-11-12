@@ -1,0 +1,31 @@
+[gd_scene format=3 uid="uid://c5u3tnm3qgh3y"]
+
+[ext_resource type="PackedScene" uid="uid://qa0vbjhydpwf" path="res://scenes/buildings/tower.tscn" id="1_qcxio"]
+[ext_resource type="PackedScene" uid="uid://cl2ldw36phrmp" path="res://scenes/buildings/barracks.tscn" id="2_daisx"]
+[ext_resource type="PackedScene" uid="uid://c2reyx2wvlt48" path="res://scenes/buildings/farm.tscn" id="3_mfina"]
+[ext_resource type="PackedScene" uid="uid://dhsiqvu0k3sr2" path="res://scenes/buildings/wall.tscn" id="5_mfina"]
+[ext_resource type="PackedScene" uid="uid://bs827caik5upc" path="res://scenes/buildings/base.tscn" id="6_f6oyp"]
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_v8228"]
+
+[node name="Building" type="Node3D" unique_id=2145065743]
+
+[node name="Visual" type="Node3D" parent="." unique_id=1484461946]
+
+[node name="Tower" parent="Visual" unique_id=468697195 instance=ExtResource("1_qcxio")]
+
+[node name="Barracks" parent="Visual" unique_id=98682975 instance=ExtResource("2_daisx")]
+
+[node name="Farm" parent="Visual" unique_id=1518792934 instance=ExtResource("3_mfina")]
+
+[node name="Wall" parent="Visual" unique_id=1155080435 instance=ExtResource("5_mfina")]
+
+[node name="Base" parent="Visual" unique_id=1895642044 instance=ExtResource("6_f6oyp")]
+
+[node name="StaticBody3D" type="StaticBody3D" parent="." unique_id=1289708272]
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="StaticBody3D" unique_id=471143807]
+transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0, 1, 0)
+shape = SubResource("BoxShape3D_v8228")
+
+[node name="BuildingInfo" type="Node3D" parent="." unique_id=265888816]

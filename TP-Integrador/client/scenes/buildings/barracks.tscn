@@ -1,0 +1,9 @@
+[gd_scene format=3 uid="uid://cl2ldw36phrmp"]
+
+[ext_resource type="PackedScene" uid="uid://dy5ghahayw5fx" path="res://assets/buildings/blue/building_barracks_blue.gltf" id="1_hv4qf"]
+
+[node name="Barracks" type="Node3D" unique_id=98682975]
+
+[node name="Colored" type="Node3D" parent="." unique_id=1760959376]
+
+[node name="building_barracks_blue2" parent="Colored" unique_id=1186918117 instance=ExtResource("1_hv4qf")]

@@ -1,0 +1,32 @@
+[gd_scene format=3 uid="uid://c2reyx2wvlt48"]
+
+[ext_resource type="PackedScene" uid="uid://btvo5sa7kd1d6" path="res://assets/buildings/neutral/building_dirt.gltf" id="1_ltp22"]
+[ext_resource type="PackedScene" uid="uid://c2ypn6vdo46lr" path="res://assets/buildings/neutral/building_grain.gltf" id="2_6cyto"]
+[ext_resource type="PackedScene" uid="uid://yryah2vtohbn" path="res://assets/buildings/blue/building_home_A_blue.gltf" id="3_4euwl"]
+
+[node name="Farm" type="Node3D" unique_id=1518792934]
+
+[node name="Colored" type="Node3D" parent="." unique_id=1293746698]
+
+[node name="building_home_A_blue2" parent="Colored" unique_id=893384101 instance=ExtResource("3_4euwl")]
+
+[node name="building_dirt2" parent="." unique_id=1483367742 instance=ExtResource("1_ltp22")]
+transform = Transform3D(0.545, 0, 0, 0, 0.545, 0, 0, 0, 0.545, 0.689, 0, 0.005)
+
+[node name="building_grain2" parent="building_dirt2" unique_id=1475007780 instance=ExtResource("2_6cyto")]
+transform = Transform3D(0.9, 0, 0, 0, 1.5, 0, 0, 0, 0.9, 0, 0, 0)
+
+[node name="building_dirt3" parent="." unique_id=1062324459 instance=ExtResource("1_ltp22")]
+transform = Transform3D(0.345, 0, 0, 0, 0.345, 0, 0, 0, 0.345, 0.39731288, 0, 0.65496993)
+
+[node name="building_grain2" parent="building_dirt3" unique_id=1811597222 instance=ExtResource("2_6cyto")]
+transform = Transform3D(0.9, 0, 0, 0, 1.5, 0, 0, 0, 0.9, 0, 0, 0)
+
+[node name="building_dirt4" parent="." unique_id=286645971 instance=ExtResource("1_ltp22")]
+transform = Transform3D(0.43, 0, 0, 0, 0.43, 0, 0, 0, 0.43, 1.020174, 0, 0.6446459)
+
+[node name="building_grain2" parent="building_dirt4" unique_id=2143233559 instance=ExtResource("2_6cyto")]
+transform = Transform3D(0.9, 0, 0, 0, 1.5, 0, 0, 0, 0.9, 0, 0, 0)
+
+[node name="building_dirt5" parent="." unique_id=512401018 instance=ExtResource("1_ltp22")]
+transform = Transform3D(0.85, 0, 0, 0, 0.85, 0, 0, 0, 0.85, 0.09728354, 0, -0.03796649)
