@@ -1,5 +1,7 @@
 using Rts.Economy.Contracts;
+using Rts.Economy.Model;
 using Rts.Shared.Entities;
+using Rts.Shared.Errors;
 using Rts.Shared.Resources;
 
 namespace Rts.Economy;
@@ -33,4 +35,16 @@ public interface IEconomyRules
 
   /// <summary>Atajo de <see cref="EvaluateSpend"/>: verdadero si el saldo cubre el costo.</summary>
   bool CanAfford(ResourceAmount balance, ResourceAmount cost);
+
+  /// <summary>
+  /// Valida el objetivo de una orden <c>GatherWood</c> al procesar el comando (04 §3, RECOMENDADO D-092). Devuelve <c>null</c> si es
+  /// recolectable, o el motivo del rechazo:
+  /// <list type="bullet">
+  /// <item><c>Common.EntityNotFound</c>: el objetivo no existe (<paramref name="target"/> nulo).</item>
+  /// <item><c>Economy.InvalidGatherTarget</c>: el objetivo no es un árbol.</item>
+  /// <item><c>Economy.TreeDepleted</c>: el árbol está agotado.</item>
+  /// </list>
+  /// La propiedad y el tipo del trabajador los validan Simulation y Movement. La alcanzabilidad la decide Movement.
+  /// </summary>
+  ErrorCode? EvaluateGatherTarget(GatherTargetInfo? target);
 }

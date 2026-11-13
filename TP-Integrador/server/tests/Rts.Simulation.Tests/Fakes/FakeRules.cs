@@ -5,6 +5,7 @@ using Rts.Construction.Contracts;
 using Rts.Construction.Model;
 using Rts.Economy;
 using Rts.Economy.Contracts;
+using Rts.Economy.Model;
 using Rts.Shared.Entities;
 using Rts.Shared.Errors;
 using Rts.Shared.Geometry;
@@ -39,6 +40,31 @@ internal sealed class FakeEconomyRules : IEconomyRules
   }
 
   public bool CanAfford(ResourceAmount balance, ResourceAmount cost) => throw NotYet();
+
+  private readonly List<GatherTargetInfo?> _gatherValidations = [];
+
+  /// <summary>Si es verdadero, <see cref="EvaluateGatherTarget"/> acepta cualquier objetivo, aunque no exista (Economy con errores).</summary>
+  public bool AcceptEveryGatherTarget { get; init; }
+
+  public IReadOnlyList<GatherTargetInfo?> GatherValidations => _gatherValidations;
+
+  /// <summary>Sigue la tabla de D-092, en su orden.</summary>
+  public ErrorCode? EvaluateGatherTarget(GatherTargetInfo? target)
+  {
+    _gatherValidations.Add(target);
+    if (AcceptEveryGatherTarget)
+    {
+      return null;
+    }
+
+    return target switch
+    {
+      null => CommonErrors.EntityNotFound,
+      { Kind: not EntityKind.Tree } => EconomyErrors.InvalidGatherTarget,
+      { TreeStatus: TreeStatus.Depleted } => EconomyErrors.TreeDepleted,
+      _ => null,
+    };
+  }
 
   private static NotSupportedException NotYet() => new("Todavía no lo usa ninguna prueba de Simulation.");
 }

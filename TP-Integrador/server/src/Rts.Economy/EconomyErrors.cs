@@ -13,4 +13,10 @@ public static class EconomyErrors
 
   /// <summary>No alcanzan ni la madera ni la comida.</summary>
   public static readonly ErrorCode InsufficientResources = new("Economy.InsufficientResources");
+
+  /// <summary>El objetivo de un <c>GatherWood</c> existe pero no es un árbol (RECOMENDADO D-092).</summary>
+  public static readonly ErrorCode InvalidGatherTarget = new("Economy.InvalidGatherTarget");
+
+  /// <summary>El árbol objetivo de un <c>GatherWood</c> está agotado: no es recolectable hasta regenerarse (RECOMENDADO D-092).</summary>
+  public static readonly ErrorCode TreeDepleted = new("Economy.TreeDepleted");
 }

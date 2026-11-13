@@ -9,11 +9,11 @@
 | Tipo | Namespace | Función |
 |---|---|---|
 | `IEconomyCalculator.CalculateTick(EconomyTickInput) → EconomyTickResult` | `Rts.Economy` | Cálculo del tick (fase 5, en paralelo con Combat) |
-| `IEconomyRules` | `Rts.Economy` | Costos, saldo inicial, `EvaluateSpend`/`CanAfford` para gastos atómicos de Simulation |
+| `IEconomyRules` | `Rts.Economy` | Costos, saldo inicial, `EvaluateSpend`/`CanAfford` para gastos atómicos de Simulation y `EvaluateGatherTarget` para validar `GatherWood` en la fase 1 (RECOMENDADO D-092) |
 | `EconomyTickInput`, `EconomyTickResult`, `PlayerResourceDelta`, `WoodGathered`, `FoodProduced`, `SpendEvaluation` | `Rts.Economy.Contracts` | Entradas y salidas inmutables |
-| `GathererState`, `TreeEconomyState`, `FarmEconomyState`, `TreeStatus`, `FarmProductionStatus` | `Rts.Economy.Model` | Vistas económicas de entidades |
+| `GathererState`, `TreeEconomyState`, `FarmEconomyState`, `TreeStatus`, `FarmProductionStatus`, `GatherTargetInfo` | `Rts.Economy.Model` | Vistas económicas de entidades |
 | `EconomyConfig` | `Rts.Economy.Configuration` | Parámetros tipados y validación |
-| `EconomyErrors` | `Rts.Economy` | `Economy.InsufficientWood`, `Economy.InsufficientFood`, `Economy.InsufficientResources` |
+| `EconomyErrors` | `Rts.Economy` | `Economy.InsufficientWood`, `Economy.InsufficientFood`, `Economy.InsufficientResources`, `Economy.InvalidGatherTarget`, `Economy.TreeDepleted` (D-092) |
 | `TreeDepleted`, `TreeRespawned`, `FarmDepleted` | `Rts.Shared.Events` | Eventos propuestos (D-009) |
 
 Son internos, y Simulation no los usa: `IGatheringCalculation` y `IFarmProductionCalculation`. Son los subcálculos que pueden correr en paralelo y que se consolidan en orden fijo (01 §7).
@@ -82,6 +82,19 @@ Esto vale para el implementador de Simulation; Economy no lo hace.
 - Al completarse una reparación (Construction) en el tick N: pasarla a `Producing` con `BatchesPerFarmCycle` tandas, temporizador 0 y `ProductionActiveFromTick = N+1` (D-014).
 - Al reemplazar o cancelar la orden de un trabajador: descartar su contador de recolección (01 §3.8).
 - Confirmar los gastos con `IEconomyRules.EvaluateSpend` en el mismo commit lógico que la operación (`Build`, inicio de `RepairFarm`, inicio de entrenamiento).
+
+### Validación del objetivo de `GatherWood` en la fase 1 (RECOMENDADO D-092)
+
+04 §3 pide que Economy valide que el árbol sea recolectable. Simulation llama a `IEconomyRules.EvaluateGatherTarget(GatherTargetInfo?)` por cada trabajador, después de verificar su propiedad y antes de Movement:
+
+| Caso | Resultado |
+|---|---|
+| Objetivo inexistente (`null`) | `Common.EntityNotFound` |
+| Objetivo que no es un árbol (unidad o edificio) | `Economy.InvalidGatherTarget` |
+| Árbol agotado | `Economy.TreeDepleted` |
+| Árbol disponible | válido (`null`) |
+
+El tipo del trabajador (`Common.IncompatibleEntity`) lo valida Movement con `UnitOrderCompatibility`, y la alcanzabilidad, `EvaluateUnitOrder`.
 
 ## 6. Configuración (`EconomyConfig`)
 
