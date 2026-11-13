@@ -1,0 +1,49 @@
+[gd_scene format=3 uid="uid://c3ix3fs3q6e4y"]
+
+[ext_resource type="PackedScene" uid="uid://ctb8ipxe3g57d" path="res://scenes/camera/rts_camera.tscn" id="1_camera"]
+[ext_resource type="Texture2D" uid="uid://dgo1ucaqxvrh1" path="res://assets/textures/skybox.jpg" id="2_sky"]
+[ext_resource type="Script" uid="uid://do67d6bbvdif1" path="res://scripts/edge_margin_overlay.gd" id="3_overlay"]
+[ext_resource type="Script" uid="uid://cplwyijcnhnqw" path="res://scripts/initial_world.gd" id="4_world"]
+
+[sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_world"]
+panorama = ExtResource("2_sky")
+energy_multiplier = 0.45
+
+[sub_resource type="Sky" id="Sky_world"]
+sky_material = SubResource("PanoramaSkyMaterial_world")
+
+[sub_resource type="Environment" id="Environment_world"]
+background_mode = 2
+background_color = Color(0.32266605, 0.65667504, 0.89629006, 1)
+sky = SubResource("Sky_world")
+ambient_light_source = 2
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_energy = 0.4
+tonemap_mode = 3
+
+[node name="MatchWorld" type="Node3D" unique_id=1524502370]
+script = ExtResource("4_world")
+
+[node name="RTSCamera" parent="." unique_id=211214968 instance=ExtResource("1_camera")]
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=80036505]
+transform = Transform3D(0.7253744, 0.3337209, -0.60204846, 0, 0.8746197, 0.4848096, 0.68835455, -0.35166848, 0.6344268, 0, 0, 0)
+light_energy = 0.3
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=140928041]
+environment = SubResource("Environment_world")
+
+[node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=1115445953]
+
+[node name="EdgeMarginOverlay" type="Control" parent="CanvasLayer" unique_id=190512673 node_paths=PackedStringArray("rts_camera")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3_overlay")
+rts_camera = NodePath("../../RTSCamera")
+line_width = 5.0
