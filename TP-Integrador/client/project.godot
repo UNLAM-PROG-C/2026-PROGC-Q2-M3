@@ -18,6 +18,7 @@ config/icon="res://icon.svg"
 [autoload]
 
 NetworkClient="*res://scripts/network/network_client.gd"
+SessionController="*res://scripts/session_controller.gd"
 
 [display]
 
