@@ -6,6 +6,8 @@ using Rts.Construction.Model;
 using Rts.Economy;
 using Rts.Economy.Contracts;
 using Rts.Economy.Model;
+using Rts.Shared.Collections;
+using Rts.Shared.Commands;
 using Rts.Shared.Entities;
 using Rts.Shared.Errors;
 using Rts.Shared.Geometry;
@@ -26,7 +28,24 @@ internal sealed class FakeEconomyRules : IEconomyRules
 
   public ResourceAmount InitialBalance => TestInitialBalance;
 
-  public bool TryGetBuildingCost(BuildingType buildingType, out ResourceAmount cost) => throw NotYet();
+  public static readonly ResourceAmount FarmCost = ResourceAmount.OfWood(50);
+  public static readonly ResourceAmount BarracksCost = ResourceAmount.OfWood(100);
+  public static readonly ResourceAmount TowerCost = ResourceAmount.OfWood(80);
+  public static readonly ResourceAmount FenceCost = ResourceAmount.OfWood(5);
+
+  /// <summary>El Centro Principal no tiene costo: no se construye durante la partida.</summary>
+  public bool TryGetBuildingCost(BuildingType buildingType, out ResourceAmount cost)
+  {
+    cost = buildingType switch
+    {
+      BuildingType.Farm => FarmCost,
+      BuildingType.Barracks => BarracksCost,
+      BuildingType.Tower => TowerCost,
+      BuildingType.Fence => FenceCost,
+      _ => ResourceAmount.Zero,
+    };
+    return buildingType != BuildingType.MainCenter;
+  }
 
   public static readonly ResourceAmount FarmRepairCost = ResourceAmount.OfWood(30);
 
@@ -80,8 +99,20 @@ internal sealed class FakeConstructionRules : IConstructionRules
   public const int TowerMaxHp = 500;
   public const int FenceMaxHp = 50;
 
-  public FootprintSize GetFootprintSize(BuildingType buildingType) =>
-      buildingType == BuildingType.MainCenter ? MainCenterSize : throw NotYet();
+  public static readonly FootprintSize FarmSize = new(2, 2);
+  public static readonly FootprintSize BarracksSize = new(3, 3);
+  public static readonly FootprintSize SingleCell = new(1, 1);
+
+  /// <summary>HP con el que nace cualquier obra en las pruebas (valor de prueba, no la fracción real de D-035).</summary>
+  public const int TestInitialHp = 10;
+
+  public FootprintSize GetFootprintSize(BuildingType buildingType) => buildingType switch
+  {
+    BuildingType.MainCenter => MainCenterSize,
+    BuildingType.Farm => FarmSize,
+    BuildingType.Barracks => BarracksSize,
+    _ => SingleCell, // Torre y valla.
+  };
 
   public int GetMaxHp(BuildingType buildingType) => buildingType switch
   {
@@ -93,11 +124,73 @@ internal sealed class FakeConstructionRules : IConstructionRules
     _ => throw NotYet(),
   };
 
-  public int GetInitialHp(BuildingType buildingType) => throw NotYet();
+  public int GetInitialHp(BuildingType buildingType) => TestInitialHp;
 
-  public SiteEvaluation EvaluateSite(BuildingType buildingType, GridCell anchor, OccupancyView site) => throw NotYet();
+  private readonly List<SiteCall> _siteEvaluations = [];
+  private readonly List<PlacementInput> _placements = [];
 
-  public PlacementEvaluation EvaluatePlacement(PlacementInput input) => throw NotYet();
+  public IReadOnlyList<SiteCall> SiteEvaluations => _siteEvaluations;
+
+  public IReadOnlyList<PlacementInput> Placements => _placements;
+
+  /// <summary>Si no es nulo, <see cref="EvaluatePlacement"/> responde esto siempre (simula un Construction con errores).</summary>
+  public PlacementEvaluation? ForcedPlacement { get; init; }
+
+  /// <summary>Sigue la tabla de 03 §3, paso 1, en su orden.</summary>
+  public SiteEvaluation EvaluateSite(BuildingType buildingType, GridCell anchor, OccupancyView site)
+  {
+    _siteEvaluations.Add(new SiteCall(buildingType, anchor, site));
+    return CheckSite(buildingType, anchor, site);
+  }
+
+  /// <summary>
+  /// 03 §3, paso 3: repite el sitio y combina los trabajadores. Ninguno alcanzable ⇒ <c>NoReachableWorker</c>; si no, acepta a los que
+  /// Movement aceptó.
+  /// </summary>
+  public PlacementEvaluation EvaluatePlacement(PlacementInput input)
+  {
+    _placements.Add(input);
+    if (ForcedPlacement is { } forced)
+    {
+      return forced;
+    }
+
+    SiteEvaluation site = CheckSite(input.BuildingType, input.Anchor, input.Site);
+    if (site.Error is { } invalid)
+    {
+      return PlacementEvaluation.Rejected(invalid);
+    }
+
+    EquatableArray<EntityCommandResult> results = [.. input.Workers.Select(worker => worker.MovementError is { } error
+        ? EntityCommandResult.Rejected(worker.WorkerId, error)
+        : EntityCommandResult.Accepted(worker.WorkerId))];
+    return results.Any(result => result.IsAccepted)
+        ? PlacementEvaluation.Accepted(site.Footprint!.Value, GetInitialHp(input.BuildingType), results)
+        : PlacementEvaluation.Rejected(ConstructionErrors.NoReachableWorker, results);
+  }
+
+  private SiteEvaluation CheckSite(BuildingType buildingType, GridCell anchor, OccupancyView site)
+  {
+    if (buildingType == BuildingType.MainCenter)
+    {
+      return SiteEvaluation.Invalid(ConstructionErrors.NotBuildable);
+    }
+
+    var footprint = new Footprint(anchor, GetFootprintSize(buildingType));
+    if (!site.Grid.Contains(footprint))
+    {
+      return SiteEvaluation.Invalid(ConstructionErrors.OutOfBounds);
+    }
+
+    IEnumerable<GridCell> cells = footprint.Cells();
+    return cells switch
+    {
+      _ when cells.Any(site.StructureCells.Contains) => SiteEvaluation.Invalid(ConstructionErrors.CellOccupied),
+      _ when cells.Any(site.TreeReservedCells.Contains) => SiteEvaluation.Invalid(ConstructionErrors.TreeReserved),
+      _ when cells.Any(site.UnitCells.Contains) => SiteEvaluation.Invalid(ConstructionErrors.UnitInFootprint),
+      _ => SiteEvaluation.Valid(footprint),
+    };
+  }
 
   private readonly List<ContinueBuildCall> _continueBuilds = [];
 
@@ -199,3 +292,6 @@ internal sealed record RepairStartCall(PlayerId Requester, RepairTargetInfo? Tar
 
 /// <summary>Un pedido que Simulation le hizo a <see cref="FakeConstructionRules.EvaluateContinueBuild"/>.</summary>
 internal sealed record ContinueBuildCall(PlayerId Requester, ConstructionTargetInfo? Target);
+
+/// <summary>Un pedido que Simulation le hizo a <see cref="FakeConstructionRules.EvaluateSite"/>.</summary>
+internal sealed record SiteCall(BuildingType BuildingType, GridCell Anchor, OccupancyView Site);

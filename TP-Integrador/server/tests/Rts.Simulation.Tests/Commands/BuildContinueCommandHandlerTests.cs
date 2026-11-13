@@ -31,7 +31,7 @@ public class BuildContinueCommandHandlerTests
           site, MapRevision.Initial, [.. workers.Select(worker => new UnitRouteCandidate(worker, SomeRoute))]));
 
   private static BuildCommandHandler Handler(FakeConstructionRules? construction = null, FakeMovementRules? movement = null) =>
-      new(construction ?? new FakeConstructionRules(), movement ?? new FakeMovementRules());
+      new(construction ?? new FakeConstructionRules(), new FakeEconomyRules(), movement ?? new FakeMovementRules());
 
   private static (TickContext Context, EntityId SiteId) WithSite(PlayerId owner)
   {
@@ -127,15 +127,5 @@ public class BuildContinueCommandHandlerTests
 
     Assert.Throws<InvalidOperationException>(() => Handler(careless).Handle(Continue(TestWorld.P1Center, TestWorld.P1WorkerA), context));
     Assert.Throws<InvalidOperationException>(() => Handler(careless).Handle(Continue(rivalSite, TestWorld.P1WorkerA), context));
-  }
-
-  [Fact]
-  public void Handle_PlaceForm_IsStillUnsupported()
-  {
-    var context = new TickContext(TestWorld.Create());
-    var place = new CommandEnvelope(CommandSequence.First, PlayerId.One, new ClientCommandId(1), BuildCommand.Place(
-        BuildingType.Farm, SiteAnchor, MapRevision.Initial, [new UnitRouteCandidate(TestWorld.P1WorkerA, SomeRoute)]));
-
-    Assert.Equal(SimulationErrors.UnsupportedCommand, Handler().Handle(place, context).Error); // Paso 16g.
   }
 }

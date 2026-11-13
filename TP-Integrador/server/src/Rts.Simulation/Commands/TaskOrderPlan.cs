@@ -44,6 +44,9 @@ internal sealed class TaskOrderPlan
   /// <summary>Si al menos una unidad recibió la orden.</summary>
   public bool AnyAccepted => _changes.Count > 0;
 
+  /// <summary>Resultado de cada unidad, en el orden del comando (Build colocar se lo pasa a Construction para combinarlo).</summary>
+  public IReadOnlyList<EntityCommandResult> Results => _results;
+
   /// <param name="map">Mapa contra el que Movement valida las rutas: el actual, o uno hipotético (Build colocar).</param>
   /// <param name="domainCheck">Validación del módulo dueño del objetivo para cada unidad; nulo si pasa.</param>
   public static TaskOrderPlan Evaluate(

@@ -34,7 +34,7 @@ public class SimulationFactoryTests
     var workerBRoute = new UnitRouteCandidate(TestWorld.P1WorkerB, [Waypoint]);
 
     queue.Admit(PlayerId.One, new ClientCommandId(1), new MoveCommand(TestWorld.SomeDestination, MapRevision.Initial, [route]));
-    queue.Admit(PlayerId.One, new ClientCommandId(2), BuildCommand.Place(BuildingType.Farm, new GridCell(20, 20), MapRevision.Initial, [route]));
+    queue.Admit(PlayerId.One, new ClientCommandId(2), BuildCommand.Place(BuildingType.Farm, new GridCell(25, 10), MapRevision.Initial, [workerBRoute]));
     queue.Admit(PlayerId.One, new ClientCommandId(3), new TrainUnitCommand(TestWorld.P1Center, UnitType.Worker));
     queue.Admit(PlayerId.One, new ClientCommandId(4), new AttackCommand(TestWorld.P2Worker, MapRevision.Initial, [route]));
     queue.Admit(PlayerId.One, new ClientCommandId(5), new GatherWoodCommand(TestWorld.Tree, MapRevision.Initial, [workerBRoute]));
@@ -46,7 +46,7 @@ public class SimulationFactoryTests
 
     CommandResult[] results = [.. first.Publication!.CommandResults];
     Assert.Equal(CommandOutcome.Accepted, results[0].Outcome); // Move: handler conectado.
-    Assert.Equal(SimulationErrors.UnsupportedCommand, results[1].Error); // Build colocar: todavía sin implementar (16g).
+    Assert.Equal(CommandOutcome.Accepted, results[1].Outcome); // Build colocar: conectado.
     Assert.Equal(CommandOutcome.Accepted, results[2].Outcome); // TrainUnit: handler conectado.
     Assert.Equal(CommonErrors.IncompatibleEntity, results[3].EntityResults[0].Error); // Attack: conectado (un trabajador no ataca).
     Assert.Equal(CommandOutcome.Accepted, results[4].Outcome); // GatherWood: handler conectado.
