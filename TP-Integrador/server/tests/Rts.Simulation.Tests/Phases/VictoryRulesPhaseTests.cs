@@ -67,7 +67,7 @@ public class VictoryRulesPhaseTests
     };
     ISimulationEngine engine = SimulationFactory.CreateEngine(
         config, TestWorld.Map, TestWorld.Economy, new CommandQueue(config.CommandQueueCapacity),
-        UnusedModules.Create(combatCalculator: combat), TimeProvider.System);
+        TestModules.Create(combatCalculator: combat), TimeProvider.System);
     engine.InitializeMatch();
 
     TickOutcome outcome = engine.AdvanceTick();

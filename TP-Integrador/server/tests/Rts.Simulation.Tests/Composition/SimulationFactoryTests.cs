@@ -1,4 +1,6 @@
 using Rts.Shared.Commands;
+using Rts.Shared.Entities;
+using Rts.Shared.Errors;
 using Rts.Shared.Geometry;
 using Rts.Shared.Ids;
 using Rts.Shared.Match;
@@ -18,7 +20,7 @@ public class SimulationFactoryTests
 
   private static ISimulationEngine CreateEngine(CommandQueue queue, SimulationConfig? config = null) =>
       SimulationFactory.CreateEngine(
-          config ?? ConfigAndMapTests.ValidConfig(), TestWorld.Map, TestWorld.Economy, queue, UnusedModules.Create(),
+          config ?? ConfigAndMapTests.ValidConfig(), TestWorld.Map, TestWorld.Economy, queue, TestModules.Create(),
           TimeProvider.System);
 
   [Fact]
@@ -31,13 +33,17 @@ public class SimulationFactoryTests
     var route = new UnitRouteCandidate(TestWorld.P1WorkerA, [Waypoint, TestWorld.SomeDestination]);
 
     queue.Admit(PlayerId.One, new ClientCommandId(1), new MoveCommand(TestWorld.SomeDestination, MapRevision.Initial, [route]));
-    queue.Admit(PlayerId.One, new ClientCommandId(2), new AttackCommand(TestWorld.P2Worker, MapRevision.Initial, [route]));
+    queue.Admit(PlayerId.One, new ClientCommandId(2), new GatherWoodCommand(TestWorld.Tree, MapRevision.Initial, [route]));
+    queue.Admit(PlayerId.One, new ClientCommandId(3), new TrainUnitCommand(TestWorld.P1Center, UnitType.Worker));
+    queue.Admit(PlayerId.One, new ClientCommandId(4), new AttackCommand(TestWorld.P2Worker, MapRevision.Initial, [route]));
     TickOutcome first = engine.AdvanceTick();
     engine.AdvanceTick();
 
     CommandResult[] results = [.. first.Publication!.CommandResults];
     Assert.Equal(CommandOutcome.Accepted, results[0].Outcome); // Move: handler conectado.
-    Assert.Equal(SimulationErrors.UnsupportedCommand, results[1].Error); // Attack: todavía sin handler.
+    Assert.Equal(SimulationErrors.UnsupportedCommand, results[1].Error); // GatherWood: todavía sin handler.
+    Assert.Equal(CommandOutcome.Accepted, results[2].Outcome); // TrainUnit: handler conectado.
+    Assert.Equal(CommonErrors.IncompatibleEntity, results[3].EntityResults[0].Error); // Attack: conectado (un trabajador no ataca).
     Assert.Equal(TestWorld.SomeDestination, engine.Current!.Units[TestWorld.P1WorkerA].Position); // Fase 2 conectada.
   }
 

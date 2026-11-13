@@ -78,13 +78,42 @@ internal sealed class FakeConstructionRules : IConstructionRules
   private static NotSupportedException NotYet() => new("Todavía no lo usa ninguna prueba de Simulation.");
 }
 
+/// <summary>
+/// <see cref="ValidateAttackTarget"/> sigue la tabla de 02 §6, en su orden. <see cref="AcceptEverything"/> simula un Combat con errores,
+/// para probar que Simulation detecta una respuesta incoherente. Guarda los pedidos para revisar qué le pasó Simulation.
+/// </summary>
 internal sealed class FakeCombatRules : ICombatRules
 {
   public const int WorkerMaxHp = 40;
   public const int SoldierMaxHp = 80;
 
+  private readonly List<AttackValidationCall> _attackValidations = [];
+
+  /// <summary>Si es verdadero, acepta cualquier objetivo, aunque no exista.</summary>
+  public bool AcceptEverything { get; init; }
+
+  public IReadOnlyList<AttackValidationCall> AttackValidations => _attackValidations;
+
   public int GetUnitMaxHp(UnitType unitType) => unitType == UnitType.Worker ? WorkerMaxHp : SoldierMaxHp;
 
-  public ErrorCode? ValidateAttackTarget(PlayerId attackerOwner, UnitType attackerType, AttackTargetInfo? target) =>
-      throw new NotSupportedException("Todavía no lo usa ninguna prueba de Simulation.");
+  public ErrorCode? ValidateAttackTarget(PlayerId attackerOwner, UnitType attackerType, AttackTargetInfo? target)
+  {
+    _attackValidations.Add(new AttackValidationCall(attackerOwner, attackerType, target));
+    if (AcceptEverything)
+    {
+      return null;
+    }
+
+    return (attackerType, target) switch
+    {
+      (not UnitType.Soldier, _) => CommonErrors.IncompatibleEntity,
+      (_, null) => CommonErrors.EntityNotFound,
+      (_, { Kind: EntityKind.Tree }) => CombatErrors.InvalidTarget,
+      (_, { Owner: var owner }) when owner == attackerOwner => CombatErrors.FriendlyTarget,
+      _ => null,
+    };
+  }
 }
+
+/// <summary>Un pedido que Simulation le hizo a <see cref="FakeCombatRules.ValidateAttackTarget"/>.</summary>
+internal sealed record AttackValidationCall(PlayerId AttackerOwner, UnitType AttackerType, AttackTargetInfo? Target);

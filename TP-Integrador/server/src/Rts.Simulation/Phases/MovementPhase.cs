@@ -53,30 +53,13 @@ internal sealed class MovementPhase : ITickPhase
   /// Geometría de cada entidad apuntada por una orden de tarea, sin repetir. Unidad o árbol ⇒ un punto; edificio ⇒ su huella.
   /// Si el objetivo ya no existe, no se incluye: Movement termina esa orden con <c>TargetLost</c>.
   /// </summary>
-  private static IEnumerable<MovementTarget> CollectTargets(WorldState world)
-  {
-    IEnumerable<EntityId> targetIds = world.Units.Values
-        .Select(unit => unit.Order.TargetId)
-        .OfType<EntityId>()
-        .Distinct()
-        .Order();
-
-    foreach (EntityId id in targetIds)
-    {
-      if (world.Units.TryGetValue(id, out UnitEntity? unit))
-      {
-        yield return MovementTarget.AtPoint(id, unit.Position);
-      }
-      else if (world.Buildings.TryGetValue(id, out BuildingEntity? building))
-      {
-        yield return MovementTarget.WithFootprint(id, building.Footprint);
-      }
-      else if (world.Trees.TryGetValue(id, out TreeEntity? tree))
-      {
-        yield return MovementTarget.AtPoint(id, tree.Position);
-      }
-    }
-  }
+  private static IEnumerable<MovementTarget> CollectTargets(WorldState world) => world.Units.Values
+      .Select(unit => unit.Order.TargetId)
+      .OfType<EntityId>()
+      .Distinct()
+      .Order()
+      .Select(world.MovementTargetOf)
+      .OfType<MovementTarget>();
 
   private static void Apply(TickContext context, MovementTickResult result)
   {
