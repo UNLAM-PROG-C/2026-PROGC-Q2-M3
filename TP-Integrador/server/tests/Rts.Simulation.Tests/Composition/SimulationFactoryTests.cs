@@ -38,6 +38,7 @@ public class SimulationFactoryTests
     queue.Admit(PlayerId.One, new ClientCommandId(3), new TrainUnitCommand(TestWorld.P1Center, UnitType.Worker));
     queue.Admit(PlayerId.One, new ClientCommandId(4), new AttackCommand(TestWorld.P2Worker, MapRevision.Initial, [route]));
     queue.Admit(PlayerId.One, new ClientCommandId(5), new GatherWoodCommand(TestWorld.Tree, MapRevision.Initial, [workerBRoute]));
+    queue.Admit(PlayerId.One, new ClientCommandId(6), new RepathResponseCommand(TestWorld.P2Worker, new OrderId(1), MapRevision.Initial, []));
     TickOutcome first = engine.AdvanceTick();
     engine.AdvanceTick();
 
@@ -47,6 +48,7 @@ public class SimulationFactoryTests
     Assert.Equal(CommandOutcome.Accepted, results[2].Outcome); // TrainUnit: handler conectado.
     Assert.Equal(CommonErrors.IncompatibleEntity, results[3].EntityResults[0].Error); // Attack: conectado (un trabajador no ataca).
     Assert.Equal(CommandOutcome.Accepted, results[4].Outcome); // GatherWood: handler conectado.
+    Assert.Equal(CommonErrors.NotOwner, results[5].Error); // RepathResponse: conectado (la unidad es de P2).
     Assert.Equal(TestWorld.SomeDestination, engine.Current!.Units[TestWorld.P1WorkerA].Position); // Fase 2 conectada.
   }
 

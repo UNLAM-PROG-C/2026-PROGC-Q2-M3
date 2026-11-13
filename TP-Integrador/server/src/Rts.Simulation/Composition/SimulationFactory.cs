@@ -15,7 +15,7 @@ namespace Rts.Simulation.Composition;
 /// Única puerta pública para armar Simulation con sus piezas reales (contrato 10 §4, paso 5). Es el único lugar que sabe
 /// <b>qué fases</b> corren, <b>en qué orden</b> y <b>qué handler</b> atiende cada comando. El resto del código recibe todo armado.
 /// <para>
-/// Fases implementadas: las 9. 1 (lote de comandos: Stop, Move, TrainUnit, Attack y GatherWood), 2 (Movement), 3 (Construction), 4 a 6 (snapshot, Economy ∥ Combat
+/// Fases implementadas: las 9. 1 (lote de comandos: Stop, Move, TrainUnit, Attack, GatherWood y RepathResponse), 2 (Movement), 3 (Construction), 4 a 6 (snapshot, Economy ∥ Combat
 /// y barrera), 7 (Victory Rules), 8 (Production) y 9 (publicación, la hace el motor). Los demás handlers se agregan acá; mientras
 /// tanto, esos comandos se rechazan con <c>Simulation.UnsupportedCommand</c>.
 /// </para>
@@ -50,6 +50,7 @@ public static class SimulationFactory
       new TrainUnitCommandHandler(modules.ProductionRules),
       new AttackCommandHandler(modules.CombatRules, modules.MovementRules),
       new GatherWoodCommandHandler(modules.EconomyRules, modules.MovementRules),
+      new RepathResponseCommandHandler(modules.MovementRules),
     ];
 
     var economyAdapter = new EconomyAdapter(modules.EconomyCalculator, modules.MovementRules);

@@ -114,6 +114,14 @@ public sealed record UnitEntity
       repathPendingSinceTick: null, lastPursuitRepathTick: null, gatherTicksAccumulated: 0, ReadyAtTick);
 
   /// <summary>
+  /// Copia de la unidad con la ruta nueva de un <c>RepathResponse</c> aceptado (04 §3, D-028). <b>Conserva la orden</b> (mismo
+  /// <c>OrderId</c>), la marca de persecución y el contador de recolección; solo cambia la ruta y limpia el repath pendiente.
+  /// </summary>
+  internal UnitEntity WithRepathedRoute(EquatableArray<PositionXZ> route, MapRevision routeMapRevision) => new(
+      Id, Owner, Type, Position, Hp, Order, route, routeMapRevision,
+      repathPendingSinceTick: null, LastPursuitRepathTick, GatherTicksAccumulated, ReadyAtTick);
+
+  /// <summary>
   /// Copia de la unidad con la parte de Movement reemplazada por la que propuso la fase 2 (posición, orden, ruta, repath).
   /// HP y cooldown no cambian. El contador de recolección solo se conserva si la orden sigue siendo la misma (mismo OrderId).
   /// </summary>

@@ -49,12 +49,35 @@ internal sealed class FakeMovementRules : IMovementRules
 
   public bool CheckReachability(NavigationGrid map, PositionXZ start, MovementTarget target, double range) => throw NotYet();
 
+  private readonly List<RepathResponseCall> _repathRequests = [];
+
+  public IReadOnlyList<RepathResponseCall> RepathRequests => _repathRequests;
+
+  /// <summary>
+  /// Rechaza con <c>Movement.StaleOrder</c> si <paramref name="orderId"/> no es la orden vigente (04 §3); si no, aplica
+  /// <see cref="Rejections"/> o acepta la ruta tal como llega.
+  /// </summary>
   public UnitOrderEvaluation EvaluateRepathResponse(
       UnitMovementState unit,
       OrderId orderId,
       MovementTarget? target,
       EquatableArray<PositionXZ> waypoints,
-      NavigationGrid map) => throw NotYet();
+      NavigationGrid map)
+  {
+    _repathRequests.Add(new RepathResponseCall(unit, orderId, target, waypoints, map));
+    if (orderId != unit.Order.OrderId)
+    {
+      return UnitOrderEvaluation.Rejected(unit.UnitId, MovementErrors.StaleOrder);
+    }
+
+    return Rejections.TryGetValue(unit.UnitId, out ErrorCode error)
+        ? UnitOrderEvaluation.Rejected(unit.UnitId, error)
+        : UnitOrderEvaluation.Accepted(unit.UnitId, waypoints);
+  }
 
   private static NotSupportedException NotYet() => new("Todavía no lo usa ninguna prueba de Simulation.");
 }
+
+/// <summary>Un pedido que Simulation le hizo a <see cref="FakeMovementRules.EvaluateRepathResponse"/>.</summary>
+internal sealed record RepathResponseCall(
+    UnitMovementState Unit, OrderId OrderId, MovementTarget? Target, EquatableArray<PositionXZ> Waypoints, NavigationGrid Map);

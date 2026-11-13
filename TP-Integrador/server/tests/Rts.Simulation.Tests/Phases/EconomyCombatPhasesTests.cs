@@ -18,6 +18,12 @@ public class EconomyCombatPhasesTests
   private static readonly TimeSpan TestTimeout = TimeSpan.FromSeconds(5);
   private static readonly TimeSpan ShortBarrier = TimeSpan.FromMilliseconds(100);
 
+  /// <summary>
+  /// En Windows, <c>Task.Wait(timeout)</c> usa un reloj de baja resolución (~15,6 ms) y puede volver unos milisegundos antes del plazo
+  /// medido con el reloj de alta resolución de <see cref="TimeProvider"/>. Sin este margen, la prueba falla de vez en cuando.
+  /// </summary>
+  private static readonly TimeSpan WaitClockTolerance = TimeSpan.FromMilliseconds(20);
+
   private static ITickPhase[] Phases(FakeBranch<EconomyTickResult> economy, FakeBranch<CombatTickResult> combat, bool parallel, TimeSpan? barrier = null) =>
   [
     new SnapshotPhase(),
@@ -117,7 +123,7 @@ public class EconomyCombatPhasesTests
     Assert.Throws<TimeoutException>(() => Run(context, Phases(economy, combat, parallel: true, ShortBarrier)));
     release.Set();
 
-    Assert.True(context.BarrierWait >= ShortBarrier);
+    Assert.True(context.BarrierWait >= ShortBarrier - WaitClockTolerance, $"Esperó {context.BarrierWait}.");
     Assert.DoesNotContain(log, entry => entry.StartsWith("commit", StringComparison.Ordinal));
   }
 
