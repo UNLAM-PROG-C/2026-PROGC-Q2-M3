@@ -28,7 +28,9 @@ internal sealed class FakeEconomyRules : IEconomyRules
 
   public bool TryGetBuildingCost(BuildingType buildingType, out ResourceAmount cost) => throw NotYet();
 
-  public ResourceAmount GetFarmRepairCost() => throw NotYet();
+  public static readonly ResourceAmount FarmRepairCost = ResourceAmount.OfWood(30);
+
+  public ResourceAmount GetFarmRepairCost() => FarmRepairCost;
 
   public ResourceAmount GetTrainingCost(UnitType unitType) => unitType == UnitType.Worker ? WorkerCost : SoldierCost;
 
@@ -97,9 +99,57 @@ internal sealed class FakeConstructionRules : IConstructionRules
 
   public PlacementEvaluation EvaluatePlacement(PlacementInput input) => throw NotYet();
 
-  public ErrorCode? EvaluateContinueBuild(PlayerId requester, ConstructionTargetInfo? target) => throw NotYet();
+  private readonly List<ContinueBuildCall> _continueBuilds = [];
 
-  public RepairStartEvaluation EvaluateRepairStart(PlayerId requester, RepairTargetInfo? target) => throw NotYet();
+  /// <summary>Si es verdadero, <see cref="EvaluateContinueBuild"/> admite cualquier objetivo (simula un Construction con errores).</summary>
+  public bool AcceptEveryContinue { get; init; }
+
+  public IReadOnlyList<ContinueBuildCall> ContinueBuilds => _continueBuilds;
+
+  /// <summary>Sigue la tabla de 03 §3 (forma "continuar"), en su orden.</summary>
+  public ErrorCode? EvaluateContinueBuild(PlayerId requester, ConstructionTargetInfo? target)
+  {
+    _continueBuilds.Add(new ContinueBuildCall(requester, target));
+    if (AcceptEveryContinue)
+    {
+      return null;
+    }
+
+    return target switch
+    {
+      null => CommonErrors.EntityNotFound,
+      { Owner: var owner } when owner != requester => CommonErrors.NotOwner,
+      { IsCompleted: true } => ConstructionErrors.AlreadyCompleted,
+      _ => null,
+    };
+  }
+
+  private readonly List<RepairStartCall> _repairStarts = [];
+
+  /// <summary>Si no es nulo, <see cref="EvaluateRepairStart"/> responde esto siempre (simula un Construction con errores).</summary>
+  public RepairStartEvaluation? ForcedRepairStart { get; init; }
+
+  public IReadOnlyList<RepairStartCall> RepairStarts => _repairStarts;
+
+  /// <summary>Sigue la tabla de 03 §4, en su orden.</summary>
+  public RepairStartEvaluation EvaluateRepairStart(PlayerId requester, RepairTargetInfo? target)
+  {
+    _repairStarts.Add(new RepairStartCall(requester, target));
+    if (ForcedRepairStart is { } forced)
+    {
+      return forced;
+    }
+
+    return target switch
+    {
+      null => RepairStartEvaluation.Invalid(CommonErrors.EntityNotFound),
+      { Owner: var owner } when owner != requester => RepairStartEvaluation.Invalid(CommonErrors.NotOwner),
+      { BuildingType: not BuildingType.Farm } or { IsCompleted: false } => RepairStartEvaluation.Invalid(ConstructionErrors.NotAFarm),
+      { IsDepleted: false } => RepairStartEvaluation.Invalid(ConstructionErrors.FarmNotDepleted),
+      { IsRepairInProgress: true } => RepairStartEvaluation.Valid(RepairStartKind.Join),
+      _ => RepairStartEvaluation.Valid(RepairStartKind.StartAndPay),
+    };
+  }
 
   private static NotSupportedException NotYet() => new("Todavía no lo usa ninguna prueba de Simulation.");
 }
@@ -143,3 +193,9 @@ internal sealed class FakeCombatRules : ICombatRules
 
 /// <summary>Un pedido que Simulation le hizo a <see cref="FakeCombatRules.ValidateAttackTarget"/>.</summary>
 internal sealed record AttackValidationCall(PlayerId AttackerOwner, UnitType AttackerType, AttackTargetInfo? Target);
+
+/// <summary>Un pedido que Simulation le hizo a <see cref="FakeConstructionRules.EvaluateRepairStart"/>.</summary>
+internal sealed record RepairStartCall(PlayerId Requester, RepairTargetInfo? Target);
+
+/// <summary>Un pedido que Simulation le hizo a <see cref="FakeConstructionRules.EvaluateContinueBuild"/>.</summary>
+internal sealed record ContinueBuildCall(PlayerId Requester, ConstructionTargetInfo? Target);
