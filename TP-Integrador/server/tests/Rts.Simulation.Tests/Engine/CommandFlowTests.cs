@@ -25,7 +25,7 @@ public class CommandFlowTests
   {
     var queue = new CommandQueue(QueueCapacity);
     var handlers = new ICommandHandler[] { new MoveCommandHandler(new FakeMovementRules()), new StopCommandHandler() };
-    var phases = new ITickPhase[] { new CommandBatchPhase(queue, MaxCommandsPerTick, handlers) };
+    var phases = new ITickPhase[] { new CommandBatchPhase(queue, MaxCommandsPerTick, TestHandlers.CompletedWith(handlers)) };
     var engine = new SimulationEngine(TestWorld.Factory(), phases, TickRate.Default, TimeProvider.System);
     engine.InitializeMatch();
     var move = new MoveCommand(
@@ -59,7 +59,7 @@ public class CommandFlowTests
     var queue = new CommandQueue(QueueCapacity);
     var phases = new ITickPhase[]
     {
-      new CommandBatchPhase(queue, MaxCommandsPerTick, [new MoveCommandHandler(new FakeMovementRules())]),
+      new CommandBatchPhase(queue, MaxCommandsPerTick, TestHandlers.CompletedWith(new MoveCommandHandler(new FakeMovementRules()))),
       new MovementPhase(new FakeMovementCalculator()),
     };
     var engine = new SimulationEngine(TestWorld.Factory(), phases, TickRate.Default, TimeProvider.System);

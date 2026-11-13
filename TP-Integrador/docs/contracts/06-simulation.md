@@ -1,6 +1,6 @@
 # Contrato 06 — Simulation (`Rts.Simulation`)
 
-> **Estado:** Fase 1 (vertical slice) implementada y probada (`server/src/Rts.Simulation`, `server/tests/Rts.Simulation.Tests`): modelo del mundo, configuración, cargador de mapa, cola de comandos, motor con las fases 1 (lote de comandos con idempotencia; `Move` y `Stop`), 2 (Movement) y 9 (publicación), loop de 20 Hz con supervisión y fábrica pública (`SimulationFactory`). **Pendiente (Fase 2):** fases 3 a 8 y los handlers de `Attack`, `GatherWood`, `Build`, `RepairFarm`, `TrainUnit` y `RepathResponse`; hasta entonces esos comandos se rechazan con `Simulation.UnsupportedCommand` (D-090).
+> **Estado:** Fases 1 y 2 implementadas y probadas (`server/src/Rts.Simulation`, `server/tests/Rts.Simulation.Tests`) contra fakes de los módulos de dominio: modelo del mundo, configuración, cargador de mapa, cola de comandos, motor con las **9 fases** del tick (§4), un handler por cada uno de los 8 tipos de comando (D-093), loop de 20 Hz con supervisión y fábrica pública (`SimulationFactory`). Las pruebas de §11 están escritas, incluido el determinismo paralelo frente a secuencial. **Pendiente:** integración con las implementaciones reales de los módulos de dominio y las métricas de la Fase 3 (§12).
 > **Etiquetas:** **DECIDIDO** = aprobado (módulo [06-simulation](../modules/06-simulation.md) o [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Depende de:** [Contrato 00](00-shared-kernel.md) y de los contratos de dominio [01](01-economy.md), [02](02-combat.md), [03](03-construction.md), [04](04-units-movement.md) y [05](05-production.md). Ningún módulo de dominio depende de Simulation.
 
@@ -18,7 +18,6 @@
 | `SimulationPhase`, `PhaseTiming`, `TickMetrics`, `SimulationFailure` | `Rts.Simulation.Diagnostics` | Métricas y fallas |
 | `SimulationFactory` (`CreateEngine`, `CreateLoop`), `DomainModules`, `EconomyParameters` | `Rts.Simulation.Composition` | Única forma pública de armar el motor y el loop (D-089) |
 | `CommandQueue` | `Rts.Simulation.Commands` | Cola global: implementa `ICommandSink` e `ICommandSource` (§7) |
-| `SimulationErrors` | `Rts.Simulation` | Códigos de error propios de Simulation (D-090) |
 
 Tipos de integración en `Rts.Shared`, que usan módulos que no pueden referenciar Simulation (D-002, D-049):
 
@@ -197,7 +196,7 @@ Estas pruebas de 06 §10 se escriben al implementar:
 ## 12. Pendientes
 
 - ~~Implementación del motor, el loop, la cola y el cargador de mapa.~~ Hecho en la Fase 1 (ver Estado).
-- Fase 2: fases 3 a 8 del tick y los handlers que faltan (ver Estado).
+- ~~Fase 2: fases 3 a 8 del tick y los handlers que faltan.~~ Hecho (ver Estado; D-092, D-093).
 - Fase 3: registro de métricas, sobrecargas y fallas críticas (§10).
 - ~~Valores (§9)~~ elegidos en D-091. Queda el diseño del mapa simétrico real. `server/config/maps/default.json` es un mapa **temporal** de 48×48 para pruebas.
 - ~~Precedencia fina entre el resultado de Simulation y desconexiones casi simultáneas.~~ Resuelta por D-055 (ver [contrato 07 §6](07-game-session.md#6-desconexiones-en-running-lote-y-precedencia)).

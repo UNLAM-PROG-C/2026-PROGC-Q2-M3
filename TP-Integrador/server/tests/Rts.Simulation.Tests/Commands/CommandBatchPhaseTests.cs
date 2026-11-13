@@ -1,4 +1,5 @@
 using Rts.Shared.Commands;
+using Rts.Shared.Errors;
 using Rts.Shared.Geometry;
 using Rts.Shared.Ids;
 using Rts.Simulation.Commands;
@@ -16,8 +17,6 @@ public class CommandBatchPhaseTests
 
   private static readonly IGameCommand AnyStop = new StopCommand([TestWorld.P1WorkerA]);
   private static readonly IGameCommand OtherStop = new StopCommand([TestWorld.P1WorkerB]);
-  private static readonly IGameCommand AnyMove = new MoveCommand(
-      TestWorld.SomeDestination, MapRevision.Initial, [new UnitRouteCandidate(TestWorld.P1WorkerA, [TestWorld.SomeDestination])]);
 
   private static ClientCommandId ClientId(long value) => new(value);
 
@@ -25,7 +24,7 @@ public class CommandBatchPhaseTests
   {
     var queue = new CommandQueue(QueueCapacity);
     var handler = new RecordingHandler();
-    return (queue, handler, new CommandBatchPhase(queue, MaxCommandsPerTick, [handler]));
+    return (queue, handler, new CommandBatchPhase(queue, MaxCommandsPerTick, TestHandlers.CompletedWith(handler)));
   }
 
   [Fact]
@@ -94,20 +93,30 @@ public class CommandBatchPhaseTests
   }
 
   [Fact]
-  public void Execute_TypeWithoutHandler_IsRejectedAndRecorded()
+  public void Execute_RejectedByItsHandler_IsCountedAndRecorded()
   {
-    var (queue, handler, phase) = CreatePhase();
-    queue.Admit(PlayerId.One, ClientId(1), AnyMove);
+    var queue = new CommandQueue(QueueCapacity);
+    var rejecting = new RecordingHandler { Rejection = CommonErrors.NotOwner };
+    var phase = new CommandBatchPhase(queue, MaxCommandsPerTick, TestHandlers.CompletedWith(rejecting));
+    queue.Admit(PlayerId.One, ClientId(1), AnyStop);
 
     var context = new TickContext(TestWorld.Create());
     phase.Execute(context);
 
     CommandResult result = Assert.Single(context.CommandResults);
     Assert.Equal(CommandOutcome.Rejected, result.Outcome);
-    Assert.Equal(SimulationErrors.UnsupportedCommand, result.Error);
     Assert.Equal(1, context.Commands.Rejected);
-    Assert.Equal(0, handler.Calls);
-    Assert.Equal(1, context.World.Idempotency.Count);
+    Assert.Equal(1, context.World.Idempotency.Count); // Un rechazo también se guarda: un reenvío recibe el mismo rechazo.
+  }
+
+  [Fact]
+  public void Constructor_SomeTypeWithoutHandler_ThrowsNamingTheMissingTypes()
+  {
+    ArgumentException error = Assert.Throws<ArgumentException>(() =>
+        new CommandBatchPhase(new CommandQueue(QueueCapacity), MaxCommandsPerTick, [new RecordingHandler()]));
+
+    Assert.Contains(nameof(CommandType.Move), error.Message);
+    Assert.Contains(nameof(CommandType.RepathResponse), error.Message);
   }
 
   [Fact]
@@ -117,17 +126,21 @@ public class CommandBatchPhaseTests
         new CommandBatchPhase(new CommandQueue(QueueCapacity), MaxCommandsPerTick, [new RecordingHandler(), new RecordingHandler()]));
   }
 
-  /// <summary>Handler falso de Stop: acepta siempre y cuenta las llamadas, sin tocar el mundo.</summary>
+  /// <summary>Handler falso de Stop: acepta (o rechaza con <see cref="Rejection"/>) y cuenta las llamadas, sin tocar el mundo.</summary>
   private sealed class RecordingHandler : ICommandHandler
   {
     public int Calls { get; private set; }
+
+    public ErrorCode? Rejection { get; init; }
 
     public CommandType Type => CommandType.Stop;
 
     public CommandResult Handle(CommandEnvelope command, TickContext context)
     {
       Calls++;
-      return CommandResult.Accepted(command, context.Tick);
+      return Rejection is { } error
+          ? CommandResult.Rejected(command, context.Tick, error)
+          : CommandResult.Accepted(command, context.Tick);
     }
   }
 }
