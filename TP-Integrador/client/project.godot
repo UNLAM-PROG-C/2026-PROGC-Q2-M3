@@ -11,7 +11,7 @@ config_version=5
 [application]
 
 config/name="RTS_Project"
-run/main_scene="uid://c3w0t2eyvgb35"
+run/main_scene="res://scenes/match_world.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 config/icon="res://icon.svg"
 

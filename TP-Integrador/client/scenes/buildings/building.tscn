@@ -4,7 +4,7 @@
 [ext_resource type="PackedScene" uid="uid://cl2ldw36phrmp" path="res://scenes/buildings/barracks.tscn" id="2_daisx"]
 [ext_resource type="PackedScene" uid="uid://c2reyx2wvlt48" path="res://scenes/buildings/farm.tscn" id="3_mfina"]
 [ext_resource type="PackedScene" uid="uid://dhsiqvu0k3sr2" path="res://scenes/buildings/wall.tscn" id="5_mfina"]
-[ext_resource type="PackedScene" uid="uid://bs827caik5upc" path="res://scenes/buildings/base.tscn" id="6_f6oyp"]
+[ext_resource type="PackedScene" uid="uid://bs827caik5upc" path="res://scenes/buildings/main_center.tscn" id="6_f6oyp"]
 
 [sub_resource type="BoxShape3D" id="BoxShape3D_v8228"]
 
