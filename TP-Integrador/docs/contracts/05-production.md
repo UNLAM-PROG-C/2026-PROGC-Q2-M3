@@ -1,6 +1,6 @@
 # Contrato 05 — Production (`Rts.Production`)
 
-> **Estado:** contratos, modelos, interfaces y configuración implementados (`server/src/Rts.Production`) y probados (`server/tests/Rts.Production.Tests`). **La lógica de cálculo y de búsqueda de celda de aparición todavía no está implementada.**
+> **Estado:** contratos, modelos, interfaces y configuración implementados (`server/src/Rts.Production`) y probados (`server/tests/Rts.Production.Tests`). **La lógica está implementada:** `ProductionRules` (validación de `TrainUnit`, duraciones y búsqueda de celda de aparición) y `ProductionCalculator` (la fase 8). Falta integrarlos con el motor de Simulation real (ver §8).
 > **Etiquetas:** **DECIDIDO** = aprobado (módulo [05-production](../modules/05-production.md) o [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Depende de:** [Contrato 00](00-shared-kernel.md). No depende de ningún otro módulo: recibe la comida y los costos de Economy como datos inyectados.
 
@@ -10,6 +10,8 @@
 |---|---|---|
 | `IProductionCalculator.CalculateTick(ProductionTickInput) → ProductionTickResult` | `Rts.Production` | Progreso, apariciones e inicios (fase 8) |
 | `IProductionRules` | `Rts.Production` | `EvaluateTrainRequest` (fase 1), `FindSpawnCell`, `GetTrainingDurationTicks` |
+| `ProductionRules` | `Rts.Production` | Implementa `IProductionRules`: `new ProductionRules(config)`. Sin estado mutable, usable desde cualquier hilo |
+| `ProductionCalculator` | `Rts.Production` | Implementa `IProductionCalculator`: `new ProductionCalculator(rules, foodCosts)`. La composición pasa `EconomyConfig.UnitFoodCosts` como `foodCosts` (D-015), para que lo que se cobra coincida con lo que Simulation verifica con `IEconomyRules.GetTrainingCost` |
 | `ProductionTickInput`, `PlayerFood`, `ProductionTickResult`, `ProductionStart`, `SpawnProposal` | `Rts.Production.Contracts` | Entradas y salidas inmutables |
 | `ProducerState`, `ProductionRequest`, `ProductionJob`, `SpawnView`, `ProducerInfo`, `ProducerCatalog` | `Rts.Production.Model` | Modelos |
 | `ProductionConfig` | `Rts.Production.Configuration` | Parámetros tipados y validación |
@@ -77,6 +79,16 @@ La fase 8 solo corre si la partida sigue tras Victory Rules (05 §6). Solo actú
   - no fue reservada por otra aparición del mismo tick.
 - La posición de la unidad nueva es el **centro de la celda**.
 
+### Cómo lo implementa `Rts.Production`
+
+No agrega reglas: precisa detalles que el contrato dejaba abiertos, sin contradecir ninguna decisión.
+
+- **Función pura:** `ProductionCalculator` trabaja sobre copias locales y mutables de cada productor (`ProducerWork`) que descarta al terminar. La entrada nunca se modifica, y el resultado no depende del orden de sus colecciones.
+- **Quién actúa:** solo los productores operativos en el tick. Un productor **libre al entrar** (sin tarea activa) es el único que puede iniciar; si su tarea termina y aparece en esta fase, espera al tick siguiente.
+- **`ProducerUpdates`** incluye todo productor cuyo estado cambió, también por progreso de la tarea (Simulation necesita el estado nuevo para confirmarlo). **`ProductionChanged`** solo se emite si cambia el estado discreto (estado, unidad activa o cola), nunca por el solo avance del contador (D-042).
+- **Desempate de celdas:** la distancia se mide con enteros, en el **doble** de las unidades de celda, en vez de con decimales. Así dos celdas simétricas empatan exactamente y el orden por `(Row, Column)` se cumple sin ruido de punto flotante. Equivale al orden por distancia al cuadrado en coordenadas de mundo, porque las celdas son cuadradas.
+- **Costos:** el calculador recibe el costo en comida de cada unidad (`foodCosts`), porque Production no depende de Economy (D-015).
+
 ## 5. Lo que Simulation debe hacer con el resultado (commit de la fase 8)
 
 - Para cada `ProductionStart`, en orden: confirmar con `IEconomyRules.EvaluateSpend` y, en un único commit atómico, descontar `PaidFood` y activar la tarea (05 §3). Si la verificación fallara, sería una inconsistencia crítica: no se aplica a medias (06 §5).
@@ -99,7 +111,7 @@ Los costos en comida (3 y 5 fueron ejemplos ilustrativos) viven en `EconomyConfi
 
 ## 7. Pruebas de aceptación para la etapa de implementación
 
-Estas pruebas de 05 §9 se escriben al implementar:
+Estas pruebas de 05 §9 están implementadas en `server/tests/Rts.Production.Tests` (reglas de validación, búsqueda de celda, inicios, y ciclo de vida de varios ticks con un Simulation de juguete):
 
 - combinaciones de productor y unidad aceptadas y rechazadas;
 - cola llena;
@@ -121,3 +133,4 @@ Son de integración con Simulation: productor destruido que pierde cola y tarea,
 
 - Valores (§6).
 - Política de publicación del progreso en Godot (State Sync).
+- Integración con el motor de Simulation real (las pruebas usan un Simulation de juguete) y las pruebas de integración de este módulo: productor destruido que pierde cola y tarea, duplicado de solicitud, fin de partida que evita Production y dos apariciones que no eligen la misma celda en un mismo commit (work-plan §4).
