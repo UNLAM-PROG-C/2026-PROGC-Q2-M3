@@ -1,6 +1,6 @@
 # Contrato 07 — GameSession
 
-> **Estado:** primera versión de contratos implementada (`server/src/Rts.GameSession`, tipos de integración en `Rts.Shared.Session`) y probada (`server/tests/Rts.GameSession.Tests`). La máquina de estados y el host **todavía no tienen lógica**.
+> **Estado:** implementado (`server/src/Rts.GameSession`, tipos de integración en `Rts.Shared.Session`) y probado (`server/tests/Rts.GameSession.Tests`). Están completos la máquina de estados (`SessionStateMachine`), el buzón (`SessionInbox`), la vista (`SessionStateStore`) y el host (`SessionHost`). Falta integrarlos con Networking y Simulation reales (ver §12).
 > **Etiquetas:** **DECIDIDO** = aprobado por el equipo (ver [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Módulo:** [07 — GameSession](../modules/07-game-session.md). **Vecinos:** [06 Simulation](06-simulation.md), [08 Networking](../modules/08-networking.md), [09 State Sync](../modules/09-state-sync.md).
 
@@ -136,6 +136,9 @@ Para cada conexión, el orden de las acciones es el orden de la cola de salida (
 - **Cola (RECOMENDADO D-059):** está acotada por `EventQueueCapacity` solo para `Hello` y `ClientReady`; `TryPost*` devuelve `false` si está llena. `PostConnectionClosed` y los avisos internos (timer, Simulation, detención, drenaje) **nunca se descartan**: hay a lo sumo uno por conexión o por intento, así que su cantidad ya está acotada.
 - **Acciones asincrónicas:** `StopSimulation` y `ShutdownConnections` corren fuera del consumidor y vuelven como eventos (`SimulationStopped`, `ShutdownCompleted`). Si `StopTicksAsync` falla, el host informa `SimulationStopped(null)` igual.
 - **Timer:** `ScheduleReadyTimeout` usa `TimeProvider`, que es monotónico y reemplazable en pruebas, nunca ticks (07 §4).
+- **Falla al arrancar los ticks (RECOMENDADO D-086):** si `StartTicks` lanza una excepción, el host informa `CriticalError(null)` como resultado de Simulation. Es un supuesto que ningún contrato cubría; pendiente de revisión con el dueño de Simulation.
+- **Una sola ejecución:** `RunAsync` se llama una vez; una segunda llamada lanza `InvalidOperationException`. Para otra partida se lanza el servidor de nuevo (D-058).
+- **Cancelación:** cancelar el token de `RunAsync` no corta el bucle: publica `ShutdownRequested` y la sesión termina de forma ordenada (D-084).
 - **Fin (DECIDIDO D-058):** al llegar a `Ended`, `RunAsync` devuelve el resultado y el proceso termina, con código 0, o distinto de 0 si el motivo fue `CriticalError`. Para otra partida se lanza el servidor de nuevo.
 - No toma locks sobre `WorldState` ni llama a módulos de dominio (07 §7).
 
@@ -169,7 +172,11 @@ Con la máquina de estados, sin sockets, mediante secuencias de eventos:
 - Resultado fijado no cambia; eventos después de `Ended` no tienen efecto.
 - Con el host: eventos concurrentes desde varios hilos no corrompen el estado; orden `MatchStarted` → `StartSimulation` y `MatchEnded` después de detener.
 
+Todas están implementadas en `server/tests/Rts.GameSession.Tests`, con Networking, State Sync y Simulation falsos y un reloj manual (`TimeProvider`). La máquina de estados se prueba además con todos los eventos en todos los estados: nunca lanza y siempre devuelve la misma transición.
+
 ## 12. Pendientes
 
 - Valores de `ReadyTimeout` y `EventQueueCapacity` (balance y entorno).
+- Pruebas de integración con Networking y Simulation reales, cuando existan (work-plan §4): desconexiones y `MatchEnded` concurrentes con un solo resultado oficial, y dos apariciones que no eligen la misma celda.
+- Confirmar con el dueño de Simulation la falla de `StartTicks` (D-086) y resolver si `SessionHost` recibe logging (O-011).
 - ~~DTOs JSON de sesión y aviso de cierre; timeout de handshake y drenaje~~: definidos en el [contrato 08](08-networking.md). Quedan sus valores numéricos.
