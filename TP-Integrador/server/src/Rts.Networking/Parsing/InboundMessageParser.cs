@@ -158,7 +158,10 @@ internal sealed class InboundMessageParser : IInboundMessageParser
     // Control 6: en gameplay el messageId es obligatorio y es el ClientCommandId, en [1, 2^53] (D-005).
     if (messageId is not long id || !new ClientCommandId(id).IsInValidRange)
     {
-      return ParseResult.Violation(NetworkErrors.InvalidMessageId, messageId, "Move requiere un messageId entero entre 1 y 2^53.");
+      return ParseResult.Violation(
+          NetworkErrors.InvalidMessageId,
+          messageId,
+          $"Move requiere un messageId entero entre 1 y {ClientCommandId.MaxValue}.");
     }
 
     var clientCommandId = new ClientCommandId(id);
