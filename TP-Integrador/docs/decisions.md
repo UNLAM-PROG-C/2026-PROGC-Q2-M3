@@ -98,6 +98,7 @@
 | D-083 | 2026-11-10 | RECOMENDADO | Configuración en un `server.json` con una sección por módulo, leído con el lector JSON de .NET (campos desconocidos = error); argumentos `--config`, `--port`, `--validate-only`; logging con `Microsoft.Extensions.Logging.Console`. | [10 §3](contracts/10-server.md#3-configuración) |
 | D-084 | 2026-11-10 | DECIDIDO | **Apagado ordenado:** Ctrl+C o SIGTERM se convierte en `ShutdownRequested`. Si no hay otro resultado, la partida termina como `TechnicalEnd` con el motivo nuevo **`ServerShutdown`**; en Running primero se detienen los ticks. Un segundo Ctrl+C corta en seco. | [07 §3](contracts/07-game-session.md#3-tabla-de-transiciones-isessionstatemachineapply), [10 §2](contracts/10-server.md#2-decisiones) |
 | D-085 | 2026-11-10 | RECOMENDADO | Códigos de salida: 0 resultado sin error, 1 `CriticalError`, 2 configuración inválida, 3 argumentos inválidos, 4 composición pendiente (temporal). | [10 §2](contracts/10-server.md#2-decisiones) |
+| D-086 | 2026-11-14 | RECOMENDADO | **Falla de `StartTicks`:** si `ISimulationControl.StartTicks()` lanza una excepción, el host informa `MatchResult.CriticalError(null)` por el buzón y la sesión termina como con cualquier resultado de Simulation (detiene los ticks, `MatchEnded` a los conectados y cierre). Así no queda en Running sin ticks. Ningún contrato definía esta falla (06 §6 y 07 §5 solo cubren `InitializeMatch`, D-060). Pendiente de revisión con el dueño de Simulation. | [07 §8](contracts/07-game-session.md#8-host-isessionhost) |
 
 ## Asuntos abiertos
 
@@ -115,6 +116,7 @@ Detectados en la lectura inicial de `docs/modules/`. No son contradicciones entr
 | O-008 | ~~**Reasignación de plaza antes de Running.**~~ **Resuelto** por D-054. | 07 §2 | — |
 | O-009 | ~~**Evento de daño a una obra.**~~ **Resuelto** por D-034 y D-065. | 03 §3, 09 §4 | — |
 | O-010 | ~~**Pendientes explícitos de los módulos** que bloqueaban implementación.~~ **Resuelto**: Production (D-037, D-039), commit seguro (D-044), `ReadyTimeout` (D-056) y precedencia de cierre (D-055). | 07 §4/§6 | — |
+| O-011 | **Logging en `SessionHost`.** El borrador de `ServerComposition` (contrato 10 §4) le pasa `loggers` al constructor del host, pero el contrato 07 §8 no lo menciona y `Rts.GameSession` solo referencia `Rts.Shared`. El host se implementó **sin** logging, con las 7 dependencias que lista el contrato. Decidir si se agrega (y con qué abstracción, sin sumar un paquete a `Rts.GameSession`) o si se quita del borrador de la composición. | 07 §8, 10 §4 | Composición del servidor (Luca) |
 
 ## Comportamientos provisorios
 
