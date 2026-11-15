@@ -11,6 +11,8 @@ signal match_ended(result: Dictionary)
 signal disconnecting_received(reason: String)
 signal connection_disconnected(reason: String)
 signal session_error(error_code: String, detail: String)
+## Se reinició la sesión local para conectarse a un servidor nuevo: el mundo cargado se descarta.
+signal session_reset
 
 enum State {
 	AWAITING_ASSIGNMENT,
@@ -23,6 +25,8 @@ enum State {
 }
 
 const START_ABORT_REASONS := ["OpponentLeft", "ReadyTimeout"]
+## Valor de NetworkClient.State.DISCONNECTED.
+const NETWORK_DISCONNECTED_STATE := 0
 const MATCH_RESULT_TYPES := ["Victory", "Draw", "TechnicalEnd"]
 const MATCH_END_REASONS := [
 	"BaseDestroyed",
@@ -87,6 +91,15 @@ func bind_network_client(network_client: Node) -> void:
 			return
 
 
+func get_state_name() -> String:
+	return _state_name(session_state)
+
+
+## Motivo del cierre informado por el servidor (`Disconnecting`) o detectado localmente.
+func get_disconnect_reason() -> String:
+	return _disconnecting_reason
+
+
 func can_issue_gameplay() -> bool:
 	return session_state == State.RUNNING and _disconnecting_reason.is_empty()
 
@@ -130,6 +143,27 @@ func complete_initial_state_preparation(
 		return false
 
 	_set_state(State.READY_SENT)
+	return true
+
+
+## Vuelve al estado inicial para una conexión nueva. No hay reconexión (07 §2): cada partida
+## es un proceso de servidor nuevo (D-058), así que se olvidan la sesión, la identidad y las
+## inicializaciones vistas. Solo se permite sin conexión activa.
+func reset_session() -> bool:
+	var connection_state: Variant = null
+	if _network_client != null:
+		connection_state = _network_client.get("connection_state")
+	if connection_state != null and int(connection_state) != NETWORK_DISCONNECTED_STATE:
+		_report_error("ResetWhileConnected", "No se puede reiniciar la sesión con una conexión activa.")
+		return false
+	session_id = ""
+	player_id = 0
+	final_result = {}
+	_seen_initializations.clear()
+	_disconnecting_reason = ""
+	_clear_initialization()
+	_set_state(State.AWAITING_ASSIGNMENT)
+	session_reset.emit()
 	return true
 
 

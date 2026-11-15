@@ -128,10 +128,11 @@ func _ready() -> void:
 			"initial_state_preparation_requested": Callable(self, "_on_initial_state_preparation_requested"),
 			"initial_state_discard_requested": Callable(self, "_on_initial_state_discard_requested"),
 			"session_state_changed": Callable(self, "_on_session_state_changed"),
+			"session_reset": Callable(self, "_on_session_reset"),
 		}
 		for signal_name in callbacks:
 			if not _session_controller.has_signal(signal_name):
-				if signal_name == "session_state_changed":
+				if signal_name == "session_state_changed" or signal_name == "session_reset":
 					continue
 				_report_error(
 					"InvalidSessionController",
@@ -170,6 +171,7 @@ func _exit_tree() -> void:
 			"initial_state_preparation_requested": Callable(self, "_on_initial_state_preparation_requested"),
 			"initial_state_discard_requested": Callable(self, "_on_initial_state_discard_requested"),
 			"session_state_changed": Callable(self, "_on_session_state_changed"),
+			"session_reset": Callable(self, "_on_session_reset"),
 		}
 		for signal_name in callbacks:
 			if not _session_controller.has_signal(signal_name):
@@ -922,6 +924,11 @@ func _on_repath_requested(request: Dictionary) -> void:
 func _on_session_state_changed(_state: int, state_name: String) -> void:
 	if ["AwaitingAssignment", "Ended", "Disconnected"].has(state_name):
 		_clear_command_tracking()
+
+
+func _on_session_reset() -> void:
+	if active_initialization_id > 0:
+		discard_initial_state(active_initialization_id)
 
 
 func _on_initial_state_preparation_requested(initialization_id: int, payload: Dictionary) -> void:
