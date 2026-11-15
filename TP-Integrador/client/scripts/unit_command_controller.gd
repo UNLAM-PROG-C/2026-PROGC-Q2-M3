@@ -1,6 +1,8 @@
 extends Node
 
 signal selection_changed(unit_ids: Array[int])
+## Edificio propio seleccionado (0 = ninguno). Es excluyente con la selección de unidades.
+signal building_selection_changed(building_id: int)
 signal command_failed(error_code: String, detail: String)
 
 const SELECTION_PICK_RADIUS_PIXELS := 32.0
@@ -12,6 +14,7 @@ const TASK_UNIT_TYPES := {
 }
 
 var selected_unit_ids: Array[int] = []
+var selected_building_id := 0
 
 var _world: Node
 var _session_controller: Node
@@ -27,6 +30,7 @@ func _ready() -> void:
 		"world_preparation_completed": Callable(self, "_on_world_preparation_completed"),
 		"world_discarded": Callable(self, "_on_world_discarded"),
 		"unit_removed": Callable(self, "_on_unit_removed"),
+		"building_removed": Callable(self, "_on_building_removed"),
 	}
 	for signal_name: String in world_callbacks:
 		if not _world.has_signal(signal_name):
@@ -60,6 +64,7 @@ func _exit_tree() -> void:
 			"world_preparation_completed": Callable(self, "_on_world_preparation_completed"),
 			"world_discarded": Callable(self, "_on_world_discarded"),
 			"unit_removed": Callable(self, "_on_unit_removed"),
+			"building_removed": Callable(self, "_on_building_removed"),
 		}
 		for signal_name: String in world_callbacks:
 			var callback: Callable = world_callbacks[signal_name]
@@ -88,8 +93,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	if mouse_event.is_action_pressed("select_unit"):
 		var unit_id := _pick_local_unit(mouse_event.position)
+		var building_id := 0
+		if unit_id <= 0:
+			building_id = _pick_own_building(_mouse_to_map_position(mouse_event.position))
 		if unit_id > 0:
 			set_selected_units([unit_id])
+		elif building_id > 0:
+			set_selected_building(building_id)
 		else:
 			clear_selection()
 		get_viewport().set_input_as_handled()
@@ -183,6 +193,7 @@ func _report_if_failed(result_value: Variant, command_type: String) -> Dictionar
 
 func set_selected_units(unit_ids: Array[int]) -> void:
 	clear_selection()
+	_clear_building_selection()
 	var entities := _get_entities()
 	var snapshot := _get_active_snapshot()
 	var local_player_id := int(snapshot.get("playerId", 0))
@@ -201,6 +212,32 @@ func set_selected_units(unit_ids: Array[int]) -> void:
 
 func get_selected_units() -> Array[int]:
 	return selected_unit_ids.duplicate()
+
+
+## Selecciona un edificio propio (para ver su estado y entrenar). Deselecciona las unidades.
+func set_selected_building(building_id: int) -> void:
+	clear_selection()
+	_clear_building_selection()
+	var building: Node3D = _get_entities().get(building_id)
+	if (
+		building == null
+		or building.get_meta("entity_kind", "") != "building"
+		or int(building.get_meta("owner", 0)) != int(_get_active_snapshot().get("playerId", 0))
+	):
+		return
+	selected_building_id = building_id
+	_set_building_selected(building, true)
+	building_selection_changed.emit(building_id)
+
+
+func _clear_building_selection() -> void:
+	if selected_building_id == 0:
+		return
+	var building: Node3D = _get_entities().get(selected_building_id)
+	if building != null:
+		_set_building_selected(building, false)
+	selected_building_id = 0
+	building_selection_changed.emit(0)
 
 
 func clear_selection() -> void:
@@ -278,6 +315,35 @@ func _pick_entity(mouse_position: Vector2, ground_point: Variant) -> int:
 			best_distance_squared = distance_squared
 			best_id = int(entity_id)
 	return best_id
+
+
+func _pick_own_building(ground_point: Variant) -> int:
+	var building_id := _pick_entity(Vector2(-1.0e9, -1.0e9), ground_point)
+	var building: Node3D = _get_entities().get(building_id) if building_id > 0 else null
+	if (
+		building == null
+		or building.get_meta("entity_kind", "") != "building"
+		or int(building.get_meta("owner", 0)) != int(_get_active_snapshot().get("playerId", 0))
+	):
+		return 0
+	return building_id
+
+
+func _set_building_selected(building: Node3D, selected: bool) -> void:
+	var marker: MeshInstance3D = building.get_meta("selection_marker") if building.has_meta("selection_marker") else null
+	if marker == null:
+		if not selected:
+			return
+		marker = _create_selection_marker(building)
+		var footprint: Dictionary = building.get_meta("entity_state", {}).get("footprint", {})
+		var cell_size := float(_get_active_snapshot().get("map", {}).get("cellSize", 1.0))
+		# El anillo base mide ~1.16 m: se escala para rodear la huella.
+		marker.scale = Vector3(
+			float(footprint.get("width", 1)) * cell_size * 0.95,
+			1.0,
+			float(footprint.get("height", 1)) * cell_size * 0.95
+		)
+	marker.visible = selected
 
 
 func _mouse_to_map_position(mouse_position: Vector2) -> Variant:
@@ -372,10 +438,12 @@ func _distinct_sorted_array(values: Array[int]) -> Array[int]:
 
 func _on_world_preparation_completed(_initialization_id: int) -> void:
 	clear_selection()
+	_clear_building_selection()
 
 
 func _on_world_discarded(_initialization_id: int) -> void:
 	clear_selection()
+	_clear_building_selection()
 
 
 func _on_unit_removed(unit_id: int) -> void:
@@ -391,6 +459,13 @@ func _on_unit_removed(unit_id: int) -> void:
 func _on_session_state_changed(_state: int, state_name: String) -> void:
 	if ["AwaitingAssignment", "Ended", "Disconnected"].has(state_name):
 		clear_selection()
+		_clear_building_selection()
+
+
+func _on_building_removed(building_id: int) -> void:
+	if building_id == selected_building_id:
+		selected_building_id = 0
+		building_selection_changed.emit(0)
 
 
 func _report_command_failure(error_code: String, detail: String) -> void:

@@ -395,6 +395,8 @@ func _create_navigation_region() -> void:
 	_floor_source = MeshInstance3D.new()
 	_floor_source.name = "NavigationFloor"
 	_floor_source.mesh = floor_mesh
+	# Solo es geometría para hornear: no se dibuja (taparía el terreno y los modelos).
+	_floor_source.visible = false
 	_floor_source.position = Vector3(map_width / 2.0, 0.0, map_depth / 2.0)
 	_navigation_sources.add_child(_floor_source)
 
@@ -438,6 +440,7 @@ func _replace_obstacle_sources() -> void:
 		var obstacle := MeshInstance3D.new()
 		obstacle.name = "BuildingObstacle_%d" % int(building.get("buildingId", 0))
 		obstacle.mesh = obstacle_mesh
+		obstacle.visible = false
 		obstacle.position = Vector3(
 			(float(footprint.get("column", 0)) + float(footprint.get("width", 0)) / 2.0) * cell_size,
 			OBSTACLE_HEIGHT / 2.0,
