@@ -80,7 +80,8 @@ internal sealed class InboundMessageParser : IInboundMessageParser
       return ParseResult.Violation(
           NetworkErrors.UnsupportedVersion,
           messageId,
-          $"Versión {version} no soportada; el servidor usa la {_protocolVersion}.");
+          $"Versión {version} no soportada; el servidor usa la {_protocolVersion}.",
+          type);
     }
 
     // Control 5: el tipo es uno que el cliente puede enviar.
