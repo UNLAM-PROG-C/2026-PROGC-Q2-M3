@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Herramienta de medición (paso 23 de la Fase 3, D-101): compara Economy ∥ Combat en paralelo y en secuencia con un barrido de
+    carga real, sin servidor ni red. Arma el motor como la composición del servidor, con los módulos reales disponibles.
+    Uso: dotnet run -c Release (desde esta carpeta). En Debug los números no sirven.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Rts.Measurement</RootNamespace>
+    <AssemblyName>rts-measurement</AssemblyName>
+    <!--
+      Sin JIT por niveles: todo se compila optimizado desde la primera llamada. Si no, las primeras cargas del barrido corren con
+      código sin optimizar y salen infladas (300 unidades costaban lo mismo que 1.500). Solo afecta a esta herramienta.
+    -->
+    <TieredCompilation>false</TieredCompilation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Rts.Server\Rts.Server.csproj" />
+  </ItemGroup>
+
+  <!-- Los mismos stubs que las pruebas de integración (Construction y Production todavía no existen): se borran todos juntos. -->
+  <ItemGroup>
+    <Compile Include="..\..\tests\Rts.Integration.Tests\Stubs\*.cs" LinkBase="Stubs" />
+  </ItemGroup>
+
+  <!-- La misma configuración que el servidor: el balance de los módulos sale de acá. -->
+  <ItemGroup>
+    <None Include="..\..\config\server.example.json" Link="server.example.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\config\maps\default.json" Link="maps\default.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

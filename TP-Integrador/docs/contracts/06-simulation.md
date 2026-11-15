@@ -197,6 +197,8 @@ Si la falla fue en una fase, las métricas de ese tick llegan por `OnTickComplet
 
 Los resúmenes los arma `TickMetricsAccumulator` (`Rts.Simulation.Diagnostics`), que es lógica pura (sin niveles, períodos ni texto) y también lo usa la medición de paralelo frente a secuencial: promedio y máximo del tick, promedio de cada fase (sobre los ticks en que corrió), promedio y máximo de la espera en la barrera, cantidad de sobrecargas y totales de comandos y eventos.
 
+**Medición para la defensa (DECIDIDO D-101):** `server/tools/Rts.Measurement` (`dotnet run -c Release`) compara `RunDomainPhaseInParallel` en `true` y en `false` con un barrido de carga real, sin servidor ni red, y deja el resultado en [`docs/measurements/parallel-vs-sequential.md`](../measurements/parallel-vs-sequential.md).
+
 ## 11. Pruebas para la etapa de implementación
 
 Estas pruebas de 06 §10 se escriben al implementar:
