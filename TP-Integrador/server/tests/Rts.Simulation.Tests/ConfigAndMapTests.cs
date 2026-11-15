@@ -62,6 +62,16 @@ public class ConfigAndMapTests
     Assert.Contains(config.GetValidationErrors(), error => error.Contains(nameof(SimulationConfig.TickStallTimeout)));
   }
 
+  [Theory]
+  [InlineData(0)]
+  [InlineData(-1)]
+  public void Config_RejectsNonPositiveSummaryInterval(int summaryIntervalTicks)
+  {
+    SimulationConfig config = ValidConfig() with { SummaryIntervalTicks = summaryIntervalTicks };
+
+    Assert.Contains(config.GetValidationErrors(), error => error.Contains(nameof(SimulationConfig.SummaryIntervalTicks)));
+  }
+
   [Fact]
   public void Map_SymmetricExampleIsValid()
   {

@@ -157,6 +157,7 @@ Formato del archivo (RECOMENDADO D-052; lo lee `MapLoader.Load`, que rechaza cam
 | `TickStallTimeout` | > `BarrierTimeout` | **2 s** = 2 × `BarrierTimeout` (DECIDIDO D-092; plazo del supervisor del loop, §6, D-089) |
 | `RunDomainPhaseInParallel` | — | `true` (D-051: `false` solo para medir) |
 | `Diagnostics` | `Summary` / `Debug` | `Summary` |
+| `SummaryIntervalTicks` | > 0 | **200** = 10 s a 20 Hz (DECIDIDO D-098; ticks por ventana de resumen, §10) |
 
 Validación cruzada en la composición del servidor: `MovementConfig.AttackRange == CombatConfig.Soldier.Range` (D-030).
 
@@ -175,6 +176,15 @@ En `Summary` se registran resúmenes y errores; en `Debug`, el detalle por tick.
 **Cómo salen (DECIDIDO D-095):** Simulation no loguea. El loop entrega los datos a `ISimulationDiagnostics` (`Rts.Simulation.Diagnostics`): las `TickMetrics` de cada tick, incluidos los descartados, y cada falla crítica con su motivo. El Server lo implementa y lo traduce a `ILogger` (contrato 10). Como lo llaman el hilo del tick y el supervisor, la implementación tiene que tolerar llamadas concurrentes y no bloquear.
 
 **Entrega (DECIDIDO D-097):** `OnTickCompleted(TickMetrics)` llega una vez por tick, en orden, para todo tick que el motor terminó (confirmado o descartado por una falla de fase), incluido el último de la partida; no para un tick abandonado por el supervisor, y nunca después de completar `StopTicksAsync`. `IsOverrun` viene decidido por la agenda del loop. Si el observador lanza, se ignora y la partida sigue. Es obligatorio al armar el loop (`NullSimulationDiagnostics.Instance` si no se quiere diagnóstico). El aviso de fallas críticas se agrega en la Fase 3.
+
+**Niveles (DECIDIDO D-098)**, que aplica quien implementa el observador (el adaptador del Server):
+
+| Nivel | Qué se registra |
+|---|---|
+| `Summary` (por defecto) | Un `TickMetricsSummary` cada `SummaryIntervalTicks` ticks y uno final al terminar la partida con lo que quede de la última ventana. La **primera** sobrecarga de cada ventana se avisa enseguida (tick y `Total`); las siguientes solo se cuentan en el resumen. Las fallas críticas, siempre. |
+| `Debug` | Todo lo de `Summary`, más una línea con el detalle de cada tick. |
+
+Los resúmenes los arma `TickMetricsAccumulator` (`Rts.Simulation.Diagnostics`), que es lógica pura (sin niveles, períodos ni texto) y también lo usa la medición de paralelo frente a secuencial: promedio y máximo del tick, promedio de cada fase (sobre los ticks en que corrió), promedio y máximo de la espera en la barrera, cantidad de sobrecargas y totales de comandos y eventos.
 
 ## 11. Pruebas para la etapa de implementación
 

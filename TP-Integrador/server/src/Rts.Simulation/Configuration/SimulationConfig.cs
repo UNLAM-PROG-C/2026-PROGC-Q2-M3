@@ -44,6 +44,15 @@ public sealed record SimulationConfig
 
   public DiagnosticsLevel Diagnostics { get; init; } = DiagnosticsLevel.Summary;
 
+  /// <summary>
+  /// Ticks por ventana de resumen en nivel <see cref="DiagnosticsLevel.Summary"/> (06 §10): 200 = 10 s de juego a 20 Hz, unas 6
+  /// líneas por minuto (DECIDIDO D-098). Al terminar la partida se emite además un resumen con lo que quede de la última ventana.
+  /// </summary>
+  public int SummaryIntervalTicks { get; init; } = DefaultSummaryIntervalTicks;
+
+  /// <summary>Valor elegido para <see cref="SummaryIntervalTicks"/> (D-098).</summary>
+  public const int DefaultSummaryIntervalTicks = 200;
+
   /// <summary>Devuelve la lista de problemas de configuración; vacía si es válida.</summary>
   public IReadOnlyList<string> GetValidationErrors()
   {
@@ -77,6 +86,11 @@ public sealed record SimulationConfig
     if (!Enum.IsDefined(Diagnostics))
     {
       errors.Add($"{nameof(Diagnostics)} inválido ({Diagnostics}).");
+    }
+
+    if (SummaryIntervalTicks <= 0)
+    {
+      errors.Add($"{nameof(SummaryIntervalTicks)} debe ser positivo ({SummaryIntervalTicks}).");
     }
 
     return errors;
