@@ -16,6 +16,10 @@ public class OutboundQueueTests
   private static OutboundMessage Essential(int producer = 0, int index = 0) =>
       new("Test", new TestPayload(producer, index), DeliveryClass.Essential);
 
+  // DequeueAsync no tiene tope de espera: si un mensaje esperado no llega, la prueba tiene que fallar y no quedarse colgada.
+  private static async Task<OutboundMessage?> Take(OutboundQueue queue) =>
+      await queue.DequeueAsync(CancellationToken.None).AsTask().WaitAsync(Patience);
+
   private static TestPayload PayloadOf(OutboundMessage? message) =>
       Assert.IsType<TestPayload>(Assert.IsType<OutboundMessage>(message).Payload);
 
@@ -48,7 +52,7 @@ public class OutboundQueueTests
     var message = Essential();
 
     Assert.Equal(EnqueueOutcome.Enqueued, queue.TryEnqueue(message));
-    var received = await queue.DequeueAsync(CancellationToken.None);
+    var received = await Take(queue);
 
     Assert.Same(message, received);
   }
@@ -61,9 +65,9 @@ public class OutboundQueueTests
     queue.TryEnqueue(Essential(index: 2));
     queue.TryEnqueue(Essential(index: 3));
 
-    Assert.Equal(1, PayloadOf(await queue.DequeueAsync(CancellationToken.None)).Index);
-    Assert.Equal(2, PayloadOf(await queue.DequeueAsync(CancellationToken.None)).Index);
-    Assert.Equal(3, PayloadOf(await queue.DequeueAsync(CancellationToken.None)).Index);
+    Assert.Equal(1, PayloadOf(await Take(queue)).Index);
+    Assert.Equal(2, PayloadOf(await Take(queue)).Index);
+    Assert.Equal(3, PayloadOf(await Take(queue)).Index);
   }
 
   [Fact]
@@ -86,16 +90,17 @@ public class OutboundQueueTests
     queue.TryEnqueue(Essential());
     Assert.Equal(2, queue.Count);
 
-    await queue.DequeueAsync(CancellationToken.None);
+    await Take(queue);
     Assert.Equal(1, queue.Count);
   }
 
   // ───────────── Saturación ─────────────
 
   [Fact]
-  public void TryEnqueue_WhenFull_ReturnsSaturated()
+  public void TryEnqueue_WhenEssentialsFillTheirShare_ReturnsSaturated()
   {
-    var queue = new OutboundQueue(2);
+    // Capacidad 3 = 2 lugares para esenciales + 1 reservado para la posición.
+    var queue = new OutboundQueue(3);
     queue.TryEnqueue(Essential(index: 1));
     queue.TryEnqueue(Essential(index: 2));
 
@@ -109,25 +114,25 @@ public class OutboundQueueTests
   public async Task TryEnqueue_WhenSaturated_NeverDropsMessagesAlreadyQueued()
   {
     // D-073: para hacerle lugar a un esencial nunca se descarta otro.
-    var queue = new OutboundQueue(2);
+    var queue = new OutboundQueue(3);
     queue.TryEnqueue(Essential(index: 1));
     queue.TryEnqueue(Essential(index: 2));
     queue.TryEnqueue(Essential(index: 3));
 
-    Assert.Equal(1, PayloadOf(await queue.DequeueAsync(CancellationToken.None)).Index);
-    Assert.Equal(2, PayloadOf(await queue.DequeueAsync(CancellationToken.None)).Index);
+    Assert.Equal(1, PayloadOf(await Take(queue)).Index);
+    Assert.Equal(2, PayloadOf(await Take(queue)).Index);
     Assert.Equal(0, queue.Count);
   }
 
   [Fact]
   public async Task TryEnqueue_AfterTheConsumerFreesASlot_AcceptsAgain()
   {
-    var queue = new OutboundQueue(2);
+    var queue = new OutboundQueue(3);
     queue.TryEnqueue(Essential());
     queue.TryEnqueue(Essential());
     Assert.Equal(EnqueueOutcome.Saturated, queue.TryEnqueue(Essential()));
 
-    await queue.DequeueAsync(CancellationToken.None);
+    await Take(queue);
 
     Assert.Equal(EnqueueOutcome.Enqueued, queue.TryEnqueue(Essential()));
   }
@@ -256,10 +261,10 @@ public class OutboundQueueTests
     queue.TryEnqueue(Essential(index: 2));
     queue.Complete();
 
-    Assert.Equal(1, PayloadOf(await queue.DequeueAsync(CancellationToken.None)).Index);
-    Assert.Equal(2, PayloadOf(await queue.DequeueAsync(CancellationToken.None)).Index);
-    Assert.Null(await queue.DequeueAsync(CancellationToken.None));
-    Assert.Null(await queue.DequeueAsync(CancellationToken.None));
+    Assert.Equal(1, PayloadOf(await Take(queue)).Index);
+    Assert.Equal(2, PayloadOf(await Take(queue)).Index);
+    Assert.Null(await Take(queue));
+    Assert.Null(await Take(queue));
   }
 
   [Fact]
@@ -268,7 +273,7 @@ public class OutboundQueueTests
     var queue = new OutboundQueue(4);
     queue.Complete();
 
-    Assert.Null(await queue.DequeueAsync(CancellationToken.None));
+    Assert.Null(await Take(queue));
   }
 
   [Fact]
@@ -302,8 +307,8 @@ public class OutboundQueueTests
   {
     const int producers = 8;
     const int perProducer = 2_000;
-    // Capacidad de sobra: acá se prueba que no se pierda ni se reordene nada, no la saturación.
-    var queue = new OutboundQueue(producers * perProducer);
+    // Capacidad de sobra (+1 por el lugar reservado): acá se prueba que no se pierda ni se reordene nada, no la saturación.
+    var queue = new OutboundQueue((producers * perProducer) + 1);
     using var start = new ManualResetEventSlim(false);
 
     var producerTasks = Enumerable.Range(0, producers).Select(producer => Task.Factory.StartNew(
@@ -340,7 +345,7 @@ public class OutboundQueueTests
   {
     const int producers = 4;
     const int perProducer = 5_000;
-    var queue = new OutboundQueue(producers * perProducer);
+    var queue = new OutboundQueue((producers * perProducer) + 1);
     var seen = new bool[producers, perProducer];
 
     var consumer = Task.Run(async () =>
@@ -374,7 +379,9 @@ public class OutboundQueueTests
   public async Task SlowConsumer_NeverBlocksProducers_AndCapacityIsNeverExceeded()
   {
     // Nadie saca nada (el consumidor está "colgado"): los productores igual terminan, y la cola no pasa de su capacidad.
+    // Con capacidad 4, los esenciales usan como máximo 3 (el cuarto lugar es de la posición).
     const int capacity = 4;
+    const int essentialShare = capacity - 1;
     const int producers = 4;
     const int perProducer = 1_000;
     var queue = new OutboundQueue(capacity);
@@ -401,8 +408,8 @@ public class OutboundQueueTests
 
     await Task.WhenAll(producerTasks).WaitAsync(Patience);
 
-    Assert.Equal(capacity, enqueued);
-    Assert.Equal((producers * perProducer) - capacity, saturated);
-    Assert.Equal(capacity, queue.Count);
+    Assert.Equal(essentialShare, enqueued);
+    Assert.Equal((producers * perProducer) - essentialShare, saturated);
+    Assert.Equal(essentialShare, queue.Count);
   }
 }
