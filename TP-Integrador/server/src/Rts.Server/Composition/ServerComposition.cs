@@ -45,7 +45,8 @@ internal static class ServerComposition
     //      var modules = new DomainModules(<reglas y calculadores de los cinco módulos de dominio>);
     //      ISimulationEngine engine = SimulationFactory.CreateEngine(
     //          config.Simulation, map, EconomyParameters.FromConfig(config.Economy), commands, modules, TimeProvider.System);
-    //      ISimulationLoop simulation = SimulationFactory.CreateLoop(engine, config.Simulation, stateSync, inbox, TimeProvider.System);
+    //      ISimulationLoop simulation = SimulationFactory.CreateLoop(
+    //          engine, config.Simulation, stateSync, inbox, <adaptador de ISimulationDiagnostics a ILogger, D-095>, TimeProvider.System);
     //
     // 6. Consumidor de sesión (GameSession): el único que necesita a casi todos, por eso va al final.
     //      var effects = new SessionEffectsAdapter(network, stateSync);

@@ -32,7 +32,7 @@ public class SimulationEngineTests
   private static SimulationEngine CreateEngine(params ITickPhase[] phases)
   {
     var factory = new InitialWorldFactory(Map, MaxWoodPerTree, new FakeEconomyRules(), new FakeConstructionRules(), new FakeCombatRules());
-    return new SimulationEngine(factory, phases, TickRate.Default, TimeProvider.System);
+    return new SimulationEngine(factory, phases, TimeProvider.System);
   }
 
   private static SimulationEngine CreateInitializedEngine(params ITickPhase[] phases)

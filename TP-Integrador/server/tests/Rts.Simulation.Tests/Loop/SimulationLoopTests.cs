@@ -16,6 +16,7 @@ public class SimulationLoopTests
   private static readonly TimeSpan SettleTime = TimeSpan.FromMilliseconds(50);
   private static readonly TimeSpan GenerousStallTimeout = TimeSpan.FromSeconds(2); // Ninguna prueba normal se acerca.
   private static readonly TimeSpan ShortStallTimeout = TimeSpan.FromMilliseconds(100);
+  private static readonly TimeSpan SlowTickDuration = TimeSpan.FromMilliseconds(30); // 6 intervalos: sobrecarga segura.
   private static readonly TickRate FastRate = new(FastTicksPerSecond);
   private static readonly TickId Tick1 = TickId.Zero.Next();
   private static readonly TickId Tick2 = Tick1.Next();
@@ -23,12 +24,19 @@ public class SimulationLoopTests
 
   private static (SimulationLoop Loop, ScriptedEngine Engine, Recorder Recorder) Create(
       TimeSpan? stallTimeout = null,
-      TimeProvider? time = null)
+      TimeProvider? time = null,
+      ISimulationDiagnostics? diagnostics = null)
   {
     var engine = new ScriptedEngine();
     var recorder = new Recorder();
     var loop = new SimulationLoop(
-        engine, recorder, recorder, FastRate, stallTimeout ?? GenerousStallTimeout, time ?? TimeProvider.System);
+        engine,
+        recorder,
+        recorder,
+        diagnostics ?? NullSimulationDiagnostics.Instance,
+        FastRate,
+        stallTimeout ?? GenerousStallTimeout,
+        time ?? TimeProvider.System);
     loop.InitializeMatch();
     return (loop, engine, recorder);
   }
@@ -74,7 +82,8 @@ public class SimulationLoopTests
     var recorder = new Recorder();
 
     Assert.Throws<ArgumentOutOfRangeException>(() =>
-        new SimulationLoop(new ScriptedEngine(), recorder, recorder, FastRate, FastRate.TickInterval, TimeProvider.System));
+        new SimulationLoop(
+            new ScriptedEngine(), recorder, recorder, NullSimulationDiagnostics.Instance, FastRate, FastRate.TickInterval, TimeProvider.System));
   }
 
   [Fact]
@@ -187,7 +196,8 @@ public class SimulationLoopTests
   public async Task StartTicks_TwiceOrWithoutInitialize_Throws()
   {
     var recorder = new Recorder();
-    var uninitialized = new SimulationLoop(new ScriptedEngine(), recorder, recorder, FastRate, GenerousStallTimeout, TimeProvider.System);
+    var uninitialized = new SimulationLoop(
+        new ScriptedEngine(), recorder, recorder, NullSimulationDiagnostics.Instance, FastRate, GenerousStallTimeout, TimeProvider.System);
     Assert.Throws<InvalidOperationException>(uninitialized.StartTicks);
 
     var (loop, _, _) = Create();
@@ -209,6 +219,128 @@ public class SimulationLoopTests
     Assert.False(loop.IsRunning);
     Assert.Empty(recorder.Entries); // No corrió ningún tick: nada que publicar ni avisar desde el loop.
     Assert.Throws<InvalidOperationException>(loop.StartTicks);
+  }
+
+  [Fact]
+  public async Task EveryTick_IsReportedOnceInOrder_IncludingTheLastOne()
+  {
+    var diagnostics = new DiagnosticsRecorder();
+    var (loop, engine, recorder) = Create(diagnostics: diagnostics);
+    engine.EndAt = Tick3;
+
+    loop.StartTicks();
+    await recorder.Result.WaitAsync(TestTimeout);
+    await loop.StopTicksAsync().WaitAsync(TestTimeout);
+
+    Assert.Equal([Tick1, Tick2, Tick3], diagnostics.Ticks);
+  }
+
+  [Fact]
+  public async Task TickDiscardedByAPhaseFailure_IsReportedToo()
+  {
+    var diagnostics = new DiagnosticsRecorder();
+    var (loop, engine, recorder) = Create(diagnostics: diagnostics);
+    engine.FailAt = Tick2;
+
+    loop.StartTicks();
+    await recorder.Result.WaitAsync(TestTimeout);
+    await loop.StopTicksAsync().WaitAsync(TestTimeout);
+
+    Assert.Equal([Tick1, Tick2], diagnostics.Ticks); // El tick 2 se descartó, pero sus métricas sirven para entender la falla.
+  }
+
+  [Fact]
+  public async Task TickLongerThanTheInterval_IsReportedAsOverrun()
+  {
+    var diagnostics = new DiagnosticsRecorder();
+    var (loop, engine, recorder) = Create(diagnostics: diagnostics);
+    engine.SlowAt = Tick2;
+    engine.EndAt = Tick3;
+
+    loop.StartTicks();
+    await recorder.Result.WaitAsync(TestTimeout);
+    await loop.StopTicksAsync().WaitAsync(TestTimeout);
+
+    // El motor lo informa en falso; el que decide es la agenda del loop. Los otros ticks no se verifican: con 5 ms de intervalo,
+    // un despertar tardío del sistema operativo también puede ser sobrecarga, y la prueba se volvería inestable.
+    Assert.True(diagnostics.Metrics.Single(metrics => metrics.Tick == Tick2).IsOverrun);
+  }
+
+  [Fact]
+  public async Task FailingDiagnostics_AreIgnoredAndTheMatchGoesOn()
+  {
+    var (loop, engine, recorder) = Create(diagnostics: new ThrowingDiagnostics());
+    engine.EndAt = Tick3;
+
+    loop.StartTicks();
+    await recorder.Result.WaitAsync(TestTimeout);
+
+    Assert.Equal(["publish 1", "publish 2", "publish 3", "result BothBasesDestroyed"], recorder.Entries);
+  }
+
+  [Fact]
+  public async Task NothingIsReportedAfterTheStopCompletes()
+  {
+    var diagnostics = new DiagnosticsRecorder();
+    var (loop, _, recorder) = Create(diagnostics: diagnostics);
+
+    loop.StartTicks();
+    await recorder.WaitForPublicationsAsync(2).WaitAsync(TestTimeout);
+    await loop.StopTicksAsync().WaitAsync(TestTimeout);
+    int reportedAtStop = diagnostics.Ticks.Count;
+    await Task.Delay(SettleTime);
+
+    Assert.Equal(reportedAtStop, diagnostics.Ticks.Count);
+  }
+
+  [Fact]
+  public async Task TickAbandonedByTheSupervisor_IsNotReportedEvenIfItFinishesLate()
+  {
+    var diagnostics = new DiagnosticsRecorder();
+    var (loop, engine, recorder) = Create(ShortStallTimeout, diagnostics: diagnostics);
+    engine.BlockAt = Tick2;
+
+    loop.StartTicks();
+    await recorder.Result.WaitAsync(TestTimeout);
+    await loop.StopTicksAsync().WaitAsync(TestTimeout);
+    engine.Release.Set(); // El tick 2 termina tarde...
+    await Task.Delay(SettleTime);
+
+    Assert.Equal([Tick1], diagnostics.Ticks); // ...y no se informa: la partida ya había terminado.
+  }
+
+  /// <summary>Observador que guarda, en orden y desde cualquier hilo, las métricas que recibe.</summary>
+  private sealed class DiagnosticsRecorder : ISimulationDiagnostics
+  {
+    private readonly object _gate = new();
+    private readonly List<TickMetrics> _metrics = [];
+
+    public IReadOnlyList<TickMetrics> Metrics
+    {
+      get
+      {
+        lock (_gate)
+        {
+          return [.. _metrics];
+        }
+      }
+    }
+
+    public IReadOnlyList<TickId> Ticks => [.. Metrics.Select(metrics => metrics.Tick)];
+
+    public void OnTickCompleted(TickMetrics metrics)
+    {
+      lock (_gate)
+      {
+        _metrics.Add(metrics);
+      }
+    }
+  }
+
+  /// <summary>Observador roto: lanza en cada aviso.</summary>
+  private sealed class ThrowingDiagnostics : ISimulationDiagnostics
+  {
+    public void OnTickCompleted(TickMetrics metrics) => throw new InvalidOperationException("Falla al loguear (prueba).");
   }
 
   /// <summary>Reloj real que no puede crear temporizadores: simula que falla el arranque del supervisor.</summary>
@@ -233,6 +365,9 @@ public class SimulationLoopTests
     public TickId? ThrowAt { get; set; }
 
     public TickId? BlockAt { get; set; }
+
+    /// <summary>Tick que tarda <see cref="SlowTickDuration"/>, bastante más que el intervalo de prueba (5 ms).</summary>
+    public TickId? SlowAt { get; set; }
 
     public TaskCompletionSource Blocked { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -271,6 +406,11 @@ public class SimulationLoopTests
       {
         Blocked.TrySetResult();
         Release.Wait(TestTimeout);
+      }
+
+      if (tick == SlowAt)
+      {
+        Thread.Sleep(SlowTickDuration);
       }
 
       if (tick == ThrowAt)

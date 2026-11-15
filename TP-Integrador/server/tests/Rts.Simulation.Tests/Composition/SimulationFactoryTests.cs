@@ -8,6 +8,7 @@ using Rts.Shared.World;
 using Rts.Simulation.Commands;
 using Rts.Simulation.Composition;
 using Rts.Simulation.Configuration;
+using Rts.Simulation.Diagnostics;
 using Rts.Simulation.Tests.Fakes;
 using Rts.Simulation.Tests.Support;
 
@@ -70,7 +71,7 @@ public class SimulationFactoryTests
     SimulationConfig config = ConfigAndMapTests.ValidConfig();
     ISimulationEngine engine = CreateEngine(new CommandQueue(config.CommandQueueCapacity), config);
     var sink = new IgnoringSink();
-    ISimulationLoop loop = SimulationFactory.CreateLoop(engine, config, sink, sink, TimeProvider.System);
+    ISimulationLoop loop = SimulationFactory.CreateLoop(engine, config, sink, sink, NullSimulationDiagnostics.Instance, TimeProvider.System);
 
     loop.InitializeMatch();
     loop.StartTicks();

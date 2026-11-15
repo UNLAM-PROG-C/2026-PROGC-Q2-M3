@@ -152,7 +152,7 @@ public class EconomyCombatPhasesTests
     var (economy, combat, _) = Branches();
     economy.OnCommit = context => context.World = context.World.With(lastEntityId: context.World.LastEntityId.Next());
     combat.OnCommit = _ => throw new InvalidOperationException("Combat incoherente.");
-    var engine = new SimulationEngine(TestWorld.Factory(), Phases(economy, combat, parallel: true), TickRate.Default, TimeProvider.System);
+    var engine = new SimulationEngine(TestWorld.Factory(), Phases(economy, combat, parallel: true), TimeProvider.System);
     engine.InitializeMatch();
     WorldState before = engine.Current!;
 

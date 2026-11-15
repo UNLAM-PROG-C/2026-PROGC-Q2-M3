@@ -2,6 +2,7 @@ using Rts.Shared.Ids;
 using Rts.Shared.Match;
 using Rts.Shared.Time;
 using Rts.Shared.World;
+using Rts.Simulation.Diagnostics;
 
 namespace Rts.Simulation.Loop;
 
@@ -27,6 +28,7 @@ public sealed class SimulationLoop : ISimulationLoop
   private readonly ISimulationEngine _engine;
   private readonly ITickPublisher _publisher;
   private readonly IMatchResultSink _results;
+  private readonly ISimulationDiagnostics _diagnostics;
   private readonly TimeProvider _time;
   private readonly TimeSpan _tickInterval;
   private readonly TimeSpan _stallTimeout;
@@ -49,6 +51,7 @@ public sealed class SimulationLoop : ISimulationLoop
       ISimulationEngine engine,
       ITickPublisher publisher,
       IMatchResultSink results,
+      ISimulationDiagnostics diagnostics,
       TickRate tickRate,
       TimeSpan stallTimeout,
       TimeProvider time)
@@ -58,6 +61,7 @@ public sealed class SimulationLoop : ISimulationLoop
     _engine = engine ?? throw new ArgumentNullException(nameof(engine));
     _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
     _results = results ?? throw new ArgumentNullException(nameof(results));
+    _diagnostics = diagnostics ?? throw new ArgumentNullException(nameof(diagnostics));
     _time = time ?? throw new ArgumentNullException(nameof(time));
     _tickInterval = tickRate.TickInterval;
     _stallTimeout = stallTimeout;
@@ -142,7 +146,11 @@ public sealed class SimulationLoop : ISimulationLoop
     }
   }
 
-  /// <summary>Cuerpo del hilo dedicado: tick, entrega, espera hasta el próximo; repite hasta un resultado o un pedido de detención.</summary>
+  /// <summary>
+  /// Cuerpo del hilo dedicado: tick, entrega, diagnóstico y espera hasta el próximo; repite hasta un resultado o un pedido de
+  /// detención. El diagnóstico va después de agendar el próximo tick, porque recién ahí se sabe si hubo sobrecarga (D-047); y antes
+  /// de terminar, así también se informa el último tick de la partida.
+  /// </summary>
   private void Run()
   {
     long startedAt = _time.GetTimestamp();
@@ -151,12 +159,19 @@ public sealed class SimulationLoop : ISimulationLoop
       while (TryBeginTick())
       {
         TickOutcome? outcome = AdvanceTickSafely();
-        if (!TryFinishTick(outcome) || Deliver(outcome))
+        if (!TryFinishTick(outcome))
+        {
+          return; // El supervisor lo abandonó por bloqueado: la partida ya terminó y no se informa nada más.
+        }
+
+        bool matchEnded = Deliver(outcome);
+        bool overrun = _schedule.TickFinished(_time.GetElapsedTime(startedAt));
+        ReportTick(outcome, overrun);
+        if (matchEnded)
         {
           return;
         }
 
-        _schedule.TickFinished(_time.GetElapsedTime(startedAt));
         TimeSpan delay = _schedule.DelayUntilNextStart(_time.GetElapsedTime(startedAt));
         _stopRequested.Token.WaitHandle.WaitOne(delay); // Espera interrumpible: un Stop la corta enseguida.
       }
@@ -241,6 +256,27 @@ public sealed class SimulationLoop : ISimulationLoop
     }
 
     return outcome.GameplayResult is { } result && EndMatch(result);
+  }
+
+  /// <summary>
+  /// Entrega las métricas del tick al observador, con la sobrecarga que decidió la agenda. No hay métricas si el motor lanzó una
+  /// excepción fuera de sus fases. Una falla del observador se ignora: el diagnóstico no es parte del juego (D-095).
+  /// </summary>
+  private void ReportTick(TickOutcome? outcome, bool overrun)
+  {
+    if (outcome is null)
+    {
+      return;
+    }
+
+    try
+    {
+      _diagnostics.OnTickCompleted(outcome.Metrics with { IsOverrun = overrun });
+    }
+    catch (Exception)
+    {
+      // A propósito: un problema al loguear no compromete la consistencia del mundo (AGENTS §6), así que la partida sigue.
+    }
   }
 
   /// <summary>Lo llama el temporizador, en un hilo del pool: si el tick en curso pasó el plazo, termina la partida desde afuera.</summary>

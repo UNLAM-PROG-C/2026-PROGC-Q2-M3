@@ -1,5 +1,4 @@
 using Rts.Shared.Collections;
-using Rts.Shared.Time;
 using Rts.Shared.World;
 using Rts.Simulation.Diagnostics;
 using Rts.Simulation.Initialization;
@@ -22,15 +21,13 @@ public sealed class SimulationEngine : ISimulationEngine
 {
   private readonly InitialWorldFactory _initialWorld;
   private readonly IReadOnlyList<ITickPhase> _phases;
-  private readonly TickRate _tickRate;
   private readonly TimeProvider _time;
   private bool _halted;
 
-  internal SimulationEngine(InitialWorldFactory initialWorld, IReadOnlyList<ITickPhase> phases, TickRate tickRate, TimeProvider time)
+  internal SimulationEngine(InitialWorldFactory initialWorld, IReadOnlyList<ITickPhase> phases, TimeProvider time)
   {
     _initialWorld = initialWorld ?? throw new ArgumentNullException(nameof(initialWorld));
     _phases = phases ?? throw new ArgumentNullException(nameof(phases));
-    _tickRate = tickRate ?? throw new ArgumentNullException(nameof(tickRate));
     _time = time ?? throw new ArgumentNullException(nameof(time));
   }
 
@@ -82,13 +79,16 @@ public sealed class SimulationEngine : ISimulationEngine
     return Current;
   }
 
-  private TickMetrics BuildMetrics(TickContext context, PhaseRun run, int eventsPublished)
+  /// <summary>
+  /// <c>IsOverrun</c> queda en falso: la sobrecarga la decide el loop con su agenda (D-047), porque el motor no ve la publicación
+  /// ni cuándo despertó el hilo.
+  /// </summary>
+  private static TickMetrics BuildMetrics(TickContext context, PhaseRun run, int eventsPublished)
   {
-    TimeSpan total = run.Elapsed;
     CommandCounters commands = context.Commands;
     return new TickMetrics(
-        context.Tick, total, run.Timings, context.BarrierWait, commands.Dequeued, commands.Accepted, commands.Rejected,
-        commands.DuplicatesReplied, eventsPublished, IsOverrun: total > _tickRate.TickInterval);
+        context.Tick, run.Elapsed, run.Timings, context.BarrierWait, commands.Dequeued, commands.Accepted, commands.Rejected,
+        commands.DuplicatesReplied, eventsPublished, IsOverrun: false);
   }
 
   /// <summary>Mide cada fase del tick y recuerda cuál está corriendo, para informarla si falla.</summary>

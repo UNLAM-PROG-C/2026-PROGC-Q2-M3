@@ -26,7 +26,7 @@ public class CommandFlowTests
     var queue = new CommandQueue(QueueCapacity);
     var handlers = new ICommandHandler[] { new MoveCommandHandler(new FakeMovementRules()), new StopCommandHandler() };
     var phases = new ITickPhase[] { new CommandBatchPhase(queue, MaxCommandsPerTick, TestHandlers.CompletedWith(handlers)) };
-    var engine = new SimulationEngine(TestWorld.Factory(), phases, TickRate.Default, TimeProvider.System);
+    var engine = new SimulationEngine(TestWorld.Factory(), phases, TimeProvider.System);
     engine.InitializeMatch();
     var move = new MoveCommand(
         TestWorld.SomeDestination, MapRevision.Initial, [new UnitRouteCandidate(TestWorld.P1WorkerA, [TestWorld.SomeDestination])]);
@@ -62,7 +62,7 @@ public class CommandFlowTests
       new CommandBatchPhase(queue, MaxCommandsPerTick, TestHandlers.CompletedWith(new MoveCommandHandler(new FakeMovementRules()))),
       new MovementPhase(new FakeMovementCalculator()),
     };
-    var engine = new SimulationEngine(TestWorld.Factory(), phases, TickRate.Default, TimeProvider.System);
+    var engine = new SimulationEngine(TestWorld.Factory(), phases, TimeProvider.System);
     engine.InitializeMatch();
     var waypoint = new PositionXZ(12.5, 12.5);
     var move = new MoveCommand(

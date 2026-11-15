@@ -3,6 +3,7 @@ using Rts.Shared.Match;
 using Rts.Shared.World;
 using Rts.Simulation.Commands;
 using Rts.Simulation.Configuration;
+using Rts.Simulation.Diagnostics;
 using Rts.Simulation.Engine;
 using Rts.Simulation.Initialization;
 using Rts.Simulation.Loop;
@@ -69,23 +70,25 @@ public static class SimulationFactory
       new ProductionPhase(modules.ProductionCalculator, modules.EconomyRules, modules.CombatRules),
     ];
 
-    return new SimulationEngine(initialWorld, phases, config.TickRate, time);
+    return new SimulationEngine(initialWorld, phases, time);
   }
 
   /// <summary>
-  /// Arma el loop de 20 Hz alrededor del motor: publica cada tick en <paramref name="publisher"/> (State Sync) y avisa el fin de la
-  /// partida a <paramref name="results"/> (el buzón de GameSession). Lo que recibe GameSession es este loop, como
-  /// <see cref="ISimulationControl"/>.
+  /// Arma el loop de 20 Hz alrededor del motor: publica cada tick en <paramref name="publisher"/> (State Sync), avisa el fin de la
+  /// partida a <paramref name="results"/> (el buzón de GameSession) y entrega las métricas a <paramref name="diagnostics"/> (el
+  /// Server las loguea, D-095; sin diagnóstico, <see cref="NullSimulationDiagnostics.Instance"/>). Lo que recibe GameSession es este
+  /// loop, como <see cref="ISimulationControl"/>.
   /// </summary>
   public static ISimulationLoop CreateLoop(
       ISimulationEngine engine,
       SimulationConfig config,
       ITickPublisher publisher,
       IMatchResultSink results,
+      ISimulationDiagnostics diagnostics,
       TimeProvider time)
   {
     ArgumentNullException.ThrowIfNull(config);
     config.Validate();
-    return new SimulationLoop(engine, publisher, results, config.TickRate, config.TickStallTimeout, time);
+    return new SimulationLoop(engine, publisher, results, diagnostics, config.TickRate, config.TickStallTimeout, time);
   }
 }

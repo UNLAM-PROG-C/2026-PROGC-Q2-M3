@@ -99,7 +99,7 @@ Sea `S` el último `WorldState` confirmado y `W` el estado de trabajo, inicialme
 ## 6. Loop (`ISimulationLoop`)
 
 - Un hilo dedicado llama a `AdvanceTick` cada `TickRate.TickInterval` (50 ms), con reloj monotónico. Nunca hay dos ticks a la vez.
-- **Sobrecarga (DECIDIDO D-047):** si un tick se pasa del intervalo, se registra `IsOverrun`, el próximo arranca de inmediato y el reloj se **re-ancla**. No hay ráfagas de recuperación.
+- **Sobrecarga (DECIDIDO D-047):** si un tick se pasa del intervalo, se registra `IsOverrun`, el próximo arranca de inmediato y el reloj se **re-ancla**. No hay ráfagas de recuperación. "Se pasa" se mide sobre la vuelta completa del loop (despertar, cálculo y publicación), y lo decide la agenda del loop, no el motor (DECIDIDO D-097).
 - **Agenda sin deriva (DECIDIDO D-088):** cada tick se agenda en `anterior + intervalo`, no en `ahora + intervalo`, así un despertar tardío del hilo no se acumula. La espera entre ticks es interrumpible por un pedido de detención. La decisión de arrancar otro tick y el pedido de detención comparten un lock: un Stop llega antes del tick (que no arranca) o durante él (que se termina y se entrega).
 - **Supervisión (DECIDIDO D-089):** si un tick queda bloqueado más allá de `TickStallTimeout`, se informa una falla crítica desde fuera del hilo del tick. La revisa un temporizador una vez por intervalo, no un hilo propio. Al vencer: avisa `CriticalError` con el último tick confirmado, completa `StopTicksAsync` y abandona el tick, cuyo resultado se descarta si termina más tarde. El fin de partida se avisa una sola vez, lo detecte el loop o el supervisor.
 - `StartTicks` se llama al pasar a Running. Si no puede arrancar (falta `InitializeMatch`, o no pudo crear el supervisor o el hilo), lanza sin haber corrido ningún tick y el `StopTicksAsync` que sigue devuelve enseguida; GameSession lo informa como `CriticalError` (DECIDIDO D-086). `StopTicksAsync` termina el tick en curso, si lo hay, y detiene el loop; es idempotente. Devuelve el último tick confirmado (`TickId.Zero` si no corrió ninguno), que GameSession usa como `FinalTick` de un resultado por desconexión (RECOMENDADO D-061).
@@ -172,7 +172,9 @@ Validación cruzada en la composición del servidor: `MovementConfig.AttackRange
 
 En `Summary` se registran resúmenes y errores; en `Debug`, el detalle por tick. Comparar `RunDomainPhaseInParallel` en `true` y en `false` sirve para la defensa del TP.
 
-**Cómo salen (DECIDIDO D-095):** Simulation no loguea. El loop entrega los datos a `ISimulationDiagnostics` (`Rts.Simulation.Diagnostics`): las `TickMetrics` de cada tick, incluidos los descartados, y cada falla crítica con su motivo. El Server lo implementa y lo traduce a `ILogger` (contrato 10). Como lo llaman el hilo del tick y el supervisor, la implementación tiene que tolerar llamadas concurrentes y no bloquear. La forma exacta de la interfaz se define en la Fase 3.
+**Cómo salen (DECIDIDO D-095):** Simulation no loguea. El loop entrega los datos a `ISimulationDiagnostics` (`Rts.Simulation.Diagnostics`): las `TickMetrics` de cada tick, incluidos los descartados, y cada falla crítica con su motivo. El Server lo implementa y lo traduce a `ILogger` (contrato 10). Como lo llaman el hilo del tick y el supervisor, la implementación tiene que tolerar llamadas concurrentes y no bloquear.
+
+**Entrega (DECIDIDO D-097):** `OnTickCompleted(TickMetrics)` llega una vez por tick, en orden, para todo tick que el motor terminó (confirmado o descartado por una falla de fase), incluido el último de la partida; no para un tick abandonado por el supervisor, y nunca después de completar `StopTicksAsync`. `IsOverrun` viene decidido por la agenda del loop. Si el observador lanza, se ignora y la partida sigue. Es obligatorio al armar el loop (`NullSimulationDiagnostics.Instance` si no se quiere diagnóstico). El aviso de fallas críticas se agrega en la Fase 3.
 
 ## 11. Pruebas para la etapa de implementación
 
