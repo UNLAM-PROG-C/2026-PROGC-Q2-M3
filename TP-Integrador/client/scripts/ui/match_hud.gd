@@ -20,6 +20,17 @@ const BUILDING_NAMES := {
 	"Fence": "Valla",
 }
 const UNIT_NAMES := {"Worker": "Trabajador", "Soldier": "Soldado"}
+## Acciones de entrada (project.godot) que eligen cada edificio de la barra Construir.
+## Espacio entre el contenido y el borde de los botones de construcción (márgenes del tema).
+const BUILD_BUTTON_PADDING := Vector2(36, 22)
+const BUILD_ACTIONS := {
+	"Farm": "build_farm",
+	"Barracks": "build_barracks",
+	"Tower": "build_tower",
+	"Fence": "build_fence",
+}
+const PLACEMENT_HINT := "Clic: construir  ·  Shift+clic: seguir  ·  Clic derecho o Esc: cancelar"
+const FENCE_HINT := "Arrastrá para una línea de vallas  ·  Clic derecho o Esc: cancelar"
 const STATUS_TEXTS := {
 	"Idle": "Sin entrenamientos.",
 	"WaitingForResources": "Esperando comida para empezar.",
@@ -29,6 +40,7 @@ const STATUS_TEXTS := {
 
 @export var world: Node
 @export var command_controller: Node
+@export var placement_controller: Node
 
 var selected_building_id := 0
 
@@ -50,6 +62,9 @@ var _production_queue: Label
 var _train_button: Button
 var _food_hint: Label
 var _messages: VBoxContainer
+var _build_panel: PanelContainer
+var _build_buttons: Dictionary = {}
+var _build_hint: Label
 
 
 func _ready() -> void:
@@ -63,10 +78,12 @@ func _ready() -> void:
 	_refresh_visibility()
 
 
-func bind(world_node: Node, controller: Node, session_controller: Node) -> void:
+func bind(world_node: Node, controller: Node, session_controller: Node, placement: Node = null) -> void:
 	world = world_node
 	command_controller = controller
 	_session_controller = session_controller
+	if placement != null:
+		placement_controller = placement
 	var world_callbacks := {
 		"world_preparation_completed": _on_world_ready,
 		"world_discarded": _on_world_discarded,
@@ -79,10 +96,23 @@ func bind(world_node: Node, controller: Node, session_controller: Node) -> void:
 		_connect_if_present(world, signal_name, world_callbacks[signal_name])
 	_connect_if_present(command_controller, "building_selection_changed", _on_building_selection_changed)
 	_connect_if_present(command_controller, "command_failed", _on_command_failed)
+	_connect_if_present(command_controller, "selection_changed", _on_unit_selection_changed)
+	_connect_if_present(placement_controller, "placement_mode_changed", _on_placement_mode_changed)
+	_connect_if_present(placement_controller, "command_failed", _on_command_failed)
 	_connect_if_present(_session_controller, "session_state_changed", _on_session_state_changed)
 	if world.get("active_world") != null:
 		_on_world_ready(0)
 	_refresh_visibility()
+
+
+func _unhandled_input(event: InputEvent) -> void:
+	if _build_panel == null or not _build_panel.visible or not event is InputEventKey:
+		return
+	for building_type: String in BUILD_ACTIONS:
+		if event.is_action_pressed(BUILD_ACTIONS[building_type]):
+			start_building(building_type)
+			get_viewport().set_input_as_handled()
+			return
 
 
 func _process(_delta: float) -> void:
@@ -160,6 +190,7 @@ func _refresh_visibility() -> void:
 		_selection_panel.visible = visible and selected_building_id != 0
 		if _selection_panel.visible:
 			_refresh_selection()
+	_refresh_build_panel()
 
 
 func _refresh_resources() -> void:
@@ -215,6 +246,77 @@ func _refresh_selection() -> void:
 	var food := int(world.get_own_resources().get("food", 0))
 	_food_hint.visible = bool(trainable.get("ok", false)) and food < food_cost
 	_food_hint.text = "Sin comida suficiente: la orden esperará en la cola."
+
+
+## Construcción con los trabajadores seleccionados: un botón por edificio colocable, con su
+## costo en madera del catálogo. El botón activa la vista previa de BuildPlacementController.
+func start_building(building_type: String) -> bool:
+	if placement_controller == null:
+		return false
+	if placement_controller.is_placing() and placement_controller.building_type == building_type:
+		placement_controller.cancel_placement()
+		return false
+	return placement_controller.start_placement(building_type)
+
+
+func _refresh_build_panel() -> void:
+	if _build_panel == null:
+		return
+	_build_panel.visible = (
+		visible
+		and placement_controller != null
+		and selected_building_id == 0
+		and _has_selected_worker()
+	)
+	if not _build_panel.visible:
+		return
+	var placing_type := str(placement_controller.building_type)
+	for building_type: String in _build_buttons:
+		var button: Button = _build_buttons[building_type]
+		var wood_cost := int(_building_catalog(building_type).get("cost", {}).get("wood", 0))
+		var key_label := _action_key_label(BUILD_ACTIONS[building_type])
+		var name_label := button.find_child("NameLabel", true, false) as Label
+		name_label.text = BUILDING_NAMES.get(building_type, building_type)
+		if not key_label.is_empty():
+			name_label.text = "[%s] %s" % [key_label, name_label.text]
+		(button.find_child("CostLabel", true, false) as Label).text = str(wood_cost)
+		var content := button.get_child(0) as Control
+		button.custom_minimum_size = content.get_combined_minimum_size() + BUILD_BUTTON_PADDING
+		button.tooltip_text = "%s: %d de madera" % [BUILDING_NAMES.get(building_type, building_type), wood_cost]
+		button.button_pressed = building_type == placing_type
+	_build_hint.visible = not placing_type.is_empty()
+	_build_hint.text = FENCE_HINT if placing_type == "Fence" else PLACEMENT_HINT
+
+
+## Tecla asignada a una acción en el InputMap, para mostrarla en el botón.
+func _action_key_label(action: String) -> String:
+	if not InputMap.has_action(action):
+		return ""
+	for input_event: InputEvent in InputMap.action_get_events(action):
+		var key_event := input_event as InputEventKey
+		if key_event == null:
+			continue
+		var keycode := key_event.physical_keycode if key_event.physical_keycode != KEY_NONE else key_event.keycode
+		return OS.get_keycode_string(keycode)
+	return ""
+
+
+func _has_selected_worker() -> bool:
+	if command_controller == null or world == null:
+		return false
+	for unit_id: int in command_controller.get_selected_units():
+		var unit: Node3D = world.entities_by_id.get(unit_id)
+		if unit != null and str(unit.get_meta("entity_state", {}).get("unitType", "")) == "Worker":
+			return true
+	return false
+
+
+func _on_unit_selection_changed(_unit_ids: Array) -> void:
+	_refresh_build_panel()
+
+
+func _on_placement_mode_changed(_building_type: String) -> void:
+	_refresh_build_panel()
 
 
 func _unit_catalog(unit_type: String) -> Dictionary:
@@ -321,6 +423,7 @@ func _build_ui() -> void:
 	_selection_panel.size_flags_vertical = Control.SIZE_SHRINK_END
 	_selection_panel.visible = false
 	bottom.add_child(_selection_panel)
+	_build_build_panel(bottom)
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 6)
 	_selection_panel.add_child(box)
@@ -354,6 +457,75 @@ func _build_ui() -> void:
 	_food_hint.add_theme_font_size_override("font_size", 16)
 	_food_hint.visible = false
 	_production_box.add_child(_food_hint)
+
+
+func _build_build_panel(parent: Control) -> void:
+	_build_panel = PanelContainer.new()
+	_build_panel.name = "BuildPanel"
+	_build_panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_build_panel.size_flags_vertical = Control.SIZE_SHRINK_END
+	_build_panel.visible = false
+	parent.add_child(_build_panel)
+	var box := VBoxContainer.new()
+	box.add_theme_constant_override("separation", 6)
+	_build_panel.add_child(box)
+	var title := Label.new()
+	title.name = "Title"
+	title.text = "Construir"
+	title.theme_type_variation = &"TitleLabel"
+	title.add_theme_font_size_override("font_size", 24)
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	box.add_child(title)
+	var buttons := HBoxContainer.new()
+	buttons.add_theme_constant_override("separation", 8)
+	box.add_child(buttons)
+	for building_type: String in ["Farm", "Barracks", "Tower", "Fence"]:
+		var button := Button.new()
+		button.name = "Build%s" % building_type
+		button.toggle_mode = true
+		button.focus_mode = Control.FOCUS_NONE
+		button.pressed.connect(func() -> void: start_building(building_type))
+		button.add_child(_make_build_button_content())
+		buttons.add_child(button)
+		_build_buttons[building_type] = button
+	_build_hint = _make_label("BuildHint")
+	_build_hint.add_theme_font_size_override("font_size", 16)
+	_build_hint.visible = false
+	box.add_child(_build_hint)
+
+
+## Contenido de un botón de construcción: "[tecla] Nombre", ícono de madera y costo.
+## Button no admite un ícono en medio del texto, así que el contenido son nodos hijos
+## que no toman el mouse (el clic lo recibe el botón).
+func _make_build_button_content() -> HBoxContainer:
+	var content := HBoxContainer.new()
+	content.name = "Content"
+	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	content.alignment = BoxContainer.ALIGNMENT_CENTER
+	content.add_theme_constant_override("separation", 6)
+	content.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	# Los botones del tema suben el texto 2 px por el borde inferior más grueso.
+	content.offset_bottom = -4
+	var text_color := get_theme_color("font_color", "Button")
+	for label_name: String in ["NameLabel", "CostLabel"]:
+		var label := Label.new()
+		label.name = label_name
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		label.add_theme_color_override("font_color", text_color)
+		label.add_theme_font_size_override("font_size", 18)
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		content.add_child(label)
+		if label_name == "NameLabel":
+			var icon := TextureRect.new()
+			icon.name = "CostIcon"
+			icon.texture = WOOD_ICON
+			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+			icon.custom_minimum_size = Vector2(20, 20)
+			icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+			content.add_child(icon)
+	return content
 
 
 func _add_resource(parent: HBoxContainer, icon: Texture2D, label_name: String, tooltip: String) -> Label:
