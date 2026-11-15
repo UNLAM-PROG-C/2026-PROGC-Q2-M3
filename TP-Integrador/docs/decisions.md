@@ -117,3 +117,9 @@ Detectados en la lectura inicial de `docs/modules/`. No son contradicciones entr
 | O-009 | ~~**Evento de daño a una obra.**~~ **Resuelto** por D-034 y D-065. | 03 §3, 09 §4 | — |
 | O-010 | ~~**Pendientes explícitos de los módulos** que bloqueaban implementación.~~ **Resuelto**: Production (D-037, D-039), commit seguro (D-044), `ReadyTimeout` (D-056) y precedencia de cierre (D-055). | 07 §4/§6 | — |
 | O-011 | **Logging en `SessionHost`.** El borrador de `ServerComposition` (contrato 10 §4) le pasa `loggers` al constructor del host, pero el contrato 07 §8 no lo menciona y `Rts.GameSession` solo referencia `Rts.Shared`. El host se implementó **sin** logging, con las 7 dependencias que lista el contrato. Decidir si se agrega (y con qué abstracción, sin sumar un paquete a `Rts.GameSession`) o si se quita del borrador de la composición. | 07 §8, 10 §4 | Composición del servidor (Luca) |
+
+## Comportamientos provisorios
+
+Conductas temporales de una implementación que todavía no aprobó el equipo. No son decisiones: cada una indica cuándo se reemplaza.
+
+- **2026-11-13 · Networking, parser ([08 §4](contracts/08-networking.md#4-recepción-receiveloop-una-por-conexión)):** hasta que se implementen los comandos de gameplay de la fase 2 (`Stop`, `Attack`, `GatherWood`, `Build`, `RepairFarm`, `TrainUnit` y `RepathResponse`), `InboundMessageParser` los rechaza con `Network.UnknownType` y el detalle «todavía no soportado». Es una elección de quien implementó el parser, pendiente de revisión. Se reemplaza al convertirlos a su `IGameCommand`.
