@@ -7,6 +7,7 @@
 [ext_resource type="Script" uid="uid://bt6xv31gcgu7i" path="res://scripts/unit_command_controller.gd" id="5_unit_controller"]
 [ext_resource type="Script" uid="uid://b4o6688n6mpvf" path="res://scripts/ui/session_screens.gd" id="6_session_screens"]
 [ext_resource type="Script" uid="uid://c82nnpidyqm6a" path="res://scripts/ui/match_hud.gd" id="7_match_hud"]
+[ext_resource type="Script" path="res://scripts/build_placement_controller.gd" id="8_build_placement"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_world"]
 panorama = ExtResource("2_sky")
@@ -32,6 +33,9 @@ script = ExtResource("4_world")
 [node name="UnitCommandController" type="Node" parent="." unique_id=1989907308]
 script = ExtResource("5_unit_controller")
 
+[node name="BuildPlacementController" type="Node3D" parent="."]
+script = ExtResource("8_build_placement")
+
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=80036505]
 transform = Transform3D(0.7253744, 0.3337209, -0.60204846, 0, 0.8746197, 0.4848096, 0.68835455, -0.35166848, 0.6344268, 0, 0, 0)
 light_energy = 0.3
@@ -55,7 +59,7 @@ script = ExtResource("3_overlay")
 rts_camera = NodePath("../../RTSCamera")
 line_width = 5.0
 
-[node name="MatchHud" type="Control" parent="CanvasLayer" unique_id=1117846785 node_paths=PackedStringArray("world", "command_controller")]
+[node name="MatchHud" type="Control" parent="CanvasLayer" unique_id=1117846785 node_paths=PackedStringArray("world", "command_controller", "placement_controller")]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -66,6 +70,7 @@ mouse_filter = 2
 script = ExtResource("7_match_hud")
 world = NodePath("../..")
 command_controller = NodePath("../../UnitCommandController")
+placement_controller = NodePath("../../BuildPlacementController")
 
 [node name="SessionScreens" type="Control" parent="CanvasLayer" unique_id=1814132572]
 layout_mode = 3

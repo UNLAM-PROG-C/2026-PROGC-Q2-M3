@@ -246,7 +246,8 @@ func clear_selection() -> void:
 		if unit != null:
 			_set_unit_selected(unit, false)
 	selected_unit_ids.clear()
-	selection_changed.emit([])
+	var no_units: Array[int] = []
+	selection_changed.emit(no_units)
 
 
 func _pick_local_unit(mouse_position: Vector2) -> int:

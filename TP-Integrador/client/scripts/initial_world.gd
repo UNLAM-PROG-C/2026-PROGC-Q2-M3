@@ -38,6 +38,8 @@ const TASK_TARGET_KEYS := {
 	"Build": "buildingId",
 	"RepairFarm": "farmId",
 }
+## Edificios que se pueden colocar con Build (el Centro Principal no: Construction.NotBuildable).
+const BUILDABLE_TYPES := ["Farm", "Barracks", "Tower", "Fence"]
 ## Qué entrena cada edificio productor (contrato 05, ProducerCatalog, DECIDIDO 05 §1).
 const PRODUCER_UNIT_TYPES := {
 	"MainCenter": "Worker",
@@ -118,6 +120,7 @@ var pending_command_by_unit: Dictionary = {}
 var accepted_order_intents: Dictionary = {}
 var _units_calculating_command: Dictionary = {}
 var _batch_unit_order_changes: Array[Dictionary] = []
+var _batch_placed_buildings: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -420,6 +423,124 @@ func get_own_resources() -> Dictionary:
 	return active_snapshot.get("ownResources", {}).duplicate(true)
 
 
+## Verificación local de una colocación, en el orden de EvaluateSite (contrato 03 §3) y
+## después la madera. Sirve para la vista previa: el resultado oficial lo decide el servidor.
+func validate_placement(building_type: String, anchor_column: int, anchor_row: int) -> Dictionary:
+	if not BUILDABLE_TYPES.has(building_type):
+		return {"ok": false, "error": "NotBuildable", "detail": "%s no se puede construir." % building_type}
+	var footprint := placement_footprint(building_type, anchor_column, anchor_row)
+	if footprint.size == Vector2i.ZERO:
+		return {"ok": false, "error": "NotBuildable", "detail": "El catálogo no define la huella de %s." % building_type}
+	var map_data: Dictionary = active_snapshot.get("map", {})
+	if (
+		footprint.position.x < 0
+		or footprint.position.y < 0
+		or footprint.end.x > int(map_data.get("columns", 0))
+		or footprint.end.y > int(map_data.get("rows", 0))
+	):
+		return {"ok": false, "error": "OutOfBounds", "detail": "La huella sale del mapa."}
+	for building: Variant in active_snapshot.get("buildings", []):
+		var other: Dictionary = building.get("footprint", {})
+		var other_rect := Rect2i(int(other.get("column", 0)), int(other.get("row", 0)), int(other.get("width", 0)), int(other.get("height", 0)))
+		if footprint.intersects(other_rect):
+			return {"ok": false, "error": "CellOccupied", "detail": "La huella pisa otro edificio."}
+	for tree: Variant in active_snapshot.get("trees", []):
+		if footprint.has_point(Vector2i(int(tree.get("column", -1)), int(tree.get("row", -1)))):
+			return {"ok": false, "error": "TreeReserved", "detail": "La huella pisa la celda de un árbol."}
+	var cell_size := float(map_data.get("cellSize", 1.0))
+	for entity_id: Variant in entities_by_id:
+		var node: Node3D = entities_by_id[entity_id]
+		if node.get_meta("entity_kind", "") != "unit":
+			continue
+		var position_value: Variant = node.get_meta("official_position", null)
+		if typeof(position_value) != TYPE_VECTOR2:
+			continue
+		var unit_position: Vector2 = position_value
+		var cell := Vector2i(floori(unit_position.x / cell_size), floori(unit_position.y / cell_size))
+		if footprint.has_point(cell):
+			return {"ok": false, "error": "UnitInFootprint", "detail": "Hay una unidad en la huella."}
+	var wood_cost := int(_catalog_by_type("buildings", "buildingType").get(building_type, {}).get("cost", {}).get("wood", 0))
+	if int(active_snapshot.get("ownResources", {}).get("wood", 0)) < wood_cost:
+		return {"ok": false, "error": "InsufficientWood", "detail": "No alcanza la madera."}
+	return {"ok": true, "footprint": footprint, "woodCost": wood_cost}
+
+
+## Huella en celdas con ancla en la celda de columna y fila mínimas (D-006), sin rotación.
+func placement_footprint(building_type: String, anchor_column: int, anchor_row: int) -> Rect2i:
+	var entry: Dictionary = _catalog_by_type("buildings", "buildingType").get(building_type, {})
+	return Rect2i(
+		anchor_column,
+		anchor_row,
+		int(entry.get("footprintWidth", 0)),
+		int(entry.get("footprintHeight", 0))
+	)
+
+
+## Build en su forma "colocar" (D-032): tipo + celda ancla, con una ruta por trabajador hasta el
+## rango de la huella. `allow_pending` deja mandar varias vallas seguidas con los mismos
+## trabajadores (D-033): cada nueva orden válida reemplaza a la anterior en el servidor.
+func issue_build_place_command(
+	building_type: String,
+	anchor_column: int,
+	anchor_row: int,
+	unit_ids: Array[int] = [],
+	allow_pending := false
+) -> Dictionary:
+	var precondition := _gameplay_precondition()
+	if not precondition.is_empty():
+		return precondition
+	var placement := validate_placement(building_type, anchor_column, anchor_row)
+	if not bool(placement.get("ok", false)):
+		return placement
+	return await _issue_routed_command(
+		"Build",
+		unit_ids,
+		func(ids: Array[int]) -> Dictionary:
+			return await calculate_build_place_routes(building_type, anchor_column, anchor_row, ids),
+		allow_pending
+	)
+
+
+func calculate_build_place_routes(
+	building_type: String,
+	anchor_column: int,
+	anchor_row: int,
+	unit_ids: Array[int]
+) -> Dictionary:
+	if active_world == null:
+		return {"ok": false, "error": "WorldNotReady", "detail": "No hay un mundo activo para calcular rutas."}
+	var world_instance := active_world
+	var compatible_ids := _compatible_unit_ids("Build", unit_ids)
+	if compatible_ids.is_empty():
+		return {"ok": false, "error": "NoCompatibleUnits", "detail": "Solo los trabajadores pueden construir."}
+	var footprint := placement_footprint(building_type, anchor_column, anchor_row)
+	var cell_size := float(active_snapshot.get("map", {}).get("cellSize", 1.0))
+	var target := {"rect": Rect2(Vector2(footprint.position) * cell_size, Vector2(footprint.size) * cell_size)}
+	# La ruta termina al entrar en el rango de la huella, así que no la atraviesa aunque la
+	# navegación local todavía no la tenga como obstáculo (el servidor valida contra el mapa
+	# con la huella bloqueada, 03 §3).
+	var routes_result: Dictionary = await _calculate_routes_to_target(
+		compatible_ids,
+		target,
+		_interaction_range("Build"),
+		0
+	)
+	if active_world != world_instance:
+		return {"ok": false, "error": "WorldChanged", "detail": "El mundo cambió durante el cálculo de rutas."}
+	if not bool(routes_result.get("ok", false)):
+		return routes_result
+	return {
+		"ok": true,
+		"payload": {
+			"buildingType": building_type,
+			"anchorColumn": anchor_column,
+			"anchorRow": anchor_row,
+			"routeMapRevision": routes_result["revision"],
+			"routes": routes_result["routes"],
+		},
+	}
+
+
 ## Arma el payload de una orden de tarea: objetivo, revisión de mapa y una ruta por unidad
 ## que termina dentro del rango de interacción (contrato 04 §3).
 func calculate_task_routes(command_type: String, target_id: int, unit_ids: Array[int] = []) -> Dictionary:
@@ -435,13 +556,39 @@ func calculate_task_routes(command_type: String, target_id: int, unit_ids: Array
 	var compatible_ids := _compatible_unit_ids(command_type, unit_ids)
 	if compatible_ids.is_empty():
 		return {"ok": false, "error": "NoCompatibleUnits", "detail": "Ninguna unidad elegida puede ejecutar %s." % command_type}
+	var routes_result: Dictionary = await _calculate_routes_to_target(
+		compatible_ids,
+		target_check["geometry"],
+		interaction_range,
+		target_id
+	)
+	if active_world != world_instance:
+		return {"ok": false, "error": "WorldChanged", "detail": "El mundo cambió durante el cálculo de rutas."}
+	if not bool(routes_result.get("ok", false)):
+		return routes_result
+	var payload := {
+		TASK_TARGET_KEYS[command_type]: target_id,
+		"routeMapRevision": routes_result["revision"],
+		"routes": routes_result["routes"],
+	}
+	return {"ok": true, "payload": payload}
+
+
+## Una ruta por unidad hasta quedar en rango del objetivo (punto o huella). Si `target_id`
+## es 0, el objetivo es una huella hipotética (Build colocar) y no una entidad existente.
+func _calculate_routes_to_target(
+	unit_ids: Array[int],
+	target_geometry: Dictionary,
+	interaction_range: float,
+	target_id: int
+) -> Dictionary:
+	var world_instance := active_world
 	var navigation: Node = _get_active_navigation()
 	if navigation == null:
 		return {"ok": false, "error": "NavigationUnavailable", "detail": "El mundo no contiene ClientNavigation."}
-	var target_geometry: Dictionary = target_check["geometry"]
 	var route_revision := -1
 	var routes: Array[Dictionary] = []
-	for unit_id: int in compatible_ids:
+	for unit_id: int in unit_ids:
 		var unit: Node3D = entities_by_id.get(unit_id)
 		var official_position: Variant = unit.get_meta("official_position", null)
 		if typeof(official_position) != TYPE_VECTOR2:
@@ -459,7 +606,7 @@ func calculate_task_routes(command_type: String, target_id: int, unit_ids: Array
 			return {"ok": false, "error": "WorldChanged", "detail": "El mundo cambió durante el cálculo de rutas."}
 		if entities_by_id.get(unit_id) != unit:
 			return {"ok": false, "error": "UnitMissing", "detail": "La unidad %d desapareció durante el cálculo." % unit_id}
-		if not entities_by_id.has(target_id):
+		if target_id > 0 and not entities_by_id.has(target_id):
 			return {"ok": false, "error": "TargetMissing", "detail": "El objetivo %d desapareció durante el cálculo." % target_id}
 		var latest_position: Variant = unit.get_meta("official_position", null)
 		if typeof(latest_position) != TYPE_VECTOR2 or not origin.is_equal_approx(latest_position):
@@ -471,12 +618,7 @@ func calculate_task_routes(command_type: String, target_id: int, unit_ids: Array
 			return {"ok": false, "error": "MapRevisionChanged", "detail": "El mapa cambió mientras se calculaban las rutas del grupo."}
 		route_revision = current_route_revision
 		routes.append({"unitId": unit_id, "waypoints": route_result["waypoints"]})
-	var payload := {
-		TASK_TARGET_KEYS[command_type]: target_id,
-		"routeMapRevision": route_revision,
-		"routes": routes,
-	}
-	return {"ok": true, "payload": payload}
+	return {"ok": true, "routes": routes, "revision": route_revision}
 
 
 func _issue_task_command(command_type: String, target_id: int, unit_ids: Array[int]) -> Dictionary:
@@ -496,7 +638,12 @@ func _issue_task_command(command_type: String, target_id: int, unit_ids: Array[i
 
 ## Flujo común de los comandos con rutas: bloqueo por unidad mientras hay un comando
 ## sin resultado, cálculo de rutas, revalidación tras el await y envío con messageId nuevo.
-func _issue_routed_command(command_type: String, unit_ids: Array[int], route_calculator: Callable) -> Dictionary:
+func _issue_routed_command(
+	command_type: String,
+	unit_ids: Array[int],
+	route_calculator: Callable,
+	allow_pending := false
+) -> Dictionary:
 	var precondition := _gameplay_precondition()
 	if not precondition.is_empty():
 		return precondition
@@ -505,7 +652,7 @@ func _issue_routed_command(command_type: String, unit_ids: Array[int], route_cal
 		return {"ok": false, "error": "NoUnitsSelected", "detail": "No hay unidades elegidas para %s." % command_type}
 	var request_initialization_id := active_initialization_id
 	for unit_id: int in target_ids:
-		if pending_command_by_unit.has(unit_id) or _units_calculating_command.has(unit_id):
+		if _units_calculating_command.has(unit_id) or (not allow_pending and pending_command_by_unit.has(unit_id)):
 			return {"ok": false, "error": "CommandAlreadyPending", "detail": "La unidad %d ya tiene un comando pendiente." % unit_id}
 	for unit_id: int in target_ids:
 		_units_calculating_command[unit_id] = true
@@ -524,7 +671,7 @@ func _issue_routed_command(command_type: String, unit_ids: Array[int], route_cal
 	for route: Dictionary in payload["routes"]:
 		routed_unit_ids.append(int(route["unitId"]))
 	for unit_id: int in routed_unit_ids:
-		if pending_command_by_unit.has(unit_id):
+		if not allow_pending and pending_command_by_unit.has(unit_id):
 			return {"ok": false, "error": "CommandAlreadyPending", "detail": "La unidad %d recibió otro comando durante el cálculo." % unit_id}
 	return _send_tracked_command(command_type, payload, routed_unit_ids)
 
@@ -1133,6 +1280,7 @@ func apply_state_events(payload: Variant) -> bool:
 
 	var notifications: Array[Dictionary] = []
 	_batch_unit_order_changes.clear()
+	_batch_placed_buildings.clear()
 	for event_index in range(events.size()):
 		var event_data: Dictionary = events[event_index]
 		var result := _apply_state_event(event_data, tick)
@@ -1604,6 +1752,7 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 			buildings_parent.add_child(building_node)
 			entities_by_id[int(building["buildingId"])] = building_node
 			_store_entity_snapshot(int(building["buildingId"]), building)
+			_batch_placed_buildings.append(building.duplicate(true))
 		"UnitSpawned":
 			var unit: Dictionary = {
 				"unitId": int(event["unitId"]),
@@ -1859,6 +2008,19 @@ func _release_pending_command(message_id: int, command: Dictionary) -> void:
 			pending_command_by_unit.erase(unit_id)
 
 
+func _placed_building_id(payload: Dictionary) -> int:
+	for placed: Dictionary in _batch_placed_buildings:
+		var footprint: Dictionary = placed["footprint"]
+		if (
+			int(placed["owner"]) == int(active_snapshot.get("playerId", 0))
+			and str(placed["buildingType"]) == str(payload.get("buildingType", ""))
+			and int(footprint.get("column", -1)) == int(payload.get("anchorColumn", -2))
+			and int(footprint.get("row", -1)) == int(payload.get("anchorRow", -2))
+		):
+			return int(placed["buildingId"])
+	return 0
+
+
 func _reconcile_accepted_command(command: Dictionary, result: Dictionary) -> void:
 	if not ["Accepted", "PartiallyAccepted"].has(str(result.get("outcome", ""))):
 		return
@@ -1875,6 +2037,12 @@ func _reconcile_accepted_command(command: Dictionary, result: Dictionary) -> voi
 			float(destination_data.get("x", 0.0)),
 			float(destination_data.get("z", 0.0))
 		)
+	elif order_kind == "Build" and payload.has("anchorColumn"):
+		# Build colocar: el objetivo es la obra creada en el mismo lote (03 §3, paso 5).
+		var placed_id := _placed_building_id(payload)
+		if placed_id <= 0:
+			return
+		intent_data["targetId"] = placed_id
 	elif TASK_TARGET_KEYS.has(order_kind):
 		var target_key: String = TASK_TARGET_KEYS[order_kind]
 		if not payload.has(target_key):
@@ -1961,6 +2129,7 @@ func _clear_command_tracking() -> void:
 	accepted_order_intents.clear()
 	_units_calculating_command.clear()
 	_batch_unit_order_changes.clear()
+	_batch_placed_buildings.clear()
 
 
 func _add_position_sample(
