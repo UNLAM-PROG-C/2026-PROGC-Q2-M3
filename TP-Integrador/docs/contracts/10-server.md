@@ -1,6 +1,6 @@
 # Contrato 10 — Server (composición)
 
-> **Estado:** esqueleto implementado y probado (`server/src/Rts.Server`, `server/tests/Rts.Server.Tests`). Están completos: configuración, validación cruzada, catálogo, adaptador de efectos, códigos de salida y apagado ordenado. La creación de las piezas (§4) se completa en la vertical slice, cuando existan las implementaciones de los módulos.
+> **Estado:** esqueleto implementado y probado (`server/src/Rts.Server`, `server/tests/Rts.Server.Tests`). Están completos: configuración, validación cruzada, catálogo, adaptador de efectos, diagnóstico de Simulation (D-100), códigos de salida y apagado ordenado. La creación de las piezas (§4) se completa en la vertical slice, cuando existan las implementaciones de los módulos.
 > **Etiquetas:** **DECIDIDO** = aprobado por el equipo (ver [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **No es un módulo:** no tiene reglas de juego ni lógica de interacción. Es el `main()` del servidor (contrato 00 §1), y el único proyecto que referencia a todos.
 
@@ -125,11 +125,12 @@ Cada paso usa solo lo creado en los anteriores (D-082):
 
 - `ServerComposition.RunMatchAsync` documenta en código el orden de §4 y por ahora lanza `NotImplementedException`; el programa sale con el código 4.
 - `rts-server --validate-only` ya funciona: carga, valida, arma el catálogo y muestra el resumen.
-- **Listo del lado de Simulation:** la cola de comandos (`CommandQueue`), el cargador de mapa (`MapLoader`) y la fábrica `SimulationFactory` (`CreateEngine`, `CreateLoop`), que reciben los cinco módulos de dominio agrupados en `DomainModules` (D-090).
+- **Listo del lado de Simulation:** la cola de comandos (`CommandQueue`), el cargador de mapa (`MapLoader`) y la fábrica `SimulationFactory` (`CreateEngine`, `CreateLoop`), que reciben los cinco módulos de dominio agrupados en `DomainModules` (D-090) y el observador de diagnóstico (D-095).
+- **Listo del lado del Server:** `LoggingSimulationDiagnostics`, que la composición pasa a `CreateLoop` y al que le pide `WriteFinalSummary()` al terminar (D-100).
+- **Listo en otros módulos** (2026-11-15): buzón, vista y `SessionHost` (GameSession); reglas y calculadores de Economy, Combat y Movement (este último solo mueve órdenes `Move`; las de tarea están pendientes, 04 §5).
 - **PENDIENTE:** las implementaciones que faltan para completar la composición:
-  - buzón y vista de sesión, y `SessionHost` (GameSession);
   - `NetworkServer` (Networking) y `StateSyncPublisher` (State Sync);
-  - las implementaciones de reglas y calculadores de los cinco módulos de dominio.
+  - reglas y calculadores de Construction y Production.
 
   Se agregan en la vertical slice (AGENTS §8).
 - **PENDIENTE:** el archivo de mapa real (formato D-052) y los valores definitivos de configuración.

@@ -1,6 +1,6 @@
 # Contrato 06 — Simulation (`Rts.Simulation`)
 
-> **Estado:** Fases 1 y 2 implementadas y probadas (`server/src/Rts.Simulation`, `server/tests/Rts.Simulation.Tests`) contra fakes de los módulos de dominio: modelo del mundo, configuración, cargador de mapa, cola de comandos, motor con las **9 fases** del tick (§4), un handler por cada uno de los 8 tipos de comando (D-094), loop de 20 Hz con supervisión y fábrica pública (`SimulationFactory`). Las pruebas de §11 están escritas, incluido el determinismo paralelo frente a secuencial. **Pendiente:** integración con las implementaciones reales de los módulos de dominio y las métricas de la Fase 3 (§12).
+> **Estado:** Fases 1 y 2 implementadas y probadas (`server/src/Rts.Simulation`, `server/tests/Rts.Simulation.Tests`) contra fakes de los módulos de dominio: modelo del mundo, configuración, cargador de mapa, cola de comandos, motor con las **9 fases** del tick (§4), un handler por cada uno de los 8 tipos de comando (D-094), loop de 20 Hz con supervisión y fábrica pública (`SimulationFactory`). Las pruebas de §11 están escritas, incluido el determinismo paralelo frente a secuencial. **Fase 3 (§10) completa:** el loop entrega métricas y fallas críticas con motivo a `ISimulationDiagnostics` (D-095, D-097, D-099), con resúmenes por ventana (D-098); el Server las escribe en el log (D-100), y `server/tools/Rts.Measurement` mide paralelo frente a secuencial (D-101). **Integración:** `server/tests/Rts.Integration.Tests` corre el motor con Economy, Combat y Movement reales; Construction y Production siguen con stubs hasta que existan. **Pendiente:** reemplazar esos stubs y lo que falta de Movement para órdenes de tarea (04 §5), ver §12.
 > **Etiquetas:** **DECIDIDO** = aprobado (módulo [06-simulation](../modules/06-simulation.md) o [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Depende de:** [Contrato 00](00-shared-kernel.md) y de los contratos de dominio [01](01-economy.md), [02](02-combat.md), [03](03-construction.md), [04](04-units-movement.md) y [05](05-production.md). Ningún módulo de dominio depende de Simulation.
 
@@ -224,6 +224,7 @@ Estas pruebas de 06 §10 se escriben al implementar:
 
 - ~~Implementación del motor, el loop, la cola y el cargador de mapa.~~ Hecho en la Fase 1 (ver Estado).
 - ~~Fase 2: fases 3 a 8 del tick y los handlers que faltan.~~ Hecho (ver Estado; D-093, D-094).
-- Fase 3: registro de métricas, sobrecargas y fallas críticas (§10).
+- ~~Fase 3: registro de métricas, sobrecargas y fallas críticas (§10).~~ Hecho (D-095 a D-101).
+- Integración con los módulos reales que faltan: Construction y Production (hoy stubs en `Rts.Integration.Tests` y `Rts.Measurement`), y Movement para órdenes de tarea (04 §5, pasos 5 a 7): hay una prueba de integración marcada `Skip` que la espera.
 - ~~Valores (§9)~~ elegidos en D-092. Queda el diseño del mapa simétrico real. `server/config/maps/default.json` es un mapa **temporal** de 48×48 para pruebas.
 - ~~Precedencia fina entre el resultado de Simulation y desconexiones casi simultáneas.~~ Resuelta por D-055 (ver [contrato 07 §6](07-game-session.md#6-desconexiones-en-running-lote-y-precedencia)).
