@@ -57,18 +57,12 @@ public sealed class MovementRules : IMovementRules
       NavigationGrid map, PositionXZ start, EquatableArray<PositionXZ> waypoints)
   {
     ArgumentNullException.ThrowIfNull(map);
-    PositionXZ current = start;
-    for (int i = 0; i < waypoints.Count; i++)
+    if (!map.Grid.Contains(start) || map.IsBlocked(map.Grid.ToCell(start)))
     {
-      PositionXZ next = waypoints[i];
-      if (!map.Grid.Contains(next) || SegmentGridValidator.TouchesBlockedCell(map, current, next))
-      {
-        return RouteValidation.Invalid(MovementErrors.InvalidPath, failedSegmentIndex: i);
-      }
-      current = next;
+      return RouteValidation.Invalid(MovementErrors.InvalidPath, failedSegmentIndex: 0);
     }
 
-    return RouteValidation.Valid;
+    return ValidateSegments(map, start, waypoints);
   }
 
   /// <inheritdoc />
@@ -97,7 +91,7 @@ public sealed class MovementRules : IMovementRules
   {
     ArgumentNullException.ThrowIfNull(map);
     ArgumentNullException.ThrowIfNull(target);
-    return true;
+    return ReachabilitySearch.IsTargetReachable(map, start, target, range);
   }
 
   /// <inheritdoc />
@@ -110,15 +104,32 @@ public sealed class MovementRules : IMovementRules
   {
     ArgumentNullException.ThrowIfNull(unit);
     ArgumentNullException.ThrowIfNull(map);
-    if (unit.Order.OrderId != orderId)
+
+    ErrorCode? error =
+        CheckRepathOrderAndLimits(unit, orderId, waypoints)
+        ?? ValidateRoute(map, unit.Position, waypoints).Error
+        ?? CheckRepathGoalReached(unit, target, waypoints, map.Grid);
+
+    return error is { } code
+        ? UnitOrderEvaluation.Rejected(unit.UnitId, code)
+        : UnitOrderEvaluation.Accepted(unit.UnitId, waypoints);
+  }
+
+  private static RouteValidation ValidateSegments(
+      NavigationGrid map, PositionXZ start, EquatableArray<PositionXZ> waypoints)
+  {
+    PositionXZ current = start;
+    for (int i = 0; i < waypoints.Count; i++)
     {
-      return UnitOrderEvaluation.Rejected(unit.UnitId, MovementErrors.StaleOrder);
+      PositionXZ next = waypoints[i];
+      if (!map.Grid.Contains(next) || SegmentGridValidator.TouchesBlockedCell(map, current, next))
+      {
+        return RouteValidation.Invalid(MovementErrors.InvalidPath, failedSegmentIndex: i);
+      }
+      current = next;
     }
 
-    RouteValidation validation = ValidateRoute(map, unit.Position, waypoints);
-    return validation.Error is { } error
-        ? UnitOrderEvaluation.Rejected(unit.UnitId, error)
-        : UnitOrderEvaluation.Accepted(unit.UnitId, waypoints);
+    return RouteValidation.Valid;
   }
 
   private static ErrorCode? CheckCompatibility(UnitOrderRequest request) =>
@@ -140,15 +151,50 @@ public sealed class MovementRules : IMovementRules
 
   private ErrorCode? CheckGoalReached(UnitOrderRequest request)
   {
-    PositionXZ routeEnd = request.Waypoints.IsEmpty
-        ? request.Unit.Position
-        : request.Waypoints[^1];
-
+    PositionXZ routeEnd = request.Waypoints.IsEmpty ? request.Unit.Position : request.Waypoints[^1];
     bool reached = request.Kind == UnitOrderKind.Move
         ? routeEnd.IsWithinRange(request.Destination!.Value, _config.ArrivalTolerance)
         : IsWithinInteractionRange(
             request.Map.Grid, routeEnd, request.Target!, GetInteractionRange(request.Kind));
 
     return reached ? null : MovementErrors.RouteDoesNotReachGoal;
+  }
+
+  private ErrorCode? CheckRepathOrderAndLimits(
+      UnitMovementState unit, OrderId orderId, EquatableArray<PositionXZ> waypoints)
+  {
+    if (unit.Order.IsIdle || unit.Order.OrderId != orderId)
+    {
+      return MovementErrors.StaleOrder;
+    }
+
+    return waypoints.Count > _config.MaxWaypointsPerRoute
+        ? MovementErrors.TooManyWaypoints
+        : null;
+  }
+
+  private ErrorCode? CheckRepathGoalReached(
+      UnitMovementState unit,
+      MovementTarget? target,
+      EquatableArray<PositionXZ> waypoints,
+      GridSpec grid)
+  {
+    PositionXZ routeEnd = waypoints.IsEmpty ? unit.Position : waypoints[^1];
+    if (unit.Order.Kind == UnitOrderKind.Move)
+    {
+      return routeEnd.IsWithinRange(unit.Order.Destination!.Value, _config.ArrivalTolerance)
+          ? null
+          : MovementErrors.RouteDoesNotReachGoal;
+    }
+
+    if (target is null)
+    {
+      return MovementErrors.RouteDoesNotReachGoal;
+    }
+
+    double range = GetInteractionRange(unit.Order.Kind);
+    return IsWithinInteractionRange(grid, routeEnd, target, range)
+        ? null
+        : MovementErrors.RouteDoesNotReachGoal;
   }
 }
