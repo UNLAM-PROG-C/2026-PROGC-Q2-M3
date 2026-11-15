@@ -13,7 +13,7 @@ namespace Rts.Simulation.Commands;
 /// <c>GatherWood</c> (04 §3, 01 §3): un grupo de trabajadores va a recolectar un árbol. Por cada unidad, en el orden del comando:
 /// <list type="number">
 /// <item>Simulation: que exista y sea del jugador.</item>
-/// <item>Economy (<see cref="IEconomyRules.EvaluateGatherTarget"/>): que el objetivo sea un árbol recolectable (RECOMENDADO D-092).</item>
+/// <item>Economy (<see cref="IEconomyRules.EvaluateGatherTarget"/>): que el objetivo sea un árbol recolectable (RECOMENDADO D-093).</item>
 /// <item>Movement: que la unidad pueda recolectar (solo trabajadores) y que la ruta termine en rango del árbol.</item>
 /// </list>
 /// Las aceptadas reciben la orden GatherWood con un <c>OrderId</c> nuevo y el contador de recolección en 0 (01 §3.8).

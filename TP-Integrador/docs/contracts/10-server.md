@@ -124,7 +124,7 @@ Cada paso usa solo lo creado en los anteriores (D-082):
 
 - `ServerComposition.RunMatchAsync` documenta en código el orden de §4 y por ahora lanza `NotImplementedException`; el programa sale con el código 4.
 - `rts-server --validate-only` ya funciona: carga, valida, arma el catálogo y muestra el resumen.
-- **Listo del lado de Simulation:** la cola de comandos (`CommandQueue`), el cargador de mapa (`MapLoader`) y la fábrica `SimulationFactory` (`CreateEngine`, `CreateLoop`), que reciben los cinco módulos de dominio agrupados en `DomainModules` (D-089).
+- **Listo del lado de Simulation:** la cola de comandos (`CommandQueue`), el cargador de mapa (`MapLoader`) y la fábrica `SimulationFactory` (`CreateEngine`, `CreateLoop`), que reciben los cinco módulos de dominio agrupados en `DomainModules` (D-090).
 - **PENDIENTE:** las implementaciones que faltan para completar la composición:
   - buzón y vista de sesión, y `SessionHost` (GameSession);
   - `NetworkServer` (Networking) y `StateSyncPublisher` (State Sync);

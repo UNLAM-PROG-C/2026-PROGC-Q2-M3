@@ -11,7 +11,7 @@ namespace Rts.Simulation.Commands;
 /// comando no se ejecuta y se vuelve a publicar el resultado original. Como la cola es FIFO, el original siempre se procesa antes
 /// que sus duplicados, incluso dentro del mismo lote.</item>
 /// <item><b>Despacho (Strategy):</b> cada comando nuevo va al handler de su tipo. Hay exactamente un handler por
-/// <see cref="CommandType"/>, y se exige al construir la fase (D-093): un handler olvidado falla al armar el servidor, no en partida.</item>
+/// <see cref="CommandType"/>, y se exige al construir la fase (D-094): un handler olvidado falla al armar el servidor, no en partida.</item>
 /// <item>Todo resultado nuevo se registra en el mundo de trabajo, así que también se descarta si el tick falla.</item>
 /// </list>
 /// </summary>
@@ -59,7 +59,7 @@ internal sealed class CommandBatchPhase : ITickPhase
     Count(result, context.Commands);
   }
 
-  /// <summary>Reemplaza el rechazo temporal <c>Simulation.UnsupportedCommand</c> (D-090) por un error al armar la fase (D-093).</summary>
+  /// <summary>Reemplaza el rechazo temporal <c>Simulation.UnsupportedCommand</c> (D-091) por un error al armar la fase (D-094).</summary>
   private static void EnsureEveryTypeHasAHandler(IReadOnlyDictionary<CommandType, ICommandHandler> handlers)
   {
     CommandType[] missing = [.. Enum.GetValues<CommandType>().Where(type => !handlers.ContainsKey(type))];

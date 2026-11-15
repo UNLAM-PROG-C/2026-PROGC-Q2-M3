@@ -4,7 +4,7 @@ using Rts.Shared.Ids;
 namespace Rts.Economy.Model;
 
 /// <summary>
-/// Datos mínimos del objetivo de una orden <c>GatherWood</c>, para validarla al procesar el comando (fase 1, RECOMENDADO D-092).
+/// Datos mínimos del objetivo de una orden <c>GatherWood</c>, para validarla al procesar el comando (fase 1, RECOMENDADO D-093).
 /// <see cref="TreeStatus"/> solo está presente si el objetivo es un árbol.
 /// </summary>
 public sealed record GatherTargetInfo

@@ -1,0 +1,23 @@
+[gd_scene format=3 uid="uid://dhsiqvu0k3sr2"]
+
+[ext_resource type="PackedScene" uid="uid://ctg1wdkn8ejss" path="res://assets/buildings/neutral/wall_straight.gltf" id="1_gxk2j"]
+[ext_resource type="PackedScene" uid="uid://civisavutudd3" path="res://assets/buildings/blue/building_market_blue.gltf" id="2_gpfny"]
+
+[node name="Wall" type="Node3D" unique_id=1155080435]
+
+[node name="Colored" type="Node3D" parent="." unique_id=946745617]
+
+[node name="building_market_blue2" parent="Colored" unique_id=2042735312 instance=ExtResource("2_gpfny")]
+transform = Transform3D(0.92, 0, 0, 0, 1.43, 0, 0, 0, 0.99, -0.15533972, 0, 0.3488965)
+
+[node name="wall_straight2" parent="." unique_id=2002039064 instance=ExtResource("1_gxk2j")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0.6254202)
+
+[node name="wall_straight3" parent="." unique_id=967281504 instance=ExtResource("1_gxk2j")]
+transform = Transform3D(1.1924881e-08, 0, -1, 0, 1, 0, 1, 0, 1.1924881e-08, -0.625, 0, 0)
+
+[node name="wall_straight4" parent="." unique_id=1586334460 instance=ExtResource("1_gxk2j")]
+transform = Transform3D(-1, 0, -8.742278e-08, 0, 1, 0, 8.742278e-08, 0, -1, 0, 0, -0.625)
+
+[node name="wall_straight5" parent="." unique_id=520286635 instance=ExtResource("1_gxk2j")]
+transform = Transform3D(-4.371139e-08, 0, 1, 0, 1, 0, -1, 0, -4.371139e-08, 0.625, 0, 0)

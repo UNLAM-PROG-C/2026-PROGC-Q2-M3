@@ -38,4 +38,10 @@ public sealed record PlayerSession
 
   /// <summary>Recién registrado tras un Hello válido: conectado y sin Ready.</summary>
   public static PlayerSession Registered(PlayerId player, ConnectionId connection) => new(player, connection, isConnected: true, isReady: false);
+
+  /// <summary>La misma plaza con su confirmación de Ready cambiada.</summary>
+  internal PlayerSession WithReady(bool isReady) => new(Player, Connection, IsConnected, isReady);
+
+  /// <summary>La misma plaza, ya sin conexión: un desconectado nunca figura como listo.</summary>
+  internal PlayerSession AsDisconnected() => new(Player, Connection, isConnected: false, isReady: false);
 }

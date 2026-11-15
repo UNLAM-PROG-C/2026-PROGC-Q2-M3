@@ -5,7 +5,7 @@ using Rts.Simulation.Engine;
 namespace Rts.Simulation.Tests.Support;
 
 /// <summary>
-/// <see cref="CommandBatchPhase"/> exige un handler por cada <see cref="CommandType"/> (D-093). Las pruebas que solo usan algunos
+/// <see cref="CommandBatchPhase"/> exige un handler por cada <see cref="CommandType"/> (D-094). Las pruebas que solo usan algunos
 /// completan el resto con <see cref="UnusedHandler"/>.
 /// </summary>
 internal static class TestHandlers

@@ -37,7 +37,7 @@ public interface IEconomyRules
   bool CanAfford(ResourceAmount balance, ResourceAmount cost);
 
   /// <summary>
-  /// Valida el objetivo de una orden <c>GatherWood</c> al procesar el comando (04 §3, RECOMENDADO D-092). Devuelve <c>null</c> si es
+  /// Valida el objetivo de una orden <c>GatherWood</c> al procesar el comando (04 §3, RECOMENDADO D-093). Devuelve <c>null</c> si es
   /// recolectable, o el motivo del rechazo:
   /// <list type="bullet">
   /// <item><c>Common.EntityNotFound</c>: el objetivo no existe (<paramref name="target"/> nulo).</item>

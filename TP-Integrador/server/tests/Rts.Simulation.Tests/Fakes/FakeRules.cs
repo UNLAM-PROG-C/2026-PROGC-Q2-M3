@@ -69,7 +69,7 @@ internal sealed class FakeEconomyRules : IEconomyRules
 
   public IReadOnlyList<GatherTargetInfo?> GatherValidations => _gatherValidations;
 
-  /// <summary>Sigue la tabla de D-092, en su orden.</summary>
+  /// <summary>Sigue la tabla de D-093, en su orden.</summary>
   public ErrorCode? EvaluateGatherTarget(GatherTargetInfo? target)
   {
     _gatherValidations.Add(target);

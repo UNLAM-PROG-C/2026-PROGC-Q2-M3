@@ -4,7 +4,7 @@
 {
   "mapFile": "maps/default.json",
 
-  // Simulation: estos cuatro valores ya están elegidos (D-091), no son temporales.
+  // Simulation: estos cuatro valores ya están elegidos (D-092), no son temporales.
   "simulation": {
     "tickRate": { "ticksPerSecond": 20 },
     "maxCommandsPerTick": 32,

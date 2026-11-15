@@ -4,7 +4,7 @@ namespace Rts.Simulation.Composition;
 
 /// <summary>
 /// Los valores de <see cref="EconomyConfig"/> que Simulation necesita para crear estado y que <c>IEconomyRules</c> no expone
-/// (D-089): la madera inicial de cada árbol y las tandas de una granja recién completada o reparada (01 §5, D-014). Se toman de la
+/// (D-090): la madera inicial de cada árbol y las tandas de una granja recién completada o reparada (01 §5, D-014). Se toman de la
 /// configuración de Economy para no duplicarlos.
 /// </summary>
 public sealed record EconomyParameters
