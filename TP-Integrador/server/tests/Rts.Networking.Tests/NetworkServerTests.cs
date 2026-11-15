@@ -1,4 +1,5 @@
 using System.Net.Sockets;
+using Microsoft.Extensions.Logging;
 using Rts.Protocol;
 using Rts.Protocol.Outbound;
 using Rts.Protocol.Transport;
@@ -138,6 +139,83 @@ public class NetworkServerTests
     Assert.Null(await client.ReadLineAsync()); // El servidor cerró el socket.
     await WaitUntil(() => harness.Session.Closed.Count == 1);
     Assert.Equal([id], harness.Session.Closed);
+  }
+
+  // ───────────── Logging (D-096) ─────────────
+
+  [Fact]
+  public async Task TheServer_LogsItsPortAndEveryAcceptedConnection()
+  {
+    await using var harness = new NetworkServerHarness();
+    int port = await harness.StartAsync();
+
+    var (_, id) = await ConnectWithHelloAsync(harness);
+
+    Assert.Contains(
+        harness.Loggers.Entries,
+        e => e.Level == LogLevel.Information && e.Message.Contains("escuchando", StringComparison.Ordinal) && e.Message.Contains(port.ToString(), StringComparison.Ordinal));
+    Assert.Contains(
+        harness.Loggers.Entries,
+        e => e.Level == LogLevel.Information && e.Message.Contains(id.ToString(), StringComparison.Ordinal) && e.Message.Contains("aceptada", StringComparison.Ordinal));
+  }
+
+  [Fact]
+  public async Task Close_LogsTheReason()
+  {
+    await using var harness = new NetworkServerHarness();
+    await harness.StartAsync();
+    var (_, id) = await ConnectWithHelloAsync(harness);
+
+    harness.Server.Close(id, NetworkErrors.ServerShuttingDown);
+
+    Assert.Contains(
+        harness.Loggers.Entries,
+        e => e.Message.Contains(id.ToString(), StringComparison.Ordinal) && e.Message.Contains("Network.ServerShuttingDown", StringComparison.Ordinal));
+  }
+
+  [Theory]
+  [InlineData(true, "por el servidor")]
+  [InlineData(false, "el cliente se fue")]
+  public async Task WhenAConnectionEnds_TheLogSaysWhoEndedIt(bool closedByTheServer, string expectedCause)
+  {
+    await using var harness = new NetworkServerHarness();
+    await harness.StartAsync();
+    var (client, id) = await ConnectWithHelloAsync(harness);
+
+    if (closedByTheServer)
+    {
+      harness.Server.Close(id, NetworkErrors.ServerShuttingDown);
+    }
+    else
+    {
+      client.Dispose();
+    }
+
+    await WaitUntil(() => harness.Session.Closed.Count == 1);
+    Assert.Contains(
+        harness.Loggers.Entries,
+        e => e.Message.Contains(id.ToString(), StringComparison.Ordinal) && e.Message.Contains("cerrada", StringComparison.Ordinal) && e.Message.Contains(expectedCause, StringComparison.Ordinal));
+  }
+
+  [Fact]
+  public async Task AnUnexpectedFailureInAConnection_IsLoggedAsAnError_AndTheServerKeepsAccepting()
+  {
+    await using var harness = new NetworkServerHarness();
+    await harness.StartAsync();
+    harness.Session.HelloException = new InvalidOperationException("boom");
+    TestClient failing = await harness.ConnectAsync();
+
+    await failing.SendLineAsync(HelloLine);
+    await WaitUntil(() => harness.Loggers.Entries.Any(e => e.Level == LogLevel.Error));
+
+    LogEntry error = Assert.Single(harness.Loggers.Entries, e => e.Level == LogLevel.Error);
+    Assert.IsType<InvalidOperationException>(error.Exception);
+    Assert.Single(harness.Session.Closed); // Aun así la conexión se informó cerrada, una sola vez.
+
+    harness.Session.HelloException = null;
+    TestClient other = await harness.ConnectAsync();
+    await other.SendLineAsync(PingLine(1));
+    Assert.Equal(PongLine(1), await other.ReadLineAsync());
   }
 
   // ───────────── IClientOutbox.Enqueue (09, D-069) ─────────────

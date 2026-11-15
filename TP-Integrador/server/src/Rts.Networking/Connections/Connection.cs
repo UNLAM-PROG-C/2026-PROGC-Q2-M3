@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Rts.Networking.Admission;
 using Rts.Networking.Configuration;
 using Rts.Networking.Framing;
@@ -33,6 +34,7 @@ internal sealed class Connection : IConnectionOutput
   private readonly ConnectionId _id;
   private readonly ISessionEventSink _session;
   private readonly TimeProvider _time;
+  private readonly ILogger<Connection> _logger;
   private readonly TimeSpan _closeLinger;
   private readonly Stream _stream;
   private readonly OutboundQueue _queue;
@@ -49,12 +51,14 @@ internal sealed class Connection : IConnectionOutput
       ISessionEventSink session,
       ISessionGate gate,
       ICommandSink commands,
-      TimeProvider time)
+      TimeProvider time,
+      ILogger<Connection> logger)
   {
     _id = id;
     _stream = stream;
     _session = session;
     _time = time;
+    _logger = logger;
     _closeLinger = config.CloseLinger;
 
     _queue = new OutboundQueue(config.OutboundQueueCapacity);
@@ -100,6 +104,7 @@ internal sealed class Connection : IConnectionOutput
     {
       _queue.Complete();
       _sendCancellation.Cancel();
+      _logger.LogInformation("Conexión {ConnectionId} cerrada ({Cause})", _id, IsClosing ? "por el servidor" : "el cliente se fue");
       _session.PostConnectionClosed(_id);
     }
   }
@@ -120,6 +125,8 @@ internal sealed class Connection : IConnectionOutput
     {
       return;
     }
+
+    _logger.LogInformation("Conexión {ConnectionId} se cierra: {Reason}", _id, reason);
 
     // El Disconnecting va último: lo que ya estaba encolado se entrega antes.
     _queue.TryEnqueue(new OutboundMessage(ProtocolMessageTypes.Disconnecting, new DisconnectingDto(reason.Value), DeliveryClass.Essential));

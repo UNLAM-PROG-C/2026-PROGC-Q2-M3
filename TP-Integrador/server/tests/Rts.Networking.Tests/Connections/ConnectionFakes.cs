@@ -18,6 +18,9 @@ internal sealed class FakeSessionEventSink : ISessionEventSink
   /// <summary>Lo que devuelve <see cref="TryPostHello"/>; falso simula la cola de sesión llena.</summary>
   public bool AcceptHello { get; set; } = true;
 
+  /// <summary>Si no es <c>null</c>, <see cref="TryPostHello"/> la lanza: simula un fallo inesperado en el código que usa la conexión.</summary>
+  public Exception? HelloException { get; set; }
+
   /// <summary>Lo que devuelve <see cref="TryPostClientReady"/>.</summary>
   public bool AcceptReady { get; set; } = true;
 
@@ -59,6 +62,11 @@ internal sealed class FakeSessionEventSink : ISessionEventSink
     lock (_lock)
     {
       _hellos.Add(connection);
+    }
+
+    if (HelloException is { } failure)
+    {
+      throw failure;
     }
 
     return AcceptHello;

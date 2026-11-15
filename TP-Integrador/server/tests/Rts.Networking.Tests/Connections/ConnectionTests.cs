@@ -1,4 +1,5 @@
 using System.Text;
+using Microsoft.Extensions.Logging.Abstractions;
 using Rts.Networking.Configuration;
 using Rts.Networking.Connections;
 using Rts.Networking.Tests.Admission;
@@ -24,7 +25,7 @@ public class ConnectionTests
   private readonly RecordingStream _outgoing = new();
 
   private Connection Create(NetworkingConfig? config = null) =>
-      new(Id, new CompositeStream(_incoming, _outgoing), config ?? ContractsTests.ValidConfig(), _session, _gate, _commands, TimeProvider.System);
+      new(Id, new CompositeStream(_incoming, _outgoing), config ?? ContractsTests.ValidConfig(), _session, _gate, _commands, TimeProvider.System, NullLogger<Connection>.Instance);
 
   private static OutboundMessage Pong(long pingId) => new(ProtocolMessageTypes.Pong, new PongDto(pingId), DeliveryClass.Essential);
 

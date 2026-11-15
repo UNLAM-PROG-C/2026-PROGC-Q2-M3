@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
+using Microsoft.Extensions.Logging;
 using Rts.Networking.Configuration;
 using Rts.Networking.Connections;
 using Rts.Networking.Outbound;
@@ -30,6 +31,8 @@ public sealed class NetworkServer : INetworkServer
   private readonly ISessionGate _gate;
   private readonly ICommandSink _commands;
   private readonly TimeProvider _time;
+  private readonly ILogger<NetworkServer> _logger;
+  private readonly ILogger<Connection> _connectionLogger;
   private readonly SessionMessageEncoder _encoder = new();
   private readonly ConcurrentDictionary<ConnectionId, Connection> _connections = new();
   private readonly TaskCompletionSource<int> _listening = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -40,13 +43,16 @@ public sealed class NetworkServer : INetworkServer
       ISessionEventSink sessionEvents,
       ISessionGate gate,
       ICommandSink commands,
-      TimeProvider time)
+      TimeProvider time,
+      ILoggerFactory loggers)
   {
     _config = config;
     _sessionEvents = sessionEvents;
     _gate = gate;
     _commands = commands;
     _time = time;
+    _logger = loggers.CreateLogger<NetworkServer>();
+    _connectionLogger = loggers.CreateLogger<Connection>();
   }
 
   /// <summary>Puerto en el que escucha, disponible cuando <see cref="RunAsync"/> ya empezó a escuchar (útil con el puerto 0 en pruebas).</summary>
@@ -56,7 +62,9 @@ public sealed class NetworkServer : INetworkServer
   {
     var listener = new TcpListener(IPAddress.Parse(_config.ListenAddress), _config.Port);
     listener.Start();
-    _listening.TrySetResult(((IPEndPoint)listener.LocalEndpoint).Port);
+    int port = ((IPEndPoint)listener.LocalEndpoint).Port;
+    _listening.TrySetResult(port);
+    _logger.LogInformation("Networking escuchando en {Address}:{Port}", _config.ListenAddress, port);
 
     try
     {
@@ -109,8 +117,9 @@ public sealed class NetworkServer : INetworkServer
   private void Accept(TcpClient client)
   {
     var id = new ConnectionId(Interlocked.Increment(ref _lastConnectionId));
-    var connection = new Connection(id, client.GetStream(), _config, _sessionEvents, _gate, _commands, _time);
+    var connection = new Connection(id, client.GetStream(), _config, _sessionEvents, _gate, _commands, _time, _connectionLogger);
     _connections[id] = connection;
+    _logger.LogInformation("Conexión {ConnectionId} aceptada", id);
     _ = RunConnectionAsync(connection, client);
   }
 
@@ -119,6 +128,11 @@ public sealed class NetworkServer : INetworkServer
     try
     {
       await connection.RunAsync().ConfigureAwait(false);
+    }
+    catch (Exception e)
+    {
+      // Un fallo inesperado (un bug) en una conexión no tira al servidor: la conexión ya se cerró y se informó, y queda en el log.
+      _logger.LogError(e, "Fallo inesperado en la conexión {ConnectionId}", connection.Id);
     }
     finally
     {

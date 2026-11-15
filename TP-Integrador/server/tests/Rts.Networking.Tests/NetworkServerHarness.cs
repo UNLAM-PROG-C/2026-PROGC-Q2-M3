@@ -61,7 +61,7 @@ internal sealed class NetworkServerHarness : IAsyncDisposable
       config = configure(config);
     }
 
-    Server = new NetworkServer(config, Session, Gate, Commands, TimeProvider.System);
+    Server = new NetworkServer(config, Session, Gate, Commands, TimeProvider.System, Loggers);
   }
 
   public FakeSessionEventSink Session { get; } = new();
@@ -69,6 +69,8 @@ internal sealed class NetworkServerHarness : IAsyncDisposable
   public FakeSessionGate Gate { get; } = new();
 
   public FakeCommandSink Commands { get; } = new();
+
+  public ListLoggerFactory Loggers { get; } = new();
 
   public NetworkServer Server { get; }
 
