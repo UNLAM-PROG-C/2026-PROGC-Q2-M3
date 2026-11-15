@@ -88,6 +88,10 @@ var _position_samples: Dictionary = {}
 var _position_clock_tick := -1
 var _position_clock_received_usec := 0
 var _recent_command_result_ids: Array[int] = []
+var next_client_message_id := 1
+var selected_unit_ids: Array[int] = []
+var pending_move_requests: Dictionary = {}
+var pending_repath_responses: Dictionary = {}
 
 
 func _ready() -> void:
@@ -207,6 +211,264 @@ func discard_initial_state(initialization_id: int) -> void:
 	active_initialization_id = 0
 	_clear_synchronization_state()
 	world_discarded.emit(initialization_id)
+
+
+func set_selected_units(unit_ids: Array[int]) -> void:
+	selected_unit_ids.clear()
+	for unit_id: Variant in unit_ids:
+		if typeof(unit_id) == TYPE_INT and unit_id > 0:
+			selected_unit_ids.append(int(unit_id))
+	selected_unit_ids = _distinct_sorted_array(selected_unit_ids)
+
+
+func get_selected_units() -> Array[int]:
+	return selected_unit_ids.duplicate()
+
+
+func clear_selection() -> void:
+	selected_unit_ids.clear()
+
+
+func calculate_move_routes(destination: Vector2, unit_ids: Array[int] = []) -> Dictionary:
+	if active_world == null:
+		return {"ok": false, "error": "WorldNotReady", "detail": "No hay un mundo activo para calcular rutas."}
+	var target_ids: Array[int] = unit_ids if not unit_ids.is_empty() else selected_unit_ids
+	if target_ids.is_empty():
+		return {"ok": false, "error": "NoUnitsSelected", "detail": "No hay unidades elegidas para mover."}
+	var map_data: Dictionary = active_snapshot.get("map", {})
+	if map_data.is_empty():
+		return {"ok": false, "error": "MapMissing", "detail": "El snapshot activo no define el mapa."}
+	var cell_size := float(map_data.get("cellSize", 1.0))
+	var map_width := float(map_data.get("columns", 0)) * cell_size
+	var map_depth := float(map_data.get("rows", 0)) * cell_size
+	var routes: Array[Dictionary] = []
+	for unit_id: Variant in target_ids:
+		if typeof(unit_id) != TYPE_INT:
+			continue
+		var entity_id := int(unit_id)
+		var entity: Node3D = entities_by_id.get(entity_id)
+		if entity == null:
+			continue
+		var state: Dictionary = entity.get_meta("entity_state", {})
+		if str(state.get("owner", 0)) != str(active_snapshot.get("playerId", 0)):
+			continue
+		var origin := Vector2(entity.position.x, entity.position.z)
+		var route_result := _route_candidate_between(origin, destination, map_width, map_depth, cell_size)
+		if route_result["ok"]:
+			routes.append({
+				"unitId": entity_id,
+				"waypoints": route_result["waypoints"],
+			})
+		else:
+			return {"ok": false, "error": route_result.get("error", "RouteCalculationFailed"), "detail": route_result.get("detail", "No se pudo calcular una ruta válida.")}
+	if routes.is_empty():
+		return {"ok": false, "error": "NoUnitsReady", "detail": "Ninguna unidad elegida está lista para mover."}
+	var payload := {
+		"destination": {"x": float(destination.x), "z": float(destination.y)},
+		"routeMapRevision": int(map_revision),
+		"routes": routes,
+	}
+	return {"ok": true, "payload": payload}
+
+
+func build_move_payload(destination: Vector2, unit_ids: Array[int] = []) -> Dictionary:
+	return calculate_move_routes(destination, unit_ids)
+
+
+func generate_move_command(destination: Vector2, unit_ids: Array[int] = []) -> Dictionary:
+	return issue_move_command(destination, unit_ids)
+
+
+func create_move_command(destination: Vector2, unit_ids: Array[int] = []) -> Dictionary:
+	return issue_move_command(destination, unit_ids)
+
+
+func issue_move_command(destination: Vector2, unit_ids: Array[int] = []) -> Dictionary:
+	if _session_controller == null or not _session_controller.can_issue_gameplay():
+		return {"ok": false, "error": "MatchNotRunning", "detail": "La sesión no está en Running."}
+	if _network_client == null or not _network_client.has_method("send_message"):
+		return {"ok": false, "error": "NetworkUnavailable", "detail": "No hay un NetworkClient disponible."}
+	var route_result: Dictionary = calculate_move_routes(destination, unit_ids)
+	if not route_result["ok"]:
+		return route_result
+	var message_id: int = next_client_message_id
+	next_client_message_id += 1
+	var payload: Dictionary = route_result["payload"]
+	var outbound: bool = bool(_network_client.call("send_message", "Move", payload, message_id))
+	if not outbound:
+		return {"ok": false, "error": "SendFailed", "detail": "No se pudo enviar el comando Move."}
+	pending_move_requests[message_id] = {
+		"destination": Vector2(payload["destination"]["x"], payload["destination"]["z"]),
+		"routeMapRevision": int(payload["routeMapRevision"]),
+		"units": unit_ids.duplicate() if not unit_ids.is_empty() else selected_unit_ids.duplicate(),
+	}
+	return {"ok": true, "messageId": message_id, "payload": payload}
+
+
+func build_repath_response_payload(request: Dictionary) -> Dictionary:
+	if typeof(request) != TYPE_DICTIONARY:
+		return {"ok": false, "error": "InvalidRequest", "detail": "La solicitud de repath debe ser un objeto."}
+	var unit_id: Variant = request.get("unitId", 0)
+	var order_id: Variant = request.get("orderId", 0)
+	if typeof(unit_id) != TYPE_INT or typeof(order_id) != TYPE_INT:
+		return {"ok": false, "error": "InvalidRequest", "detail": "RepathRequest requiere unitId y orderId enteros."}
+	var unit: Node3D = entities_by_id.get(int(unit_id))
+	if unit == null:
+		return {"ok": false, "error": "UnitMissing", "detail": "La unidad no existe en el mundo local."}
+	var target_vector := Vector2(unit.position.x, unit.position.z)
+	var valid_target: Variant = request.get("destination")
+	if valid_target is Dictionary:
+		target_vector = Vector2(float(valid_target.get("x", unit.position.x)), float(valid_target.get("z", unit.position.z)))
+	var map_data: Dictionary = active_snapshot.get("map", {})
+	var cell_size := float(map_data.get("cellSize", 1.0))
+	var map_width := float(map_data.get("columns", 0)) * cell_size
+	var map_depth := float(map_data.get("rows", 0)) * cell_size
+	var route_result := _route_candidate_between(
+		Vector2(unit.position.x, unit.position.z),
+		target_vector,
+		map_width,
+		map_depth,
+		cell_size
+	)
+	var payload := {
+		"unitId": int(unit_id),
+		"orderId": int(order_id),
+		"mapRevision": int(request.get("mapRevision", int(map_revision))),
+		"waypoints": route_result.get("waypoints", []),
+	}
+	return {"ok": route_result.get("ok", false), "payload": payload, "error": route_result.get("error", "")}
+
+
+func send_repath_response(request: Dictionary, message_id: int = -1) -> bool:
+	if _session_controller == null or not _session_controller.can_issue_gameplay():
+		return false
+	if _network_client == null or not _network_client.has_method("send_message"):
+		return false
+	var payload_result := build_repath_response_payload(request)
+	if not payload_result.get("ok", false):
+		return false
+	var effective_message_id := message_id if message_id > 0 else next_client_message_id
+	if message_id > 0:
+		next_client_message_id = max(next_client_message_id, message_id + 1)
+	else:
+		next_client_message_id += 1
+	var payload: Dictionary = payload_result["payload"]
+	if not _network_client.call("send_message", "RepathResponse", payload, effective_message_id):
+		return false
+	pending_repath_responses[effective_message_id] = {"unitId": int(payload["unitId"]), "orderId": int(payload["orderId"])}
+	return true
+
+
+func _route_candidate_between(
+	origin: Vector2,
+	destination: Vector2,
+	map_width: float,
+	map_depth: float,
+	cell_size: float
+) -> Dictionary:
+	var origin_vector := Vector2(origin.x, origin.y)
+	var destination_vector := Vector2(destination.x, destination.y)
+	if not _is_within_map(origin_vector.x, origin_vector.y, map_width, map_depth):
+		return {"ok": false, "error": "OriginOutOfBounds", "detail": "El origen está fuera del mapa."}
+	if not _is_within_map(destination_vector.x, destination_vector.y, map_width, map_depth):
+		return {"ok": false, "error": "DestinationOutOfBounds", "detail": "El destino está fuera del mapa."}
+	if origin_vector.distance_to(destination_vector) <= 0.05:
+		return {"ok": true, "waypoints": []}
+	var blocked: Dictionary = {}
+	for building_data: Dictionary in active_snapshot.get("buildings", []):
+		if building_data.get("isCompleted", false) == false:
+			continue
+		var footprint: Dictionary = building_data.get("footprint", {})
+		if footprint.is_empty():
+			continue
+		var column := int(footprint.get("column", 0))
+		var row := int(footprint.get("row", 0))
+		var width := int(footprint.get("width", 1))
+		var height := int(footprint.get("height", 1))
+		for cell_x in range(column, column + width):
+			for cell_y in range(row, row + height):
+				blocked[_cell_key(cell_x, cell_y)] = true
+	var start_cell := _world_to_cell(origin_vector.x, origin_vector.y, cell_size)
+	var target_cell := _world_to_cell(destination_vector.x, destination_vector.y, cell_size)
+	var queue: Array[Vector2i] = [start_cell]
+	var came_from: Dictionary = { _cell_key(start_cell.x, start_cell.y): null }
+	var visited: Dictionary = { _cell_key(start_cell.x, start_cell.y): true }
+	while not queue.is_empty():
+		var current: Vector2i = queue.pop_front()
+		if current == target_cell:
+			break
+		for neighbor in _neighbor_cells(current):
+			var key := _cell_key(neighbor.x, neighbor.y)
+			if visited.has(key):
+				continue
+			if not _cell_is_open(neighbor.x, neighbor.y, blocked, int(map_width / cell_size), int(map_depth / cell_size)):
+				continue
+			visited[key] = true
+			came_from[key] = _cell_key(current.x, current.y)
+			queue.push_back(neighbor)
+	if not visited.has(_cell_key(target_cell.x, target_cell.y)):
+		return {"ok": false, "error": "NoRouteFound", "detail": "No se encontró una ruta válida hasta el destino."}
+	var reconstructed: Array[Vector2] = []
+	var cursor := _cell_key(target_cell.x, target_cell.y)
+	while cursor != null:
+		var cell_parts = cursor.split("|")
+		if cell_parts.size() != 2:
+			break
+		var cell_x := int(cell_parts[0])
+		var cell_y := int(cell_parts[1])
+		reconstructed.push_back(Vector2((float(cell_x) + 0.5) * cell_size, (float(cell_y) + 0.5) * cell_size))
+		cursor = came_from.get(cursor, null)
+	reconstructed.reverse()
+	if reconstructed.size() <= 1:
+		return {"ok": true, "waypoints": []}
+	var waypoints: Array = []
+	for index in range(1, reconstructed.size()):
+		var point := reconstructed[index]
+		waypoints.append({"x": float(point.x), "z": float(point.y)})
+	return {"ok": true, "waypoints": waypoints}
+
+
+func _neighbor_cells(cell: Vector2i) -> Array[Vector2i]:
+	var cells: Array[Vector2i] = []
+	for dx in [-1, 0, 1]:
+		for dy in [-1, 0, 1]:
+			if dx == 0 and dy == 0:
+				continue
+			cells.append(Vector2i(cell.x + dx, cell.y + dy))
+	return cells
+
+
+func _cell_is_open(cell_x: int, cell_y: int, blocked: Dictionary, map_columns: int, map_rows: int) -> bool:
+	if cell_x < 0 or cell_y < 0 or cell_x >= map_columns or cell_y >= map_rows:
+		return false
+	if blocked.has(_cell_key(cell_x, cell_y)):
+		return false
+	return true
+
+
+func _world_to_cell(x: float, z: float, cell_size: float) -> Vector2i:
+	var cell_x := int(floor(x / cell_size))
+	var cell_y := int(floor(z / cell_size))
+	return Vector2i(cell_x, cell_y)
+
+
+func _cell_key(cell_x: int, cell_y: int) -> String:
+	return "%d|%d" % [cell_x, cell_y]
+
+
+func _distinct_sorted_array(values: Array[int]) -> Array[int]:
+	var seen: Dictionary = {}
+	var result: Array[int] = []
+	for value: Variant in values:
+		if typeof(value) != TYPE_INT:
+			continue
+		var unit_id := int(value)
+		if seen.has(unit_id):
+			continue
+		seen[unit_id] = true
+		result.append(unit_id)
+	result.sort()
+	return result
 
 
 func _on_initial_state_preparation_requested(initialization_id: int, payload: Dictionary) -> void:
@@ -366,19 +628,19 @@ func apply_state_events(payload: Variant) -> bool:
 	navigation_required_revision = simulated_revision
 	active_snapshot["map"]["revision"] = simulated_revision
 
-	for notification in notifications:
-		match notification["type"]:
+	for event_notification in notifications:
+		match event_notification["type"]:
 			"map_revision":
-				map_revision_changed.emit(int(notification["revision"]))
+				map_revision_changed.emit(int(event_notification["revision"]))
 			"resources":
-				resources_changed.emit(notification["value"].duplicate(true))
+				resources_changed.emit(event_notification["value"].duplicate(true))
 			"production":
 				production_changed.emit(
-					int(notification["producerId"]),
-					notification["value"].duplicate(true)
+					int(event_notification["producerId"]),
+					event_notification["value"].duplicate(true)
 				)
 			"repath":
-				repath_requested.emit(notification["value"].duplicate(true))
+				repath_requested.emit(event_notification["value"].duplicate(true))
 
 	for command_result: Dictionary in data["commandResults"]:
 		_remember_command_result(command_result)
@@ -408,10 +670,10 @@ func apply_position_update(payload: Variant, received_usec: int = -1) -> bool:
 	var positions: Array = data["units"]
 	var position_ids: Dictionary = {}
 	for index in range(positions.size()):
-		var position: Variant = positions[index]
-		if typeof(position) != TYPE_DICTIONARY:
+		var position_entry: Variant = positions[index]
+		if typeof(position_entry) != TYPE_DICTIONARY:
 			return _fail_synchronization("PositionUpdate.units[%d] debe ser un objeto." % index)
-		var position_data: Dictionary = position
+		var position_data: Dictionary = position_entry
 		if (
 			not position_data.has("id")
 			or not position_data.has("x")
@@ -486,12 +748,12 @@ func _validate_state_event(
 			):
 				return _event_validation_failure("BuildingPlaced contiene identidad o tipo inválido.", simulated_revision)
 			var building_id := int(event["buildingId"])
-			var owner := int(event["owner"])
+			var owner_id := int(event["owner"])
 			var building_type: String = event["buildingType"]
 			if (
-				not _has_player(owner)
+				not _has_player(owner_id)
 				or not BUILDING_VISUAL_PATHS.has(building_type)
-				or _building_visual_path(building_type, owner).is_empty()
+				or _building_visual_path(building_type, owner_id).is_empty()
 			):
 				return _event_validation_failure("BuildingPlaced contiene identidad o tipo inválido.", simulated_revision)
 			if simulated_entities.has(building_id) or simulated_destroyed.has(building_id):
@@ -778,7 +1040,7 @@ func _validate_command_results(command_results: Array) -> String:
 
 func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 	var event_type: String = event["type"]
-	var notification: Dictionary = {}
+	var event_notification: Dictionary = {}
 	match event_type:
 		"BuildingPlaced":
 			var building: Dictionary = {
@@ -791,7 +1053,7 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 			}
 			var footprint: Dictionary = building["footprint"]
 			var cell_size := float(active_snapshot["map"]["cellSize"])
-			var position := Vector3(
+			var building_position := Vector3(
 				(float(footprint["column"]) + float(footprint["width"]) / 2.0) * cell_size,
 				0.0,
 				(float(footprint["row"]) + float(footprint["height"]) / 2.0) * cell_size
@@ -801,7 +1063,7 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 				path,
 				"Building_%d" % building["buildingId"],
 				building,
-				position
+				building_position
 			)
 			if not bool(building_instance_result["ok"]):
 				return {"ok": false, "detail": str(building_instance_result["detail"])}
@@ -867,7 +1129,7 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 				}
 			)
 		"MapRevisionChanged":
-			notification = {"type": "map_revision", "revision": int(event["revision"])}
+			event_notification = {"type": "map_revision", "revision": int(event["revision"])}
 		"EntityDamaged":
 			_update_entity_state(int(event["entityId"]), {"hp": int(event["hp"])})
 		"EntityDestroyed":
@@ -894,14 +1156,14 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 				{"orderId": int(event["orderId"]), "order": event["kind"]}
 			)
 		"RepathRequested":
-			notification = {"type": "repath", "value": event.duplicate(true)}
+			event_notification = {"type": "repath", "value": event.duplicate(true)}
 		"ProductionChanged":
 			var producer_id := int(event["producerId"])
 			var production := event.duplicate(true)
 			production.erase("type")
 			production.erase("index")
 			_replace_own_production(producer_id, production)
-			notification = {
+			event_notification = {
 				"type": "production",
 				"producerId": producer_id,
 				"value": production,
@@ -909,10 +1171,10 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 		"ResourcesChanged":
 			var resources := {"wood": int(event["wood"]), "food": int(event["food"])}
 			active_snapshot["ownResources"] = resources.duplicate(true)
-			notification = {"type": "resources", "value": resources}
+			event_notification = {"type": "resources", "value": resources}
 
-	if not notification.is_empty():
-		return {"ok": true, "notification": notification}
+	if not event_notification.is_empty():
+		return {"ok": true, "notification": event_notification}
 	return {"ok": true}
 
 
@@ -1083,11 +1345,11 @@ func _clear_synchronization_state() -> void:
 func _add_position_sample(
 	entity_id: int,
 	tick: int,
-	position: Vector2,
+	world_position: Vector2,
 	received_usec: int
 ) -> void:
 	var samples: Array = _position_samples.get(entity_id, [])
-	var sample := {"tick": tick, "position": position, "received_usec": received_usec}
+	var sample := {"tick": tick, "position": world_position, "received_usec": received_usec}
 	if not samples.is_empty() and int(samples[-1]["tick"]) == tick:
 		samples[-1] = sample
 	else:
@@ -1098,10 +1360,10 @@ func _add_position_sample(
 
 	var node: Node3D = entities_by_id[entity_id]
 	var state: Dictionary = node.get_meta("entity_state", {}).duplicate(true)
-	state["x"] = position.x
-	state["z"] = position.y
+	state["x"] = world_position.x
+	state["z"] = world_position.y
 	node.set_meta("entity_state", state)
-	node.set_meta("official_position", position)
+	node.set_meta("official_position", world_position)
 	_store_entity_snapshot(entity_id, state)
 
 
