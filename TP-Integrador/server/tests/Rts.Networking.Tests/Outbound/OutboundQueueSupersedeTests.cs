@@ -92,7 +92,7 @@ public class OutboundQueueSupersedeTests
     var queue = new OutboundQueue(4);
     var first = Position(1);
     queue.TryEnqueue(first);
-    Assert.Same(first, await queue.DequeueAsync(CancellationToken.None));
+    Assert.Same(first, await queue.DequeueAsync(CancellationToken.None).AsTask().WaitAsync(Patience));
 
     var outcome = queue.TryEnqueue(Position(2));
 
