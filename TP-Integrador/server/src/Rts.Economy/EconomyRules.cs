@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Rts.Economy.Configuration;
 using Rts.Economy.Contracts;
+using Rts.Economy.Model;
 using Rts.Shared.Entities;
 using Rts.Shared.Errors;
 using Rts.Shared.Resources;
@@ -69,6 +70,28 @@ public sealed class EconomyRules : IEconomyRules
   }
 
   public bool CanAfford(ResourceAmount balance, ResourceAmount cost) => EvaluateSpend(balance, cost).IsAffordable;
+
+  /// <summary>Un objetivo inexistente no se encuentra; si existe, se evalúa como árbol (RECOMENDADO D-093).</summary>
+  public ErrorCode? EvaluateGatherTarget(GatherTargetInfo? target)
+  {
+    if (target is null)
+    {
+      return CommonErrors.EntityNotFound;
+    }
+
+    return EvaluateKnownGatherTarget(target);
+  }
+
+  /// <summary>Solo un árbol es recolectable, y mientras no esté agotado.</summary>
+  private static ErrorCode? EvaluateKnownGatherTarget(GatherTargetInfo target)
+  {
+    if (target.Kind != EntityKind.Tree)
+    {
+      return EconomyErrors.InvalidGatherTarget;
+    }
+
+    return target.TreeStatus == TreeStatus.Depleted ? EconomyErrors.TreeDepleted : null;
+  }
 
   /// <summary>Devuelve qué recurso falta, o <c>null</c> si el saldo cubre el costo.</summary>
   private static ErrorCode? FindShortage(ResourceAmount balance, ResourceAmount cost)

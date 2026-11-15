@@ -1,6 +1,8 @@
 using Rts.Economy.Configuration;
 using Rts.Economy.Contracts;
+using Rts.Economy.Model;
 using Rts.Shared.Entities;
+using Rts.Shared.Errors;
 using Rts.Shared.Resources;
 using static Rts.Economy.Tests.EconomyTestData;
 
@@ -99,5 +101,37 @@ public class EconomyRulesTests
 
     Assert.True(rules.TryGetBuildingCost(BuildingType.Tower, out ResourceAmount cost));
     Assert.Equal(ResourceAmount.OfWood(original), cost);
+  }
+
+  [Fact]
+  public void MissingGatherTarget_IsNotFound()
+  {
+    Assert.Equal(CommonErrors.EntityNotFound, Rules.EvaluateGatherTarget(null));
+  }
+
+  [Fact]
+  public void UnitOrBuilding_IsNotAGatherTarget()
+  {
+    var unit = new GatherTargetInfo(Worker1, EntityKind.Unit, treeStatus: null);
+    var building = new GatherTargetInfo(FarmA, EntityKind.Building, treeStatus: null);
+
+    Assert.Equal(EconomyErrors.InvalidGatherTarget, Rules.EvaluateGatherTarget(unit));
+    Assert.Equal(EconomyErrors.InvalidGatherTarget, Rules.EvaluateGatherTarget(building));
+  }
+
+  [Fact]
+  public void DepletedTree_IsNotGatherable()
+  {
+    var tree = new GatherTargetInfo(TreeA, EntityKind.Tree, TreeStatus.Depleted);
+
+    Assert.Equal(EconomyErrors.TreeDepleted, Rules.EvaluateGatherTarget(tree));
+  }
+
+  [Fact]
+  public void AvailableTree_IsGatherable()
+  {
+    var tree = new GatherTargetInfo(TreeA, EntityKind.Tree, TreeStatus.Available);
+
+    Assert.Null(Rules.EvaluateGatherTarget(tree));
   }
 }
