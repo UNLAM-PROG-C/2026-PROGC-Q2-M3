@@ -18,6 +18,7 @@
     <Project Path="tests/Rts.Construction.Tests/Rts.Construction.Tests.csproj" />
     <Project Path="tests/Rts.Economy.Tests/Rts.Economy.Tests.csproj" />
     <Project Path="tests/Rts.GameSession.Tests/Rts.GameSession.Tests.csproj" />
+    <Project Path="tests/Rts.Integration.Tests/Rts.Integration.Tests.csproj" />
     <Project Path="tests/Rts.Movement.Tests/Rts.Movement.Tests.csproj" />
     <Project Path="tests/Rts.Networking.Tests/Rts.Networking.Tests.csproj" />
     <Project Path="tests/Rts.Production.Tests/Rts.Production.Tests.csproj" />
