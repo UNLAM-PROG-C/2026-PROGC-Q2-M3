@@ -13,6 +13,9 @@ internal sealed class RecordingStream : Stream
   /// <summary>Si no es <c>null</c>, cada escritura espera a que esta tarea termine antes de anotarse.</summary>
   public Task? Gate { get; set; }
 
+  /// <summary>Si no es <c>null</c>, cada escritura lanza esta excepción (simula un socket que falla).</summary>
+  public Exception? WriteException { get; set; }
+
   /// <summary>Termina cuando entra la primera escritura (todavía sin anotarse si hay una puerta cerrada).</summary>
   public Task WriteStarted => _writeStarted.Task;
 
@@ -45,6 +48,11 @@ internal sealed class RecordingStream : Stream
   public override async ValueTask WriteAsync(ReadOnlyMemory<byte> buffer, CancellationToken cancellationToken = default)
   {
     _writeStarted.TrySetResult();
+    if (WriteException is { } failure)
+    {
+      throw failure;
+    }
+
     if (Gate is { } gate)
     {
       await gate.WaitAsync(cancellationToken);
