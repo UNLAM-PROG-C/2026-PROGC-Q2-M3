@@ -30,6 +30,20 @@ const UNIT_ORDER_KINDS := [
 	"Attack",
 ]
 const PRODUCTION_STATUSES := ["Idle", "WaitingForResources", "Training", "PendingSpawn"]
+## Campo del payload que identifica el objetivo de cada orden de tarea (docs/protocol/examples).
+const TASK_TARGET_KEYS := {
+	"GatherWood": "treeId",
+	"Attack": "targetId",
+	"Build": "buildingId",
+	"RepairFarm": "farmId",
+}
+## Tipo de unidad que acepta cada orden de tarea (contrato 04 §3, UnitOrderCompatibility).
+const TASK_UNIT_TYPES := {
+	"GatherWood": "Worker",
+	"Build": "Worker",
+	"RepairFarm": "Worker",
+	"Attack": "Soldier",
+}
 
 const UNIT_VISUAL_PATHS := {
 	"Worker": "res://assets/units/mini_characters/character-worker.glb",
@@ -92,11 +106,11 @@ var _position_clock_tick := -1
 var _position_clock_received_usec := 0
 var _recent_command_result_ids: Array[int] = []
 var next_client_message_id := 1
-var pending_move_requests: Dictionary = {}
+var pending_commands: Dictionary = {}
 var pending_repath_responses: Dictionary = {}
-var pending_move_by_unit: Dictionary = {}
-var accepted_move_intents: Dictionary = {}
-var _units_calculating_move: Dictionary = {}
+var pending_command_by_unit: Dictionary = {}
+var accepted_order_intents: Dictionary = {}
+var _units_calculating_command: Dictionary = {}
 var _batch_unit_order_changes: Array[Dictionary] = []
 
 
@@ -312,50 +326,294 @@ func create_move_command(destination: Vector2, unit_ids: Array[int] = []) -> Dic
 
 
 func issue_move_command(destination: Vector2, unit_ids: Array[int] = []) -> Dictionary:
-	if _session_controller == null or not _session_controller.can_issue_gameplay():
-		return {"ok": false, "error": "MatchNotRunning", "detail": "La sesión no está en Running."}
-	if _network_client == null or not _network_client.has_method("send_message"):
-		return {"ok": false, "error": "NetworkUnavailable", "detail": "No hay un NetworkClient disponible."}
+	return await _issue_routed_command(
+		"Move",
+		unit_ids,
+		func(ids: Array[int]) -> Dictionary: return await calculate_move_routes(destination, ids)
+	)
+
+
+## GatherWood: solo trabajadores propios; el resto de la selección se ignora (plan 06 §2).
+func issue_gather_wood_command(tree_id: int, unit_ids: Array[int] = []) -> Dictionary:
+	return await _issue_task_command("GatherWood", tree_id, unit_ids)
+
+
+## Attack: solo soldados propios contra una unidad o un edificio rival.
+func issue_attack_command(target_id: int, unit_ids: Array[int] = []) -> Dictionary:
+	return await _issue_task_command("Attack", target_id, unit_ids)
+
+
+## Build en su forma "continuar" (D-032): sumarse a una obra propia sin costo.
+func issue_build_continue_command(building_id: int, unit_ids: Array[int] = []) -> Dictionary:
+	return await _issue_task_command("Build", building_id, unit_ids)
+
+
+## RepairFarm: trabajadores propios sobre una granja propia, completada y agotada.
+func issue_repair_farm_command(farm_id: int, unit_ids: Array[int] = []) -> Dictionary:
+	return await _issue_task_command("RepairFarm", farm_id, unit_ids)
+
+
+## Stop: deja Idle a las unidades propias. No lleva rutas ni bloquea por comandos pendientes,
+## para que el jugador pueda frenar una orden recién dada.
+func issue_stop_command(unit_ids: Array[int] = []) -> Dictionary:
+	var precondition := _gameplay_precondition()
+	if not precondition.is_empty():
+		return precondition
+	var stop_ids: Array[int] = []
+	for unit_id: int in _distinct_sorted_array(unit_ids):
+		if not _owned_unit_type(unit_id).is_empty():
+			stop_ids.append(unit_id)
+	if stop_ids.is_empty():
+		return {"ok": false, "error": "NoUnitsSelected", "detail": "No hay unidades propias para detener."}
+	var payload := {"unitIds": stop_ids}
+	return _send_tracked_command("Stop", payload, [])
+
+
+## Arma el payload de una orden de tarea: objetivo, revisión de mapa y una ruta por unidad
+## que termina dentro del rango de interacción (contrato 04 §3).
+func calculate_task_routes(command_type: String, target_id: int, unit_ids: Array[int] = []) -> Dictionary:
+	if active_world == null:
+		return {"ok": false, "error": "WorldNotReady", "detail": "No hay un mundo activo para calcular rutas."}
+	var world_instance := active_world
+	var target_check := _validate_task_target(command_type, target_id)
+	if not bool(target_check.get("ok", false)):
+		return target_check
+	var interaction_range := _interaction_range(command_type)
+	if interaction_range <= 0.0:
+		return {"ok": false, "error": "RangeUnavailable", "detail": "El catálogo no define el rango de %s." % command_type}
+	var compatible_ids := _compatible_unit_ids(command_type, unit_ids)
+	if compatible_ids.is_empty():
+		return {"ok": false, "error": "NoCompatibleUnits", "detail": "Ninguna unidad elegida puede ejecutar %s." % command_type}
+	var navigation: Node = _get_active_navigation()
+	if navigation == null:
+		return {"ok": false, "error": "NavigationUnavailable", "detail": "El mundo no contiene ClientNavigation."}
+	var target_geometry: Dictionary = target_check["geometry"]
+	var route_revision := -1
+	var routes: Array[Dictionary] = []
+	for unit_id: int in compatible_ids:
+		var unit: Node3D = entities_by_id.get(unit_id)
+		var official_position: Variant = unit.get_meta("official_position", null)
+		if typeof(official_position) != TYPE_VECTOR2:
+			return {"ok": false, "error": "OfficialPositionUnavailable", "detail": "La unidad %d no tiene posición oficial." % unit_id}
+		var origin: Vector2 = official_position
+		var route_result: Dictionary = await _calculate_candidate_route_stable(
+			navigation,
+			origin,
+			Vector2.ZERO,
+			map_revision,
+			target_geometry,
+			interaction_range
+		)
+		if active_world != world_instance:
+			return {"ok": false, "error": "WorldChanged", "detail": "El mundo cambió durante el cálculo de rutas."}
+		if entities_by_id.get(unit_id) != unit:
+			return {"ok": false, "error": "UnitMissing", "detail": "La unidad %d desapareció durante el cálculo." % unit_id}
+		if not entities_by_id.has(target_id):
+			return {"ok": false, "error": "TargetMissing", "detail": "El objetivo %d desapareció durante el cálculo." % target_id}
+		var latest_position: Variant = unit.get_meta("official_position", null)
+		if typeof(latest_position) != TYPE_VECTOR2 or not origin.is_equal_approx(latest_position):
+			return {"ok": false, "error": "OfficialPositionChanged", "detail": "La posición oficial de la unidad cambió durante el cálculo."}
+		if not bool(route_result.get("ok", false)):
+			return route_result
+		var current_route_revision := int(route_result["revision"])
+		if route_revision >= 0 and current_route_revision != route_revision:
+			return {"ok": false, "error": "MapRevisionChanged", "detail": "El mapa cambió mientras se calculaban las rutas del grupo."}
+		route_revision = current_route_revision
+		routes.append({"unitId": unit_id, "waypoints": route_result["waypoints"]})
+	var payload := {
+		TASK_TARGET_KEYS[command_type]: target_id,
+		"routeMapRevision": route_revision,
+		"routes": routes,
+	}
+	return {"ok": true, "payload": payload}
+
+
+func _issue_task_command(command_type: String, target_id: int, unit_ids: Array[int]) -> Dictionary:
+	var precondition := _gameplay_precondition()
+	if not precondition.is_empty():
+		return precondition
+	# Un objetivo inválido se informa antes que el bloqueo por comandos pendientes.
+	var target_check := _validate_task_target(command_type, target_id)
+	if not bool(target_check.get("ok", false)):
+		return target_check
+	return await _issue_routed_command(
+		command_type,
+		unit_ids,
+		func(ids: Array[int]) -> Dictionary: return await calculate_task_routes(command_type, target_id, ids)
+	)
+
+
+## Flujo común de los comandos con rutas: bloqueo por unidad mientras hay un comando
+## sin resultado, cálculo de rutas, revalidación tras el await y envío con messageId nuevo.
+func _issue_routed_command(command_type: String, unit_ids: Array[int], route_calculator: Callable) -> Dictionary:
+	var precondition := _gameplay_precondition()
+	if not precondition.is_empty():
+		return precondition
 	var target_ids := _distinct_sorted_array(unit_ids)
 	if target_ids.is_empty():
-		return {"ok": false, "error": "NoUnitsSelected", "detail": "No hay unidades elegidas para mover."}
+		return {"ok": false, "error": "NoUnitsSelected", "detail": "No hay unidades elegidas para %s." % command_type}
 	var request_initialization_id := active_initialization_id
 	for unit_id: int in target_ids:
-		if pending_move_by_unit.has(unit_id) or _units_calculating_move.has(unit_id):
-			return {"ok": false, "error": "MoveAlreadyPending", "detail": "La unidad %d ya tiene un Move pendiente." % unit_id}
+		if pending_command_by_unit.has(unit_id) or _units_calculating_command.has(unit_id):
+			return {"ok": false, "error": "CommandAlreadyPending", "detail": "La unidad %d ya tiene un comando pendiente." % unit_id}
 	for unit_id: int in target_ids:
-		_units_calculating_move[unit_id] = true
-	var route_result: Dictionary = await calculate_move_routes(destination, target_ids)
+		_units_calculating_command[unit_id] = true
+	var route_result: Dictionary = await route_calculator.call(target_ids)
 	for unit_id: int in target_ids:
-		_units_calculating_move.erase(unit_id)
+		_units_calculating_command.erase(unit_id)
 	if not route_result["ok"]:
 		return route_result
 	if request_initialization_id != active_initialization_id:
 		return {"ok": false, "error": "WorldChanged", "detail": "El mundo cambió durante el cálculo de rutas."}
-	if _session_controller == null or not _session_controller.can_issue_gameplay():
-		return {"ok": false, "error": "MatchNotRunning", "detail": "La sesión dejó de estar en Running durante el cálculo."}
-	var message_id := _allocate_client_message_id()
-	if message_id < 0:
-		return {"ok": false, "error": "MessageIdExhausted", "detail": "Se agotó el rango de messageId permitido."}
+	precondition = _gameplay_precondition()
+	if not precondition.is_empty():
+		return precondition
 	var payload: Dictionary = route_result["payload"]
 	var routed_unit_ids: Array[int] = []
 	for route: Dictionary in payload["routes"]:
 		routed_unit_ids.append(int(route["unitId"]))
 	for unit_id: int in routed_unit_ids:
-		if pending_move_by_unit.has(unit_id):
-			return {"ok": false, "error": "MoveAlreadyPending", "detail": "La unidad %d recibió otro Move durante el cálculo." % unit_id}
-	var outbound: bool = bool(_network_client.call("send_message", "Move", payload, message_id))
-	if not outbound:
-		return {"ok": false, "error": "SendFailed", "detail": "No se pudo enviar el comando Move."}
-	pending_move_requests[message_id] = {
-		"type": "Move",
+		if pending_command_by_unit.has(unit_id):
+			return {"ok": false, "error": "CommandAlreadyPending", "detail": "La unidad %d recibió otro comando durante el cálculo." % unit_id}
+	return _send_tracked_command(command_type, payload, routed_unit_ids)
+
+
+func _send_tracked_command(command_type: String, payload: Dictionary, locked_unit_ids: Array[int]) -> Dictionary:
+	var message_id := _allocate_client_message_id()
+	if message_id < 0:
+		return {"ok": false, "error": "MessageIdExhausted", "detail": "Se agotó el rango de messageId permitido."}
+	if not bool(_network_client.call("send_message", command_type, payload, message_id)):
+		return {"ok": false, "error": "SendFailed", "detail": "No se pudo enviar el comando %s." % command_type}
+	var unit_ids: Array[int] = locked_unit_ids.duplicate()
+	if command_type == "Stop":
+		for unit_id_value: Variant in payload["unitIds"]:
+			unit_ids.append(int(unit_id_value))
+	pending_commands[message_id] = {
+		"type": command_type,
 		"status": "awaiting_result",
 		"payload": payload.duplicate(true),
-		"unitIds": routed_unit_ids,
+		"unitIds": unit_ids,
 	}
-	for unit_id: int in routed_unit_ids:
-		pending_move_by_unit[unit_id] = message_id
+	for unit_id: int in locked_unit_ids:
+		pending_command_by_unit[unit_id] = message_id
 	return {"ok": true, "messageId": message_id, "payload": payload}
+
+
+func _gameplay_precondition() -> Dictionary:
+	if _session_controller == null or not _session_controller.can_issue_gameplay():
+		return {"ok": false, "error": "MatchNotRunning", "detail": "La sesión no está en Running."}
+	if _network_client == null or not _network_client.has_method("send_message"):
+		return {"ok": false, "error": "NetworkUnavailable", "detail": "No hay un NetworkClient disponible."}
+	return {}
+
+
+## Tipo de una unidad propia y viva, o "" si no lo es.
+func _owned_unit_type(unit_id: int) -> String:
+	var unit: Node3D = entities_by_id.get(unit_id)
+	if unit == null or unit.get_meta("entity_kind", "") != "unit":
+		return ""
+	var state: Dictionary = unit.get_meta("entity_state", {})
+	if int(state.get("owner", 0)) != int(active_snapshot.get("playerId", 0)):
+		return ""
+	return str(state.get("unitType", ""))
+
+
+## Unidades propias de la selección que pueden ejecutar la orden (04 §2).
+func _compatible_unit_ids(command_type: String, unit_ids: Array[int]) -> Array[int]:
+	var required_type: String = TASK_UNIT_TYPES.get(command_type, "")
+	var result: Array[int] = []
+	for unit_id: int in _distinct_sorted_array(unit_ids):
+		var unit_type := _owned_unit_type(unit_id)
+		if not unit_type.is_empty() and (required_type.is_empty() or unit_type == required_type):
+			result.append(unit_id)
+	return result
+
+
+## Rango de interacción de una orden de tarea, tomado del catálogo (D-068):
+## GatherWood → gatherRange; Build y RepairFarm → buildRange; Attack → rango del soldado.
+func _interaction_range(command_type: String) -> float:
+	match command_type:
+		"GatherWood":
+			return float(active_catalog.get("gatherRange", 0.0))
+		"Build", "RepairFarm":
+			return float(active_catalog.get("buildRange", 0.0))
+		"Attack":
+			var soldier: Dictionary = _catalog_by_type("units", "unitType").get("Soldier", {})
+			return float(soldier.get("attack", {}).get("range", 0.0))
+	return 0.0
+
+
+## Verifica que el objetivo exista y corresponda a la orden, y devuelve su geometría:
+## punto para unidades y árboles, huella para edificios (D-019, D-050).
+func _validate_task_target(command_type: String, target_id: int) -> Dictionary:
+	var target: Node3D = entities_by_id.get(target_id)
+	if target == null:
+		return {"ok": false, "error": "TargetMissing", "detail": "El objetivo %d no existe en el mundo local." % target_id}
+	var kind := str(target.get_meta("entity_kind", ""))
+	var state: Dictionary = target.get_meta("entity_state", {})
+	var local_player_id := int(active_snapshot.get("playerId", 0))
+	var owner := int(state.get("owner", 0))
+	match command_type:
+		"GatherWood":
+			if kind != "tree":
+				return {"ok": false, "error": "InvalidTarget", "detail": "GatherWood requiere un árbol."}
+			if not bool(state.get("isAvailable", false)):
+				return {"ok": false, "error": "TreeDepleted", "detail": "El árbol %d está agotado." % target_id}
+		"Attack":
+			if kind != "unit" and kind != "building":
+				return {"ok": false, "error": "InvalidTarget", "detail": "Attack requiere una unidad o un edificio."}
+			if owner == local_player_id:
+				return {"ok": false, "error": "FriendlyTarget", "detail": "No se puede atacar una entidad propia."}
+		"Build":
+			if kind != "building" or owner != local_player_id:
+				return {"ok": false, "error": "InvalidTarget", "detail": "Build continuar requiere una obra propia."}
+			if bool(state.get("isCompleted", false)):
+				return {"ok": false, "error": "AlreadyCompleted", "detail": "El edificio %d ya está terminado." % target_id}
+		"RepairFarm":
+			if (
+				kind != "building"
+				or owner != local_player_id
+				or str(state.get("buildingType", "")) != "Farm"
+				or not bool(state.get("isCompleted", false))
+			):
+				return {"ok": false, "error": "NotAFarm", "detail": "RepairFarm requiere una granja propia completada."}
+			if not bool(state.get("farm", {}).get("isDepleted", false)):
+				return {"ok": false, "error": "FarmNotDepleted", "detail": "La granja %d no está agotada." % target_id}
+		_:
+			return {"ok": false, "error": "UnknownCommand", "detail": "%s no es una orden de tarea." % command_type}
+	var geometry := _target_geometry(target_id)
+	if geometry.is_empty():
+		return {"ok": false, "error": "TargetGeometryUnavailable", "detail": "No se pudo ubicar al objetivo %d." % target_id}
+	return {"ok": true, "geometry": geometry}
+
+
+func _target_geometry(target_id: int) -> Dictionary:
+	var target: Node3D = entities_by_id.get(target_id)
+	if target == null:
+		return {}
+	var state: Dictionary = target.get_meta("entity_state", {})
+	match str(target.get_meta("entity_kind", "")):
+		"unit":
+			var official_position: Variant = target.get_meta("official_position", null)
+			if typeof(official_position) == TYPE_VECTOR2:
+				return {"point": official_position}
+			return {"point": Vector2(float(state.get("x", 0.0)), float(state.get("z", 0.0)))}
+		"tree":
+			return {"point": Vector2(float(state.get("x", 0.0)), float(state.get("z", 0.0)))}
+		"building":
+			var footprint: Dictionary = state.get("footprint", {})
+			var cell_size := float(active_snapshot.get("map", {}).get("cellSize", 0.0))
+			if footprint.is_empty() or cell_size <= 0.0:
+				return {}
+			return {
+				"rect": Rect2(
+					float(footprint["column"]) * cell_size,
+					float(footprint["row"]) * cell_size,
+					float(footprint["width"]) * cell_size,
+					float(footprint["height"]) * cell_size
+				),
+			}
+	return {}
 
 
 func build_repath_response_payload(request: Dictionary) -> Dictionary:
@@ -370,36 +628,54 @@ func build_repath_response_payload(request: Dictionary) -> Dictionary:
 		return {"ok": false, "error": "InvalidRequest", "detail": "RepathRequest requiere unitId y orderId."}
 	var unit_id: int = int(request["unitId"])
 	var order_id: int = int(request["orderId"])
-	if request.has("targetId"):
-		return {"ok": false, "error": "UnsupportedTarget", "detail": "El cliente todavía no calcula rutas de persecución con targetId."}
-	if not request.has("destination") or typeof(request["destination"]) != TYPE_DICTIONARY:
+	var has_target := request.has("targetId") and request["targetId"] != null
+	if has_target and not _is_positive_integer(request["targetId"]):
+		return {"ok": false, "error": "InvalidRequest", "detail": "RepathRequest.targetId debe ser un ID positivo."}
+	if not has_target and (not request.has("destination") or typeof(request["destination"]) != TYPE_DICTIONARY):
 		return {"ok": false, "error": "InvalidRequest", "detail": "RepathRequest debe contener destination para una orden Move."}
 	if not entities_by_id.has(unit_id):
 		return {"ok": false, "error": "UnitMissing", "detail": "La unidad no existe en el mundo local."}
 	var unit: Node3D = entities_by_id[unit_id]
 	var unit_state: Dictionary = unit.get_meta("entity_state", {})
-	var intent: Dictionary = accepted_move_intents.get(unit_id, {})
+	var intent: Dictionary = accepted_order_intents.get(unit_id, {})
 	if (
 		unit.get_meta("entity_kind", "") != "unit"
 		or int(unit_state.get("owner", 0)) != int(active_snapshot.get("playerId", 0))
-		or str(unit_state.get("order", "")) != "Move"
-		or int(unit_state.get("orderId", 0)) != order_id
 		or intent.is_empty()
+		or str(unit_state.get("order", "")) != str(intent.get("kind", ""))
+		or int(unit_state.get("orderId", 0)) != order_id
 		or int(intent.get("orderId", 0)) != order_id
+		or has_target == (str(intent.get("kind", "")) == "Move")
 	):
-		return {"ok": false, "error": "StaleOrder", "detail": "RepathRequest ya no corresponde a la orden Move vigente."}
-	var destination_data: Dictionary = request["destination"]
-	if (
-		not destination_data.has("x")
-		or not destination_data.has("z")
-		or not _is_finite_number(destination_data["x"])
-		or not _is_finite_number(destination_data["z"])
-	):
-		return {"ok": false, "error": "InvalidRequest", "detail": "destination requiere coordenadas X/Z finitas."}
-	var destination := Vector2(float(destination_data["x"]), float(destination_data["z"]))
-	var intended_destination: Vector2 = intent["destination"]
-	if not destination.is_equal_approx(intended_destination):
-		return {"ok": false, "error": "StaleDestination", "detail": "RepathRequest no coincide con el destino de la orden aceptada."}
+		return {"ok": false, "error": "StaleOrder", "detail": "RepathRequest ya no corresponde a la orden vigente."}
+	var destination := Vector2.ZERO
+	var range_target: Dictionary = {}
+	var interaction_range := 0.0
+	if has_target:
+		# Repath de una orden de tarea (04 §5): ruta nueva hasta el rango del objetivo
+		# en su posición o huella actual, con el mismo OrderId.
+		var target_id := int(request["targetId"])
+		if int(intent.get("targetId", 0)) != target_id:
+			return {"ok": false, "error": "StaleTarget", "detail": "RepathRequest no coincide con el objetivo de la orden aceptada."}
+		range_target = _target_geometry(target_id)
+		if range_target.is_empty():
+			return {"ok": false, "error": "TargetMissing", "detail": "El objetivo %d no existe en el mundo local." % target_id}
+		interaction_range = _interaction_range(str(intent["kind"]))
+		if interaction_range <= 0.0:
+			return {"ok": false, "error": "RangeUnavailable", "detail": "El catálogo no define el rango de la orden."}
+	else:
+		var destination_data: Dictionary = request["destination"]
+		if (
+			not destination_data.has("x")
+			or not destination_data.has("z")
+			or not _is_finite_number(destination_data["x"])
+			or not _is_finite_number(destination_data["z"])
+		):
+			return {"ok": false, "error": "InvalidRequest", "detail": "destination requiere coordenadas X/Z finitas."}
+		destination = Vector2(float(destination_data["x"]), float(destination_data["z"]))
+		var intended_destination: Vector2 = intent["destination"]
+		if not destination.is_equal_approx(intended_destination):
+			return {"ok": false, "error": "StaleDestination", "detail": "RepathRequest no coincide con el destino de la orden aceptada."}
 	var official_position: Variant = unit.get_meta("official_position", null)
 	if typeof(official_position) != TYPE_VECTOR2:
 		return {"ok": false, "error": "OfficialPositionUnavailable", "detail": "La unidad no tiene posición oficial."}
@@ -413,7 +689,9 @@ func build_repath_response_payload(request: Dictionary) -> Dictionary:
 		navigation,
 		origin,
 		destination,
-		requested_revision
+		requested_revision,
+		range_target,
+		interaction_range
 	)
 	if request_initialization_id != active_initialization_id:
 		return {"ok": false, "error": "WorldChanged", "detail": "El mundo cambió durante el cálculo del repath."}
@@ -429,7 +707,7 @@ func build_repath_response_payload(request: Dictionary) -> Dictionary:
 	if (
 		current_unit == null
 		or int(current_unit.get_meta("entity_state", {}).get("orderId", 0)) != order_id
-		or int(accepted_move_intents.get(unit_id, {}).get("orderId", 0)) != order_id
+		or int(accepted_order_intents.get(unit_id, {}).get("orderId", 0)) != order_id
 	):
 		return {"ok": false, "error": "StaleOrder", "detail": "La orden cambió durante el cálculo del repath."}
 	return {
@@ -476,8 +754,8 @@ func send_repath_response(request: Dictionary, message_id: int = -1) -> Dictiona
 func retry_rejected_command(message_id: int) -> Dictionary:
 	if _session_controller == null or not _session_controller.can_issue_gameplay():
 		return {"ok": false, "error": "MatchNotRunning", "detail": "La sesión no está en Running."}
-	var command: Dictionary = pending_move_requests.get(message_id, {})
-	var commands := pending_move_requests
+	var command: Dictionary = pending_commands.get(message_id, {})
+	var commands := pending_commands
 	if command.is_empty():
 		command = pending_repath_responses.get(message_id, {})
 		commands = pending_repath_responses
@@ -493,12 +771,12 @@ func retry_rejected_command(message_id: int) -> Dictionary:
 
 
 func discard_rejected_command(message_id: int) -> bool:
-	var command: Dictionary = pending_move_requests.get(message_id, {})
+	var command: Dictionary = pending_commands.get(message_id, {})
 	if not command.is_empty():
 		if str(command.get("status", "")) != "rejected":
 			return false
-		_release_pending_move(message_id, command)
-		pending_move_requests.erase(message_id)
+		_release_pending_command(message_id, command)
+		pending_commands.erase(message_id)
 		return true
 	command = pending_repath_responses.get(message_id, {})
 	if command.is_empty() or str(command.get("status", "")) != "rejected":
@@ -540,7 +818,9 @@ func _calculate_candidate_route_stable(
 	navigation: Node,
 	origin: Vector2,
 	destination: Vector2,
-	minimum_revision: int
+	minimum_revision: int,
+	range_target: Dictionary = {},
+	interaction_range := 0.0
 ) -> Dictionary:
 	while true:
 		if not is_instance_valid(navigation):
@@ -565,12 +845,22 @@ func _calculate_candidate_route_stable(
 		if not bool(navigation.call("is_ready_for", revision)):
 			await Signal(navigation, "navigation_state_changed")
 			continue
-		var result: Dictionary = await navigation.call(
-			"calculate_candidate_route",
-			origin,
-			destination,
-			revision
-		)
+		var result: Dictionary
+		if range_target.is_empty():
+			result = await navigation.call(
+				"calculate_candidate_route",
+				origin,
+				destination,
+				revision
+			)
+		else:
+			result = await navigation.call(
+				"calculate_candidate_route_to_range",
+				origin,
+				range_target,
+				interaction_range,
+				revision
+			)
 		if not is_instance_valid(navigation):
 			return {"ok": false, "error": "NavigationUnavailable", "detail": "La navegación se cerró durante el cálculo."}
 		if bool(navigation.call("is_invalidated")):
@@ -682,11 +972,11 @@ func _handle_command_rejected(payload: Variant) -> void:
 		return
 	var message_id := int(data["messageId"])
 	var error_code := str(data["error"])
-	var command: Dictionary = pending_move_requests.get(message_id, {})
+	var command: Dictionary = pending_commands.get(message_id, {})
 	if not command.is_empty():
 		command["status"] = "rejected"
 		command["error"] = error_code
-		pending_move_requests[message_id] = command
+		pending_commands[message_id] = command
 	else:
 		command = pending_repath_responses.get(message_id, {})
 		if not command.is_empty():
@@ -1324,8 +1614,8 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 				unit_removed.emit(entity_id)
 			entities_by_id.erase(entity_id)
 			if entity_kind == "unit":
-				pending_move_by_unit.erase(entity_id)
-			accepted_move_intents.erase(entity_id)
+				pending_command_by_unit.erase(entity_id)
+			accepted_order_intents.erase(entity_id)
 			_position_samples.erase(entity_id)
 			destroyed_entity_ids[entity_id] = true
 			_remove_entity_snapshot(entity_id, entity_kind)
@@ -1346,7 +1636,7 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 				unit_id,
 				{"orderId": int(event["orderId"]), "order": event["kind"]}
 			)
-			accepted_move_intents.erase(unit_id)
+			accepted_order_intents.erase(unit_id)
 			_batch_unit_order_changes.append({
 				"unitId": unit_id,
 				"orderId": int(event["orderId"]),
@@ -1495,32 +1785,45 @@ func _remember_command_result(result: Dictionary) -> void:
 	while _recent_command_result_ids.size() > MAX_RECENT_COMMAND_RESULTS:
 		var expired_id: int = _recent_command_result_ids.pop_front()
 		recent_command_results.erase(expired_id)
-	var pending_move: Dictionary = pending_move_requests.get(client_command_id, {})
+	var pending_move: Dictionary = pending_commands.get(client_command_id, {})
 	if not pending_move.is_empty():
-		_release_pending_move(client_command_id, pending_move)
-		pending_move_requests.erase(client_command_id)
-		_reconcile_accepted_move(pending_move, result)
+		_release_pending_command(client_command_id, pending_move)
+		pending_commands.erase(client_command_id)
+		_reconcile_accepted_command(pending_move, result)
 	pending_repath_responses.erase(client_command_id)
 	command_result_received.emit(client_command_id, result.duplicate(true))
 
 
-func _release_pending_move(message_id: int, command: Dictionary) -> void:
+func _release_pending_command(message_id: int, command: Dictionary) -> void:
 	for unit_id_value: Variant in command.get("unitIds", []):
 		var unit_id := int(unit_id_value)
-		if int(pending_move_by_unit.get(unit_id, -1)) == message_id:
-			pending_move_by_unit.erase(unit_id)
+		if int(pending_command_by_unit.get(unit_id, -1)) == message_id:
+			pending_command_by_unit.erase(unit_id)
 
 
-func _reconcile_accepted_move(command: Dictionary, result: Dictionary) -> void:
+func _reconcile_accepted_command(command: Dictionary, result: Dictionary) -> void:
 	if not ["Accepted", "PartiallyAccepted"].has(str(result.get("outcome", ""))):
 		return
-	var destination_data: Dictionary = command.get("payload", {}).get("destination", {})
-	if destination_data.is_empty():
+	# La intención aceptada (destino del Move u objetivo de la tarea) permite responder
+	# RepathRequested para la misma orden. Stop no deja intención: la unidad queda Idle.
+	var order_kind := str(command.get("type", ""))
+	var payload: Dictionary = command.get("payload", {})
+	var intent_data: Dictionary = {"kind": order_kind}
+	if order_kind == "Move":
+		var destination_data: Dictionary = payload.get("destination", {})
+		if destination_data.is_empty():
+			return
+		intent_data["destination"] = Vector2(
+			float(destination_data.get("x", 0.0)),
+			float(destination_data.get("z", 0.0))
+		)
+	elif TASK_TARGET_KEYS.has(order_kind):
+		var target_key: String = TASK_TARGET_KEYS[order_kind]
+		if not payload.has(target_key):
+			return
+		intent_data["targetId"] = int(payload[target_key])
+	else:
 		return
-	var destination := Vector2(
-		float(destination_data.get("x", 0.0)),
-		float(destination_data.get("z", 0.0))
-	)
 	for entity_result_value: Variant in result.get("entityResults", []):
 		if typeof(entity_result_value) != TYPE_DICTIONARY:
 			continue
@@ -1532,7 +1835,7 @@ func _reconcile_accepted_move(command: Dictionary, result: Dictionary) -> void:
 			continue
 		var matching_changes: Array[Dictionary] = []
 		for order_change: Dictionary in _batch_unit_order_changes:
-			if int(order_change["unitId"]) == unit_id and str(order_change["kind"]) == "Move":
+			if int(order_change["unitId"]) == unit_id and str(order_change["kind"]) == order_kind:
 				matching_changes.append(order_change)
 		if matching_changes.size() != 1:
 			continue
@@ -1541,14 +1844,13 @@ func _reconcile_accepted_move(command: Dictionary, result: Dictionary) -> void:
 			continue
 		var current_state: Dictionary = unit.get_meta("entity_state", {})
 		if (
-			str(current_state.get("order", "")) != "Move"
+			str(current_state.get("order", "")) != order_kind
 			or int(current_state.get("orderId", 0)) != int(matching_changes[0]["orderId"])
 		):
 			continue
-		accepted_move_intents[unit_id] = {
-			"orderId": int(matching_changes[0]["orderId"]),
-			"destination": destination,
-		}
+		var intent: Dictionary = intent_data.duplicate()
+		intent["orderId"] = int(matching_changes[0]["orderId"])
+		accepted_order_intents[unit_id] = intent
 
 
 func _reset_synchronization_cursors() -> void:
@@ -1595,11 +1897,11 @@ func _clear_synchronization_state() -> void:
 
 
 func _clear_command_tracking() -> void:
-	pending_move_requests.clear()
+	pending_commands.clear()
 	pending_repath_responses.clear()
-	pending_move_by_unit.clear()
-	accepted_move_intents.clear()
-	_units_calculating_move.clear()
+	pending_command_by_unit.clear()
+	accepted_order_intents.clear()
+	_units_calculating_command.clear()
 	_batch_unit_order_changes.clear()
 
 

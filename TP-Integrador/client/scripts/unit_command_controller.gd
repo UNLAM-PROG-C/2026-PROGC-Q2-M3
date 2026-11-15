@@ -4,6 +4,12 @@ signal selection_changed(unit_ids: Array[int])
 signal command_failed(error_code: String, detail: String)
 
 const SELECTION_PICK_RADIUS_PIXELS := 32.0
+const TASK_UNIT_TYPES := {
+	"GatherWood": "Worker",
+	"Build": "Worker",
+	"RepairFarm": "Worker",
+	"Attack": "Soldier",
+}
 
 var selected_unit_ids: Array[int] = []
 
@@ -72,6 +78,11 @@ func _exit_tree() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventKey:
+		if event.is_action_pressed("stop_selected_units") and not selected_unit_ids.is_empty():
+			get_viewport().set_input_as_handled()
+			_report_if_failed(_world.call("issue_stop_command", selected_unit_ids.duplicate()), "Stop")
+		return
 	var mouse_event := event as InputEventMouseButton
 	if mouse_event == null or not mouse_event.pressed or mouse_event.canceled:
 		return
@@ -84,27 +95,90 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 	elif mouse_event.is_action_pressed("move_selected_units") and not selected_unit_ids.is_empty():
 		var destination_value: Variant = _mouse_to_map_position(mouse_event.position)
-		if typeof(destination_value) != TYPE_VECTOR2:
+		var target_id := _pick_entity(mouse_event.position, destination_value)
+		var command := resolve_contextual_command(target_id)
+		if command.is_empty():
 			return
-		var destination: Vector2 = destination_value
 		get_viewport().set_input_as_handled()
-		var result_value: Variant = await _world.call(
-			"issue_move_command",
-			destination,
-			selected_unit_ids.duplicate()
-		)
-		if typeof(result_value) != TYPE_DICTIONARY:
-			_report_command_failure(
-				"InvalidMoveResult",
-				"InitialWorld devolvió un resultado inválido para Move."
-			)
+		if str(command["type"]) == "Move" and typeof(destination_value) != TYPE_VECTOR2:
 			return
-		var result: Dictionary = result_value
-		if not bool(result.get("ok", false)):
-			_report_command_failure(
-				str(result.get("error", "MoveFailed")),
-				str(result.get("detail", "No se pudo emitir el comando Move."))
-			)
+		await issue_contextual_command(command, destination_value)
+
+
+## Decide la orden de un clic derecho según lo que hay bajo el cursor (plan 06 §2):
+## árbol disponible → GatherWood; unidad o edificio rival → Attack; obra propia → Build
+## (continuar); granja propia agotada → RepairFarm; cualquier otra cosa → Move.
+## Si la selección no tiene unidades compatibles con la tarea, el clic se ignora.
+func resolve_contextual_command(target_id: int) -> Dictionary:
+	var command_type := "Move"
+	var target: Node3D = _get_entities().get(target_id) if target_id > 0 else null
+	if target != null:
+		var state: Dictionary = target.get_meta("entity_state", {})
+		var kind := str(target.get_meta("entity_kind", ""))
+		var is_own := int(state.get("owner", 0)) == int(_get_active_snapshot().get("playerId", 0))
+		if kind == "tree" and bool(state.get("isAvailable", false)):
+			command_type = "GatherWood"
+		elif (kind == "unit" or kind == "building") and not is_own:
+			command_type = "Attack"
+		elif kind == "building" and not bool(state.get("isCompleted", false)):
+			command_type = "Build"
+		elif (
+			kind == "building"
+			and str(state.get("buildingType", "")) == "Farm"
+			and bool(state.get("farm", {}).get("isDepleted", false))
+		):
+			command_type = "RepairFarm"
+	if command_type == "Move":
+		return {"type": "Move", "targetId": 0, "unitIds": selected_unit_ids.duplicate()}
+	var compatible: Array[int] = []
+	for unit_id: int in selected_unit_ids:
+		var unit: Node3D = _get_entities().get(unit_id)
+		if unit == null:
+			continue
+		var unit_type := str(unit.get_meta("entity_state", {}).get("unitType", ""))
+		if unit_type == TASK_UNIT_TYPES[command_type]:
+			compatible.append(unit_id)
+	if compatible.is_empty():
+		return {}
+	return {"type": command_type, "targetId": target_id, "unitIds": compatible}
+
+
+func issue_contextual_command(command: Dictionary, destination: Variant = null) -> Dictionary:
+	var command_type := str(command.get("type", ""))
+	var unit_ids: Array[int] = []
+	for unit_id_value: Variant in command.get("unitIds", []):
+		unit_ids.append(int(unit_id_value))
+	var result_value: Variant
+	match command_type:
+		"Move":
+			result_value = await _world.call("issue_move_command", destination, unit_ids)
+		"GatherWood":
+			result_value = await _world.call("issue_gather_wood_command", int(command["targetId"]), unit_ids)
+		"Attack":
+			result_value = await _world.call("issue_attack_command", int(command["targetId"]), unit_ids)
+		"Build":
+			result_value = await _world.call("issue_build_continue_command", int(command["targetId"]), unit_ids)
+		"RepairFarm":
+			result_value = await _world.call("issue_repair_farm_command", int(command["targetId"]), unit_ids)
+		_:
+			result_value = {"ok": false, "error": "UnknownCommand", "detail": "Orden contextual desconocida."}
+	return _report_if_failed(result_value, command_type)
+
+
+func _report_if_failed(result_value: Variant, command_type: String) -> Dictionary:
+	if typeof(result_value) != TYPE_DICTIONARY:
+		_report_command_failure(
+			"InvalidCommandResult",
+			"InitialWorld devolvió un resultado inválido para %s." % command_type
+		)
+		return {"ok": false, "error": "InvalidCommandResult"}
+	var result: Dictionary = result_value
+	if not bool(result.get("ok", false)):
+		_report_command_failure(
+			str(result.get("error", "%sFailed" % command_type)),
+			str(result.get("detail", "No se pudo emitir el comando %s." % command_type))
+		)
+	return result
 
 
 func set_selected_units(unit_ids: Array[int]) -> void:
@@ -163,6 +237,47 @@ func _pick_local_unit(mouse_position: Vector2) -> int:
 			best_distance_squared = distance_squared
 			best_unit_id = unit_id
 	return best_unit_id
+
+
+## Entidad bajo el cursor para el clic contextual: primero el edificio cuya huella
+## contiene el punto del suelo; si no hay, la unidad o el árbol visible más cercano en pantalla.
+func _pick_entity(mouse_position: Vector2, ground_point: Variant) -> int:
+	var entities := _get_entities()
+	if typeof(ground_point) == TYPE_VECTOR2:
+		var cell_size := float(_get_active_snapshot().get("map", {}).get("cellSize", 0.0))
+		for entity_id: Variant in entities:
+			var building: Node3D = entities[entity_id]
+			if building.get_meta("entity_kind", "") != "building" or cell_size <= 0.0:
+				continue
+			var footprint: Dictionary = building.get_meta("entity_state", {}).get("footprint", {})
+			if footprint.is_empty():
+				continue
+			var rect := Rect2(
+				float(footprint["column"]) * cell_size,
+				float(footprint["row"]) * cell_size,
+				float(footprint["width"]) * cell_size,
+				float(footprint["height"]) * cell_size
+			)
+			if rect.has_point(ground_point):
+				return int(entity_id)
+	var camera := get_viewport().get_camera_3d()
+	if camera == null:
+		return 0
+	var best_id := 0
+	var best_distance_squared := SELECTION_PICK_RADIUS_PIXELS * SELECTION_PICK_RADIUS_PIXELS
+	for entity_id: Variant in entities:
+		var entity: Node3D = entities[entity_id]
+		var kind := str(entity.get_meta("entity_kind", ""))
+		if (kind != "unit" and kind != "tree") or not entity.visible:
+			continue
+		var world_position := entity.global_position + Vector3.UP * 0.8
+		if camera.is_position_behind(world_position):
+			continue
+		var distance_squared := mouse_position.distance_squared_to(camera.unproject_position(world_position))
+		if distance_squared < best_distance_squared:
+			best_distance_squared = distance_squared
+			best_id = int(entity_id)
+	return best_id
 
 
 func _mouse_to_map_position(mouse_position: Vector2) -> Variant:

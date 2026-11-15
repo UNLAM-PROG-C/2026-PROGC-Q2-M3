@@ -1,6 +1,7 @@
 extends SceneTree
 
 const InitialWorldScript = preload("res://scripts/initial_world.gd")
+const ClientNavigationScript = preload("res://scripts/client_navigation.gd")
 const UnitCommandControllerScript = preload("res://scripts/unit_command_controller.gd")
 const MAX_SAFE_MESSAGE_ID := 9007199254740991
 
@@ -31,6 +32,7 @@ func _run() -> void:
 	_test_position_interpolation_and_stale_updates()
 	_test_invalid_state_event_stops_synchronization()
 	_test_selection_and_move_command_tracking()
+	await _test_client_navigation_tolerance()
 	if _failed:
 		quit(1)
 		return
@@ -628,13 +630,13 @@ func _test_selection_and_move_command_tracking() -> void:
 	controller.clear_selection()
 	_check(not marker.visible, "Clearing selection should hide its marker.")
 
-	world.pending_move_requests[12] = {
+	world.pending_commands[12] = {
 		"type": "Move",
 		"status": "awaiting_result",
 		"payload": {"destination": {"x": 9.0, "z": 7.0}},
 		"unitIds": [3],
 	}
-	world.pending_move_by_unit[3] = 12
+	world.pending_command_by_unit[3] = 12
 	_check(
 		world.apply_state_events(
 			_state_events(
@@ -652,27 +654,27 @@ func _test_selection_and_move_command_tracking() -> void:
 		),
 		"An accepted Move result should reconcile with its unit order event."
 	)
-	_check(not world.pending_move_by_unit.has(3), "A definitive result should release the per-unit Move lock.")
+	_check(not world.pending_command_by_unit.has(3), "A definitive result should release the per-unit Move lock.")
 	_check(
-		world.accepted_move_intents[3]["orderId"] == 7
-			and world.accepted_move_intents[3]["destination"] == Vector2(9.0, 7.0),
+		world.accepted_order_intents[3]["orderId"] == 7
+			and world.accepted_order_intents[3]["destination"] == Vector2(9.0, 7.0),
 		"The accepted Move intent should retain its authoritative order ID and destination."
 	)
 
-	world.pending_move_requests[13] = {
+	world.pending_commands[13] = {
 		"type": "Move",
 		"status": "awaiting_result",
 		"payload": {"destination": {"x": 10.0, "z": 8.0}},
 		"unitIds": [3],
 	}
-	world.pending_move_by_unit[3] = 13
+	world.pending_command_by_unit[3] = 13
 	world._handle_command_rejected({"messageId": 13, "error": "Network.RateLimited"})
 	_check(
-		world.pending_move_requests[13]["status"] == "rejected",
+		world.pending_commands[13]["status"] == "rejected",
 		"CommandRejected should preserve the original command as manually retryable."
 	)
 	_check(world.discard_rejected_command(13), "A rejected command should be explicitly discardable.")
-	_check(not world.pending_move_by_unit.has(3), "Discarding a rejection should release its unit lock.")
+	_check(not world.pending_command_by_unit.has(3), "Discarding a rejection should release its unit lock.")
 
 	world.next_client_message_id = MAX_SAFE_MESSAGE_ID
 	_check(
@@ -681,6 +683,21 @@ func _test_selection_and_move_command_tracking() -> void:
 	)
 	_check(world._allocate_client_message_id() == -1, "Message ID exhaustion must not wrap.")
 	world.queue_free()
+
+func _test_client_navigation_tolerance() -> void:
+	var navigation := ClientNavigationScript.new()
+	navigation._map_data = {"cellSize": 1.0, "columns": 10, "rows": 10}
+	navigation.required_revision = 0
+	navigation.ready_revision = 0
+	navigation._is_configured = true
+	var route := await navigation.calculate_candidate_route(
+		Vector2(3.0, 2.0),
+		Vector2(3.0 + 1e-9, 2.0),
+		0
+	)
+	_check(route.get("ok", false), "A destination within the route tolerance should be accepted as already reached.")
+	_check(route.get("waypoints", []).is_empty(), "An already-reached destination should yield an empty route.")
+	navigation.queue_free()
 
 
 func _state_events(
