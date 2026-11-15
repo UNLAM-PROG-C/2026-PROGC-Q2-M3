@@ -136,7 +136,7 @@ Para cada conexión, el orden de las acciones es el orden de la cola de salida (
 - **Cola (RECOMENDADO D-059):** está acotada por `EventQueueCapacity` solo para `Hello` y `ClientReady`; `TryPost*` devuelve `false` si está llena. `PostConnectionClosed` y los avisos internos (timer, Simulation, detención, drenaje) **nunca se descartan**: hay a lo sumo uno por conexión o por intento, así que su cantidad ya está acotada.
 - **Acciones asincrónicas:** `StopSimulation` y `ShutdownConnections` corren fuera del consumidor y vuelven como eventos (`SimulationStopped`, `ShutdownCompleted`). Si `StopTicksAsync` falla, el host informa `SimulationStopped(null)` igual.
 - **Timer:** `ScheduleReadyTimeout` usa `TimeProvider`, que es monotónico y reemplazable en pruebas, nunca ticks (07 §4).
-- **Falla al arrancar los ticks (RECOMENDADO D-086):** si `StartTicks` lanza una excepción, el host informa `CriticalError(null)` como resultado de Simulation. Es un supuesto que ningún contrato cubría; pendiente de revisión con el dueño de Simulation.
+- **Falla al arrancar los ticks (DECIDIDO D-086):** si `StartTicks` lanza una excepción, el host informa `CriticalError(null)` como resultado de Simulation. El `StopTicksAsync` que sigue devuelve enseguida, sin esperar ticks que nunca arrancaron (06 §6).
 - **Una sola ejecución:** `RunAsync` se llama una vez; una segunda llamada lanza `InvalidOperationException`. Para otra partida se lanza el servidor de nuevo (D-058).
 - **Cancelación:** cancelar el token de `RunAsync` no corta el bucle: publica `ShutdownRequested` y la sesión termina de forma ordenada (D-084).
 - **Fin (DECIDIDO D-058):** al llegar a `Ended`, `RunAsync` devuelve el resultado y el proceso termina, con código 0, o distinto de 0 si el motivo fue `CriticalError`. Para otra partida se lanza el servidor de nuevo.
@@ -178,5 +178,5 @@ Todas están implementadas en `server/tests/Rts.GameSession.Tests`, con Networki
 
 - Valores de `ReadyTimeout` y `EventQueueCapacity` (balance y entorno).
 - Pruebas de integración con Networking y Simulation reales, cuando existan (work-plan §4): desconexiones y `MatchEnded` concurrentes con un solo resultado oficial, y dos apariciones que no eligen la misma celda.
-- Confirmar con el dueño de Simulation la falla de `StartTicks` (D-086) y resolver si `SessionHost` recibe logging (O-011).
+- Resolver si `SessionHost` recibe logging (O-011). ~~Confirmar la falla de `StartTicks` (D-086)~~: confirmada el 2026-11-15.
 - ~~DTOs JSON de sesión y aviso de cierre; timeout de handshake y drenaje~~: definidos en el [contrato 08](08-networking.md). Quedan sus valores numéricos.

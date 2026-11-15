@@ -101,10 +101,29 @@ public sealed class SimulationLoop : ISimulationLoop
         throw new InvalidOperationException("Falta InitializeMatch antes de arrancar los ticks.");
       }
 
-      _state = LoopState.Running;
       _lastConfirmedTick = _engine.Current.Tick;
+      StartSupervisorAndThread();
+      _state = LoopState.Running;
+    }
+  }
+
+  /// <summary>
+  /// Si falla crear el temporizador o arrancar el hilo, el loop queda detenido (<see cref="StopTicksAsync"/> vuelve enseguida) y la
+  /// excepción sigue hacia GameSession, que la informa como falla crítica (D-086). Sin esto, el loop quedaría en Running sin hilo.
+  /// </summary>
+  private void StartSupervisorAndThread()
+  {
+    try
+    {
       _supervisor = _time.CreateTimer(_ => CheckForStalledTick(), null, _tickInterval, _tickInterval);
       new Thread(Run) { Name = ThreadName, IsBackground = true }.Start();
+    }
+    catch (Exception)
+    {
+      _state = LoopState.Stopped;
+      _supervisor?.Dispose();
+      _stopped.TrySetResult(_lastConfirmedTick);
+      throw;
     }
   }
 

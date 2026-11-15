@@ -21,11 +21,14 @@ public class SimulationLoopTests
   private static readonly TickId Tick2 = Tick1.Next();
   private static readonly TickId Tick3 = Tick2.Next();
 
-  private static (SimulationLoop Loop, ScriptedEngine Engine, Recorder Recorder) Create(TimeSpan? stallTimeout = null)
+  private static (SimulationLoop Loop, ScriptedEngine Engine, Recorder Recorder) Create(
+      TimeSpan? stallTimeout = null,
+      TimeProvider? time = null)
   {
     var engine = new ScriptedEngine();
     var recorder = new Recorder();
-    var loop = new SimulationLoop(engine, recorder, recorder, FastRate, stallTimeout ?? GenerousStallTimeout, TimeProvider.System);
+    var loop = new SimulationLoop(
+        engine, recorder, recorder, FastRate, stallTimeout ?? GenerousStallTimeout, time ?? TimeProvider.System);
     loop.InitializeMatch();
     return (loop, engine, recorder);
   }
@@ -192,6 +195,27 @@ public class SimulationLoopTests
     Assert.Throws<InvalidOperationException>(loop.StartTicks);
     Assert.Throws<InvalidOperationException>(() => loop.InitializeMatch());
     await loop.StopTicksAsync().WaitAsync(TestTimeout);
+  }
+
+  [Fact]
+  public async Task StartTicks_FailingToStart_LeavesTheLoopStoppedSoStopDoesNotHang()
+  {
+    var (loop, _, recorder) = Create(time: new TimerFailingTimeProvider());
+
+    Assert.Throws<InvalidOperationException>(loop.StartTicks); // GameSession la informa como CriticalError (D-086).
+    TickId final = await loop.StopTicksAsync().WaitAsync(TestTimeout);
+
+    Assert.Equal(TickId.Zero, final);
+    Assert.False(loop.IsRunning);
+    Assert.Empty(recorder.Entries); // No corrió ningún tick: nada que publicar ni avisar desde el loop.
+    Assert.Throws<InvalidOperationException>(loop.StartTicks);
+  }
+
+  /// <summary>Reloj real que no puede crear temporizadores: simula que falla el arranque del supervisor.</summary>
+  private sealed class TimerFailingTimeProvider : TimeProvider
+  {
+    public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) =>
+        throw new InvalidOperationException("Temporizador no disponible (prueba).");
   }
 
   /// <summary>
