@@ -178,5 +178,5 @@ Todas están implementadas en `server/tests/Rts.GameSession.Tests`, con Networki
 
 - Valores de `ReadyTimeout` y `EventQueueCapacity` (balance y entorno).
 - Pruebas de integración con Networking y Simulation reales, cuando existan (work-plan §4): desconexiones y `MatchEnded` concurrentes con un solo resultado oficial, y dos apariciones que no eligen la misma celda.
-- Resolver si `SessionHost` recibe logging (O-011). ~~Confirmar la falla de `StartTicks` (D-086)~~: confirmada el 2026-11-15.
+- Resolver si `SessionHost` recibe logging (O-011): hay una propuesta, `ILogger<SessionHost>` vía `Microsoft.Extensions.Logging.Abstractions` (RECOMENDADO D-096), pendiente de su dueño. ~~Confirmar la falla de `StartTicks` (D-086)~~: confirmada el 2026-11-15.
 - ~~DTOs JSON de sesión y aviso de cierre; timeout de handshake y drenaje~~: definidos en el [contrato 08](08-networking.md). Quedan sus valores numéricos.

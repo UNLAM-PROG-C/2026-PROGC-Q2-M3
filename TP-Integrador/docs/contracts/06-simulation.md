@@ -172,6 +172,8 @@ Validación cruzada en la composición del servidor: `MovementConfig.AttackRange
 
 En `Summary` se registran resúmenes y errores; en `Debug`, el detalle por tick. Comparar `RunDomainPhaseInParallel` en `true` y en `false` sirve para la defensa del TP.
 
+**Cómo salen (DECIDIDO D-095):** Simulation no loguea. El loop entrega los datos a `ISimulationDiagnostics` (`Rts.Simulation.Diagnostics`): las `TickMetrics` de cada tick, incluidos los descartados, y cada falla crítica con su motivo. El Server lo implementa y lo traduce a `ILogger` (contrato 10). Como lo llaman el hilo del tick y el supervisor, la implementación tiene que tolerar llamadas concurrentes y no bloquear. La forma exacta de la interfaz se define en la Fase 3.
+
 ## 11. Pruebas para la etapa de implementación
 
 Estas pruebas de 06 §10 se escriben al implementar:
