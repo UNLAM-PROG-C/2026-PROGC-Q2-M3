@@ -3,7 +3,7 @@
 [ext_resource type="PackedScene" uid="uid://ctb8ipxe3g57d" path="res://scenes/camera/rts_camera.tscn" id="1_brpv8"]
 [ext_resource type="Texture2D" uid="uid://dgo1ucaqxvrh1" path="res://assets/textures/skybox.jpg" id="2_me1bl"]
 [ext_resource type="Texture2D" uid="uid://dqnitvm2lrcd6" path="res://assets/textures/Cartoon_green_texture_grass.jpg" id="3_17o3j"]
-[ext_resource type="Script" uid="uid://do67d6bbvdif1" path="res://scripts/edge_margin_overlay.gd" id="4_kdmr5"]
+[ext_resource type="Script" uid="uid://do67d6bbvdif1" path="res://scripts/ui/edge_margin_overlay.gd" id="4_kdmr5"]
 [ext_resource type="PackedScene" uid="uid://c2reyx2wvlt48" path="res://scenes/buildings/farm.tscn" id="5_vbk5c"]
 [ext_resource type="PackedScene" uid="uid://cl2ldw36phrmp" path="res://scenes/buildings/barracks.tscn" id="6_gme1o"]
 [ext_resource type="PackedScene" uid="uid://qa0vbjhydpwf" path="res://scenes/buildings/tower.tscn" id="7_3g26c"]
@@ -15,13 +15,13 @@
 panorama = ExtResource("2_me1bl")
 energy_multiplier = 0.45
 
-[sub_resource type="Sky" id="Sky_o5qli"]
+[sub_resource type="Sky" id="Sky_brpv8"]
 sky_material = SubResource("PanoramaSkyMaterial_tipki")
 
 [sub_resource type="Environment" id="Environment_w47wj"]
 background_mode = 2
 background_color = Color(0.32266605, 0.65667504, 0.89629006, 1)
-sky = SubResource("Sky_o5qli")
+sky = SubResource("Sky_brpv8")
 ambient_light_source = 2
 ambient_light_color = Color(1, 1, 1, 1)
 ambient_light_energy = 0.4

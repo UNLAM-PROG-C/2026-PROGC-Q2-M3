@@ -7,6 +7,8 @@
 [ext_resource type="Texture2D" uid="uid://crrmbgohekmy3" path="res://assets/ui/buttonLong_beige.png" id="5_button"]
 [ext_resource type="Texture2D" uid="uid://creckd74mlav5" path="res://assets/ui/buttonLong_beige_pressed.png" id="6_button_pressed"]
 [ext_resource type="Texture2D" uid="uid://bvatsfkbxqvsi" path="res://assets/ui/buttonLong_grey.png" id="7_button_disabled"]
+[ext_resource type="Texture2D" uid="uid://cjiy5li2dtdjq" path="res://assets/ui/barBack_horizontalMid.png" id="8_bar_back"]
+[ext_resource type="Texture2D" uid="uid://cn1we3jxn8jnd" path="res://assets/ui/barGreen_horizontalMid.png" id="9_bar_fill"]
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_button_disabled"]
 content_margin_left = 18.0
@@ -77,6 +79,16 @@ texture_margin_top = 12.0
 texture_margin_right = 12.0
 texture_margin_bottom = 12.0
 
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_bar_back"]
+texture = ExtResource("8_bar_back")
+texture_margin_top = 6.0
+texture_margin_bottom = 6.0
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_bar_fill"]
+texture = ExtResource("9_bar_fill")
+texture_margin_top = 6.0
+texture_margin_bottom = 6.0
+
 [resource]
 default_font = ExtResource("1_body_font")
 default_font_size = 20
@@ -103,6 +115,8 @@ LineEdit/styles/normal = SubResource("StyleBoxTexture_input")
 LineEdit/styles/read_only = SubResource("StyleBoxTexture_input")
 Panel/styles/panel = SubResource("StyleBoxTexture_panel")
 PanelContainer/styles/panel = SubResource("StyleBoxTexture_panel")
+ProgressBar/styles/background = SubResource("StyleBoxTexture_bar_back")
+ProgressBar/styles/fill = SubResource("StyleBoxTexture_bar_fill")
 TitleLabel/base_type = &"Label"
 TitleLabel/colors/font_color = Color(1, 0.85, 0.52, 1)
 TitleLabel/colors/font_outline_color = Color(0.2, 0.12, 0.06, 1)

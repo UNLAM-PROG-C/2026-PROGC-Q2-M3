@@ -54,7 +54,7 @@ class FakeSessionController:
 		return true
 
 
-const EXPECTED_TESTS := 8
+const EXPECTED_TESTS := 9
 
 var _failed := false
 var _completed_tests := 0
@@ -67,6 +67,7 @@ func _initialize() -> void:
 func _run() -> void:
 	_test_range_geometry_helpers()
 	await _test_move_command_with_real_navigation()
+	await _test_navigation_sources_are_hidden_but_baked()
 	await _test_stop_command()
 	await _test_gather_wood_and_task_repath()
 	await _test_attack_command()
@@ -144,6 +145,41 @@ func _test_move_command_with_real_navigation() -> void:
 		var waypoints: Array = sent["payload"]["routes"][0]["waypoints"]
 		var last := Vector2(float(waypoints[-1]["x"]), float(waypoints[-1]["z"]))
 		_check(last.is_equal_approx(destination), "The Move route must end at the destination.")
+	_free_setup(setup)
+
+
+# --- Geometría de horneado -----------------------------------------------------------
+
+func _test_navigation_sources_are_hidden_but_baked() -> void:
+	var setup := _create_running_world()
+	var world: Node = setup["world"]
+	var network: FakeNetworkClient = setup["network"]
+	# El Centro Principal propio ocupa X/Z [2, 6]: la recta (1, 4) → (7, 4) lo atraviesa.
+	var unit: Node3D = world.entities_by_id[3]
+	world._add_position_sample(3, 0, Vector2(1.0, 4.0), Time.get_ticks_usec())
+	unit.set_meta("official_position", Vector2(1.0, 4.0))
+	var result: Dictionary = await world.issue_move_command(Vector2(7.0, 4.0), _ids([3]))
+	_check(result.get("ok", false), "A Move around a building should be routed: %s" % str(result))
+	if result.get("ok", false):
+		var footprint := Rect2(2.0, 2.0, 4.0, 4.0)
+		var previous := Vector2(1.0, 4.0)
+		var waypoints: Array = network.sent_messages[-1]["payload"]["routes"][0]["waypoints"]
+		_check(waypoints.size() > 1, "The route must detour around the building instead of going straight.")
+		for waypoint: Dictionary in waypoints:
+			var point := Vector2(float(waypoint["x"]), float(waypoint["z"]))
+			for step in range(1, 21):
+				var sample := previous.lerp(point, float(step) / 20.0)
+				_check(
+					not footprint.grow(-0.01).has_point(sample),
+					"The route crosses the main center at %s: hidden obstacles must still be baked." % str(sample)
+				)
+			previous = point
+	# Las fuentes se crean al hornear, así que se revisan después de que la ruta esperó la navegación.
+	var sources: Node = world.active_world.find_child("NavigationSources", true, false)
+	_check(sources != null and sources.get_child_count() > 1, "The navigation sources include the floor and the buildings.")
+	if sources != null:
+		for source: Node in sources.get_children():
+			_check(not (source as Node3D).visible, "%s is bake-only geometry and must not be drawn." % source.name)
 	_free_setup(setup)
 
 

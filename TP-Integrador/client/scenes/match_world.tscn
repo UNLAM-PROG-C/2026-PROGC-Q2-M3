@@ -2,10 +2,11 @@
 
 [ext_resource type="PackedScene" uid="uid://ctb8ipxe3g57d" path="res://scenes/camera/rts_camera.tscn" id="1_camera"]
 [ext_resource type="Texture2D" uid="uid://dgo1ucaqxvrh1" path="res://assets/textures/skybox.jpg" id="2_sky"]
-[ext_resource type="Script" uid="uid://do67d6bbvdif1" path="res://scripts/edge_margin_overlay.gd" id="3_overlay"]
+[ext_resource type="Script" uid="uid://do67d6bbvdif1" path="res://scripts/ui/edge_margin_overlay.gd" id="3_overlay"]
 [ext_resource type="Script" uid="uid://cplwyijcnhnqw" path="res://scripts/initial_world.gd" id="4_world"]
 [ext_resource type="Script" uid="uid://bt6xv31gcgu7i" path="res://scripts/unit_command_controller.gd" id="5_unit_controller"]
 [ext_resource type="Script" uid="uid://b4o6688n6mpvf" path="res://scripts/ui/session_screens.gd" id="6_session_screens"]
+[ext_resource type="Script" uid="uid://c82nnpidyqm6a" path="res://scripts/ui/match_hud.gd" id="7_match_hud"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_world"]
 panorama = ExtResource("2_sky")
@@ -53,6 +54,18 @@ mouse_filter = 2
 script = ExtResource("3_overlay")
 rts_camera = NodePath("../../RTSCamera")
 line_width = 5.0
+
+[node name="MatchHud" type="Control" parent="CanvasLayer" unique_id=1117846785 node_paths=PackedStringArray("world", "command_controller")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("7_match_hud")
+world = NodePath("../..")
+command_controller = NodePath("../../UnitCommandController")
 
 [node name="SessionScreens" type="Control" parent="CanvasLayer" unique_id=1814132572]
 layout_mode = 3

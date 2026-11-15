@@ -7,6 +7,7 @@ signal world_preparation_completed(initialization_id: int)
 signal world_preparation_failed(initialization_id: int, detail: String)
 signal world_discarded(initialization_id: int)
 signal unit_removed(unit_id: int)
+signal building_removed(building_id: int)
 signal world_sync_warning(error_code: String, detail: String)
 signal world_sync_failed(detail: String)
 signal map_revision_changed(revision: int)
@@ -36,6 +37,11 @@ const TASK_TARGET_KEYS := {
 	"Attack": "targetId",
 	"Build": "buildingId",
 	"RepairFarm": "farmId",
+}
+## Qué entrena cada edificio productor (contrato 05, ProducerCatalog, DECIDIDO 05 §1).
+const PRODUCER_UNIT_TYPES := {
+	"MainCenter": "Worker",
+	"Barracks": "Soldier",
 }
 ## Tipo de unidad que acepta cada orden de tarea (contrato 04 §3, UnitOrderCompatibility).
 const TASK_UNIT_TYPES := {
@@ -369,6 +375,49 @@ func issue_stop_command(unit_ids: Array[int] = []) -> Dictionary:
 		return {"ok": false, "error": "NoUnitsSelected", "detail": "No hay unidades propias para detener."}
 	var payload := {"unitIds": stop_ids}
 	return _send_tracked_command("Stop", payload, [])
+
+
+## TrainUnit (contrato 05 §3): agrega una solicitud a la cola del productor. No exige comida:
+## sin comida la solicitud espera. La cola llena (`Production.QueueFull`) solo la puede
+## informar el servidor, porque `MaxPendingPerProducer` no viaja en el catálogo.
+func issue_train_unit_command(producer_id: int, unit_type: String) -> Dictionary:
+	var precondition := _gameplay_precondition()
+	if not precondition.is_empty():
+		return precondition
+	var trainable := trainable_unit_type(producer_id)
+	if not bool(trainable.get("ok", false)):
+		return trainable
+	if str(trainable["unitType"]) != unit_type:
+		return {"ok": false, "error": "WrongUnitType", "detail": "Ese edificio no entrena %s." % unit_type}
+	return _send_tracked_command("TrainUnit", {"producerId": producer_id, "unitType": unit_type}, [])
+
+
+## Tipo de unidad que entrena un edificio propio, o el error por el que no puede entrenar.
+func trainable_unit_type(producer_id: int) -> Dictionary:
+	var producer: Node3D = entities_by_id.get(producer_id)
+	if producer == null or producer.get_meta("entity_kind", "") != "building":
+		return {"ok": false, "error": "EntityNotFound", "detail": "El productor %d no existe." % producer_id}
+	var state: Dictionary = producer.get_meta("entity_state", {})
+	if int(state.get("owner", 0)) != int(active_snapshot.get("playerId", 0)):
+		return {"ok": false, "error": "NotOwner", "detail": "El edificio %d no es propio." % producer_id}
+	var unit_type: String = PRODUCER_UNIT_TYPES.get(str(state.get("buildingType", "")), "")
+	if unit_type.is_empty():
+		return {"ok": false, "error": "NotAProducer", "detail": "El edificio %d no entrena unidades." % producer_id}
+	if not bool(state.get("isCompleted", false)):
+		return {"ok": false, "error": "ProducerNotOperational", "detail": "El edificio %d todavía está en obra." % producer_id}
+	return {"ok": true, "unitType": unit_type}
+
+
+## Estado de producción propio de un productor (InitialState.ownProduction y ProductionChanged).
+func get_own_production(producer_id: int) -> Dictionary:
+	for producer: Variant in active_snapshot.get("ownProduction", []):
+		if producer is Dictionary and int(producer.get("producerId", 0)) == producer_id:
+			return producer.duplicate(true)
+	return {}
+
+
+func get_own_resources() -> Dictionary:
+	return active_snapshot.get("ownResources", {}).duplicate(true)
 
 
 ## Arma el payload de una orden de tarea: objetivo, revisión de mapa y una ruta por unidad
@@ -1619,6 +1668,8 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 			var entity_kind := str(node.get_meta("entity_kind", ""))
 			if entity_kind == "unit":
 				unit_removed.emit(entity_id)
+			elif entity_kind == "building":
+				building_removed.emit(entity_id)
 			entities_by_id.erase(entity_id)
 			if entity_kind == "unit":
 				pending_command_by_unit.erase(entity_id)
