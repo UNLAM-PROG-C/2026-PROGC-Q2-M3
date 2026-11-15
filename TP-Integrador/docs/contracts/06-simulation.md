@@ -175,7 +175,18 @@ En `Summary` se registran resúmenes y errores; en `Debug`, el detalle por tick.
 
 **Cómo salen (DECIDIDO D-095):** Simulation no loguea. El loop entrega los datos a `ISimulationDiagnostics` (`Rts.Simulation.Diagnostics`): las `TickMetrics` de cada tick, incluidos los descartados, y cada falla crítica con su motivo. El Server lo implementa y lo traduce a `ILogger` (contrato 10). Como lo llaman el hilo del tick y el supervisor, la implementación tiene que tolerar llamadas concurrentes y no bloquear.
 
-**Entrega (DECIDIDO D-097):** `OnTickCompleted(TickMetrics)` llega una vez por tick, en orden, para todo tick que el motor terminó (confirmado o descartado por una falla de fase), incluido el último de la partida; no para un tick abandonado por el supervisor, y nunca después de completar `StopTicksAsync`. `IsOverrun` viene decidido por la agenda del loop. Si el observador lanza, se ignora y la partida sigue. Es obligatorio al armar el loop (`NullSimulationDiagnostics.Instance` si no se quiere diagnóstico). El aviso de fallas críticas se agrega en la Fase 3.
+**Entrega (DECIDIDO D-097):** `OnTickCompleted(TickMetrics)` llega una vez por tick, en orden, para todo tick que el motor terminó (confirmado o descartado por una falla de fase), incluido el último de la partida; no para un tick abandonado por el supervisor, y nunca después de completar `StopTicksAsync`. `IsOverrun` viene decidido por la agenda del loop. Si el observador lanza, se ignora y la partida sigue. Es obligatorio al armar el loop (`NullSimulationDiagnostics.Instance` si no se quiere diagnóstico).
+
+**Fallas críticas (DECIDIDO D-099):** `OnCriticalFailure(CriticalFailureReport)` informa la falla que terminó la partida, **una sola vez** y **antes** de avisarle el `CriticalError` a GameSession, así el motivo queda en el log antes del cierre. El reporte trae `Kind`, el tick en que se detectó, el último confirmado (el `FinalTick` del `CriticalError`), la fase si corresponde, el motivo y la excepción original:
+
+| `Kind` | Cuándo | Lo detecta |
+|---|---|---|
+| `PhaseFailed` | una fase lanzó (también la barrera vencida o un resultado incoherente de un módulo); el tick se descartó | el hilo del loop, con la `SimulationFailure` del motor, que ahora conserva la excepción en `Cause` |
+| `UnexpectedException` | el motor lanzó fuera de sus fases | el hilo del loop |
+| `PublisherFailed` | State Sync lanzó al publicar un tick confirmado | el hilo del loop |
+| `TickStalled` | un tick superó `TickStallTimeout` | el supervisor, en otro hilo |
+
+Si la falla fue en una fase, las métricas de ese tick llegan por `OnTickCompleted` justo después del reporte.
 
 **Niveles (DECIDIDO D-098)**, que aplica quien implementa el observador (el adaptador del Server):
 

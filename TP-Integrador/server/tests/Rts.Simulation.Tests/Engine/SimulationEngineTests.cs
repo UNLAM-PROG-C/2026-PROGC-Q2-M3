@@ -121,9 +121,8 @@ public class SimulationEngineTests
   [Fact]
   public void AdvanceTick_PhaseThrows_DiscardsWholeTickAndHalts()
   {
-    SimulationEngine engine = CreateInitializedEngine(
-        GiveWoodToP1(),
-        Phase(SimulationPhase.Production, _ => throw new InvalidOperationException("falla de prueba")));
+    var cause = new InvalidOperationException("falla de prueba");
+    SimulationEngine engine = CreateInitializedEngine(GiveWoodToP1(), Phase(SimulationPhase.Production, _ => throw cause));
     WorldState before = engine.Current!;
 
     TickOutcome outcome = engine.AdvanceTick();
@@ -131,6 +130,7 @@ public class SimulationEngineTests
     Assert.Null(outcome.Publication);
     Assert.NotNull(outcome.Failure);
     Assert.Equal(SimulationPhase.Production, outcome.Failure.Phase);
+    Assert.Same(cause, outcome.Failure.Cause); // La excepción original viaja con su traza (D-099).
     Assert.Same(before, engine.Current); // El cambio de saldo de la fase anterior tampoco quedó.
     Assert.Throws<InvalidOperationException>(() => engine.AdvanceTick());
   }

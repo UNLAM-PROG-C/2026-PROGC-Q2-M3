@@ -158,15 +158,15 @@ public sealed class SimulationLoop : ISimulationLoop
     {
       while (TryBeginTick())
       {
-        TickOutcome? outcome = AdvanceTickSafely();
-        if (!TryFinishTick(outcome))
+        TickAttempt attempt = AdvanceTickSafely();
+        if (!TryFinishTick(attempt.Outcome))
         {
           return; // El supervisor lo abandonó por bloqueado: la partida ya terminó y no se informa nada más.
         }
 
-        bool matchEnded = Deliver(outcome);
+        bool matchEnded = Deliver(attempt);
         bool overrun = _schedule.TickFinished(_time.GetElapsedTime(startedAt));
-        ReportTick(outcome, overrun);
+        ReportTick(attempt.Outcome, overrun);
         if (matchEnded)
         {
           return;
@@ -200,16 +200,19 @@ public sealed class SimulationLoop : ISimulationLoop
     }
   }
 
-  /// <summary>Nulo si el motor lanzó una excepción fuera de sus fases: se trata igual que una falla crítica.</summary>
-  private TickOutcome? AdvanceTickSafely()
+  /// <summary>
+  /// Corre el tick. Si el motor lanzó fuera de sus fases, no hay resultado y se conserva la excepción para informarla (D-099): antes
+  /// se descartaba y no quedaba rastro de por qué terminó la partida.
+  /// </summary>
+  private TickAttempt AdvanceTickSafely()
   {
     try
     {
-      return _engine.AdvanceTick();
+      return new TickAttempt(_engine.AdvanceTick(), Error: null);
     }
-    catch (Exception)
+    catch (Exception ex)
     {
-      return null;
+      return new TickAttempt(Outcome: null, ex);
     }
   }
 
@@ -235,27 +238,48 @@ public sealed class SimulationLoop : ISimulationLoop
     }
   }
 
-  /// <summary>Publica el tick y, si la partida terminó (resultado o falla), lo avisa. Devuelve verdadero si terminó.</summary>
-  private bool Deliver(TickOutcome? outcome)
+  /// <summary>
+  /// Publica el tick y, si la partida terminó, lo avisa. Devuelve verdadero si terminó. Cada falla crítica sale con su reporte
+  /// (D-099): excepción del motor, falla del publicador o falla de una fase.
+  /// </summary>
+  private bool Deliver(TickAttempt attempt)
   {
-    if (outcome?.Publication is { } publication)
+    if (attempt.Outcome is not { } outcome)
     {
-      try
-      {
-        _publisher.Publish(publication);
-      }
-      catch (Exception)
-      {
-        return EndMatch(MatchResult.CriticalError(publication.Tick));
-      }
+      TickId lastConfirmed = LastConfirmedTick();
+      return EndWithFailure(new CriticalFailureReport(
+          CriticalFailureKind.UnexpectedException, lastConfirmed.Next(), lastConfirmed, Phase: null, "El motor lanzó fuera de sus fases.",
+          attempt.Error));
     }
 
-    if (outcome is null || outcome.Failure is not null)
+    if (outcome.Publication is { } publication && TryPublish(publication) is { } publishError)
     {
-      return EndMatch(MatchResult.CriticalError(LastConfirmedTick()));
+      return EndWithFailure(new CriticalFailureReport(
+          CriticalFailureKind.PublisherFailed, publication.Tick, publication.Tick, Phase: null, "State Sync no pudo publicar el tick.",
+          publishError));
+    }
+
+    if (outcome.Failure is { } failure)
+    {
+      return EndWithFailure(new CriticalFailureReport(
+          CriticalFailureKind.PhaseFailed, outcome.Metrics.Tick, LastConfirmedTick(), failure.Phase, failure.Reason, failure.Cause));
     }
 
     return outcome.GameplayResult is { } result && EndMatch(result);
+  }
+
+  /// <summary>Entrega el tick a State Sync. Nulo si salió bien; si no, la excepción, para informarla.</summary>
+  private Exception? TryPublish(TickPublication publication)
+  {
+    try
+    {
+      _publisher.Publish(publication);
+      return null;
+    }
+    catch (Exception ex)
+    {
+      return ex;
+    }
   }
 
   /// <summary>
@@ -264,44 +288,71 @@ public sealed class SimulationLoop : ISimulationLoop
   /// </summary>
   private void ReportTick(TickOutcome? outcome, bool overrun)
   {
-    if (outcome is null)
+    if (outcome is not null)
     {
-      return;
+      NotifyDiagnostics(() => _diagnostics.OnTickCompleted(outcome.Metrics with { IsOverrun = overrun }));
     }
+  }
 
+  /// <summary>Llama al observador ignorando sus fallas (D-097): el diagnóstico no es parte del juego y la partida sigue.</summary>
+  private static void NotifyDiagnostics(Action notify)
+  {
     try
     {
-      _diagnostics.OnTickCompleted(outcome.Metrics with { IsOverrun = overrun });
+      notify();
     }
     catch (Exception)
     {
-      // A propósito: un problema al loguear no compromete la consistencia del mundo (AGENTS §6), así que la partida sigue.
+      // A propósito: un problema al loguear no compromete la consistencia del mundo (AGENTS §6).
     }
   }
 
   /// <summary>Lo llama el temporizador, en un hilo del pool: si el tick en curso pasó el plazo, termina la partida desde afuera.</summary>
   private void CheckForStalledTick()
   {
-    TickId lastConfirmed;
+    CriticalFailureReport report;
     lock (_gate)
     {
-      if (_matchEnded || _tickStartedAt is not { } startedAt || _time.GetElapsedTime(startedAt) <= _stallTimeout)
+      if (_matchEnded || _tickStartedAt is not { } startedAt)
+      {
+        return;
+      }
+
+      TimeSpan elapsed = _time.GetElapsedTime(startedAt);
+      if (elapsed <= _stallTimeout)
       {
         return;
       }
 
       // Detectar y abandonar en la misma sección crítica: el tick ya no puede cerrarse "justo a tiempo" (TryFinishTick lo verá).
       _matchEnded = true;
-      lastConfirmed = _lastConfirmedTick;
+      report = StalledTickReport(_lastConfirmedTick, elapsed);
     }
 
-    // El hilo del tick está bloqueado y no puede avisar: lo hace el supervisor. Primero el aviso, después la detención (D-055).
-    _results.OnSimulationResult(MatchResult.CriticalError(lastConfirmed));
+    // El hilo del tick está bloqueado y no puede avisar: lo hace el supervisor. Primero el motivo (D-099), después el resultado y
+    // recién al final la detención (D-055).
+    NotifyDiagnostics(() => _diagnostics.OnCriticalFailure(report));
+    _results.OnSimulationResult(MatchResult.CriticalError(report.LastConfirmedTick));
     Shutdown();
   }
 
-  /// <summary>Avisa el fin de la partida desde el hilo del loop, <b>una sola vez</b> aunque el supervisor ya lo haya hecho. Siempre verdadero.</summary>
-  private bool EndMatch(MatchResult result)
+  private CriticalFailureReport StalledTickReport(TickId lastConfirmed, TimeSpan elapsed) => new(
+      CriticalFailureKind.TickStalled,
+      lastConfirmed.Next(),
+      lastConfirmed,
+      Phase: null,
+      $"El tick lleva {elapsed.TotalMilliseconds:F0} ms en curso, más que TickStallTimeout ({_stallTimeout.TotalMilliseconds:F0} ms).",
+      Exception: null);
+
+  /// <summary>Termina la partida por una falla crítica: <c>CriticalError</c> con el último tick confirmado, y el motivo al observador.</summary>
+  private bool EndWithFailure(CriticalFailureReport report) =>
+      EndMatch(MatchResult.CriticalError(report.LastConfirmedTick), report);
+
+  /// <summary>
+  /// Avisa el fin de la partida desde el hilo del loop, <b>una sola vez</b> aunque el supervisor ya lo haya hecho. Si fue una falla,
+  /// el motivo va primero al observador y después el resultado a GameSession (D-099). Siempre verdadero.
+  /// </summary>
+  private bool EndMatch(MatchResult result, CriticalFailureReport? failure = null)
   {
     lock (_gate)
     {
@@ -313,9 +364,18 @@ public sealed class SimulationLoop : ISimulationLoop
       _matchEnded = true;
     }
 
-    _results.OnSimulationResult(result); // Fuera del lock: no se llama código ajeno mientras se lo tiene tomado.
+    // Fuera del lock: no se llama código ajeno mientras se lo tiene tomado.
+    if (failure is not null)
+    {
+      NotifyDiagnostics(() => _diagnostics.OnCriticalFailure(failure));
+    }
+
+    _results.OnSimulationResult(result);
     return true;
   }
+
+  /// <summary>Un intento de tick: el resultado del motor o, si lanzó fuera de sus fases, la excepción.</summary>
+  private readonly record struct TickAttempt(TickOutcome? Outcome, Exception? Error);
 
   /// <summary>Deja el loop detenido y completa la Task de <see cref="StopTicksAsync"/>. Idempotente.</summary>
   private void Shutdown()

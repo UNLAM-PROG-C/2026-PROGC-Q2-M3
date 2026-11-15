@@ -41,5 +41,8 @@ public sealed record TickMetrics(
     int EventsPublished,
     bool IsOverrun);
 
-/// <summary>Falla crítica de un tick: fase y motivo (06 §7). El tick se descarta completo y la sesión termina en forma técnica.</summary>
-public sealed record SimulationFailure(SimulationPhase Phase, string Reason);
+/// <summary>
+/// Falla crítica de un tick: fase y motivo (06 §7). El tick se descarta completo y la sesión termina en forma técnica.
+/// <see cref="Cause"/> es la excepción original, para no perder su traza en el log (D-099).
+/// </summary>
+public sealed record SimulationFailure(SimulationPhase Phase, string Reason, Exception? Cause = null);

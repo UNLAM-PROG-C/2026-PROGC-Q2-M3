@@ -59,7 +59,7 @@ public sealed class SimulationEngine : ISimulationEngine
     catch (Exception ex)
     {
       _halted = true;
-      var failure = new SimulationFailure(run.CurrentPhase, $"{ex.GetType().Name}: {ex.Message}");
+      var failure = new SimulationFailure(run.CurrentPhase, $"{ex.GetType().Name}: {ex.Message}", ex);
       return new TickOutcome(Publication: null, GameplayResult: null, failure, BuildMetrics(context, run, eventsPublished: 0));
     }
   }

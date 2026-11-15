@@ -17,6 +17,8 @@ public class SimulationLoopTests
   private static readonly TimeSpan GenerousStallTimeout = TimeSpan.FromSeconds(2); // Ninguna prueba normal se acerca.
   private static readonly TimeSpan ShortStallTimeout = TimeSpan.FromMilliseconds(100);
   private static readonly TimeSpan SlowTickDuration = TimeSpan.FromMilliseconds(30); // 6 intervalos: sobrecarga segura.
+  private static readonly InvalidOperationException PhaseFailureCause = new("Excepción de prueba dentro de una fase.");
+  private static readonly InvalidOperationException PublishFailure = new("State Sync roto (prueba).");
   private static readonly TickRate FastRate = new(FastTicksPerSecond);
   private static readonly TickId Tick1 = TickId.Zero.Next();
   private static readonly TickId Tick2 = Tick1.Next();
@@ -309,11 +311,127 @@ public class SimulationLoopTests
     Assert.Equal([Tick1], diagnostics.Ticks); // ...y no se informa: la partida ya había terminado.
   }
 
-  /// <summary>Observador que guarda, en orden y desde cualquier hilo, las métricas que recibe.</summary>
+  [Fact]
+  public async Task PhaseFailure_IsReportedWithItsPhaseReasonAndCause_BeforeTheResult()
+  {
+    var diagnostics = new DiagnosticsRecorder();
+    var (loop, engine, recorder) = Create(diagnostics: diagnostics);
+    diagnostics.SharedLog = recorder;
+    engine.FailAt = Tick2;
+
+    loop.StartTicks();
+    await recorder.Result.WaitAsync(TestTimeout);
+    await loop.StopTicksAsync().WaitAsync(TestTimeout);
+
+    var expected = new CriticalFailureReport(
+        CriticalFailureKind.PhaseFailed, Tick2, Tick1, SimulationPhase.Movement, "Falla de prueba.", PhaseFailureCause);
+    Assert.Equal(expected, Assert.Single(diagnostics.Failures));
+    Assert.Equal(["publish 1", "failure PhaseFailed", "result CriticalError"], recorder.Entries); // El motivo, antes del cierre.
+  }
+
+  [Fact]
+  public async Task ExceptionOutsideThePhases_IsReportedWithTheException()
+  {
+    var diagnostics = new DiagnosticsRecorder();
+    var (loop, engine, recorder) = Create(diagnostics: diagnostics);
+    diagnostics.SharedLog = recorder;
+    engine.ThrowAt = Tick1;
+
+    loop.StartTicks();
+    await recorder.Result.WaitAsync(TestTimeout);
+    await loop.StopTicksAsync().WaitAsync(TestTimeout);
+
+    CriticalFailureReport report = Assert.Single(diagnostics.Failures);
+    Assert.Equal((CriticalFailureKind.UnexpectedException, Tick1, TickId.Zero), (report.Kind, report.Tick, report.LastConfirmedTick));
+    Assert.Null(report.Phase);
+    Assert.IsType<InvalidOperationException>(report.Exception); // Antes se descartaba: ahora queda la traza.
+    Assert.Equal(["failure UnexpectedException", "result CriticalError"], recorder.Entries);
+  }
+
+  [Fact]
+  public async Task PublisherFailure_IsReportedWithTheTickThatCouldNotBePublished()
+  {
+    var diagnostics = new DiagnosticsRecorder();
+    var (loop, _, recorder) = Create(diagnostics: diagnostics);
+    diagnostics.SharedLog = recorder;
+    recorder.FailToPublishAt = Tick2;
+
+    loop.StartTicks();
+    MatchResult result = await recorder.Result.WaitAsync(TestTimeout);
+    await loop.StopTicksAsync().WaitAsync(TestTimeout);
+
+    CriticalFailureReport report = Assert.Single(diagnostics.Failures);
+    Assert.Equal((CriticalFailureKind.PublisherFailed, Tick2, Tick2), (report.Kind, report.Tick, report.LastConfirmedTick));
+    Assert.Same(PublishFailure, report.Exception);
+    Assert.Equal(MatchResult.CriticalError(Tick2), result);
+    Assert.Equal(["publish 1", "failure PublisherFailed", "result CriticalError"], recorder.Entries);
+  }
+
+  [Fact]
+  public async Task StalledTick_IsReportedOnceByTheSupervisor_BeforeTheResult()
+  {
+    var diagnostics = new DiagnosticsRecorder();
+    var (loop, engine, recorder) = Create(ShortStallTimeout, diagnostics: diagnostics);
+    diagnostics.SharedLog = recorder;
+    engine.BlockAt = Tick2;
+
+    loop.StartTicks();
+    await recorder.Result.WaitAsync(TestTimeout);
+    await loop.StopTicksAsync().WaitAsync(TestTimeout);
+    engine.Release.Set(); // El tick bloqueado termina tarde: no genera otro reporte.
+    await Task.Delay(SettleTime);
+
+    CriticalFailureReport report = Assert.Single(diagnostics.Failures);
+    Assert.Equal((CriticalFailureKind.TickStalled, Tick2, Tick1), (report.Kind, report.Tick, report.LastConfirmedTick));
+    Assert.Null(report.Exception);
+    Assert.Contains("TickStallTimeout", report.Reason, StringComparison.Ordinal);
+    Assert.Equal(["publish 1", "failure TickStalled", "result CriticalError"], recorder.Entries);
+  }
+
+  [Fact]
+  public async Task FailingDiagnosticsDuringAFailure_StillDeliverTheResult()
+  {
+    var (loop, engine, recorder) = Create(diagnostics: new ThrowingDiagnostics());
+    engine.FailAt = Tick2;
+
+    loop.StartTicks();
+    MatchResult result = await recorder.Result.WaitAsync(TestTimeout);
+
+    Assert.Equal(MatchResult.CriticalError(Tick1), result);
+  }
+
+  /// <summary>
+  /// Observador que guarda, en orden y desde cualquier hilo, lo que recibe. Con <see cref="SharedLog"/>, anota cada falla en el mismo
+  /// registro que las publicaciones y los resultados, para verificar el orden entre ellos.
+  /// </summary>
   private sealed class DiagnosticsRecorder : ISimulationDiagnostics
   {
     private readonly object _gate = new();
     private readonly List<TickMetrics> _metrics = [];
+    private readonly List<CriticalFailureReport> _failures = [];
+
+    public Recorder? SharedLog { get; set; }
+
+    public IReadOnlyList<CriticalFailureReport> Failures
+    {
+      get
+      {
+        lock (_gate)
+        {
+          return [.. _failures];
+        }
+      }
+    }
+
+    public void OnCriticalFailure(CriticalFailureReport report)
+    {
+      lock (_gate)
+      {
+        _failures.Add(report);
+      }
+
+      SharedLog?.Note($"failure {report.Kind}");
+    }
 
     public IReadOnlyList<TickMetrics> Metrics
     {
@@ -341,6 +459,8 @@ public class SimulationLoopTests
   private sealed class ThrowingDiagnostics : ISimulationDiagnostics
   {
     public void OnTickCompleted(TickMetrics metrics) => throw new InvalidOperationException("Falla al loguear (prueba).");
+
+    public void OnCriticalFailure(CriticalFailureReport report) => throw new InvalidOperationException("Falla al loguear (prueba).");
   }
 
   /// <summary>Reloj real que no puede crear temporizadores: simula que falla el arranque del supervisor.</summary>
@@ -420,7 +540,8 @@ public class SimulationLoopTests
 
       if (tick == FailAt)
       {
-        return new TickOutcome(null, null, new SimulationFailure(SimulationPhase.Movement, "Falla de prueba."), Metrics(tick));
+        var failure = new SimulationFailure(SimulationPhase.Movement, "Falla de prueba.", PhaseFailureCause);
+        return new TickOutcome(null, null, failure, Metrics(tick));
       }
 
       MatchResult? result = tick == EndAt ? MatchResult.Draw(tick) : null;
@@ -454,11 +575,22 @@ public class SimulationLoopTests
       }
     }
 
+    /// <summary>Si no es nulo, <see cref="Publish"/> lanza al recibir ese tick (simula un State Sync roto).</summary>
+    public TickId? FailToPublishAt { get; set; }
+
     public void Publish(TickPublication publication)
     {
+      if (publication.Tick == FailToPublishAt)
+      {
+        throw PublishFailure;
+      }
+
       Add($"publish {publication.Tick.Value}");
       _published.Release();
     }
+
+    /// <summary>Anota algo de otro participante (el observador) en el mismo registro, para verificar el orden.</summary>
+    public void Note(string entry) => Add(entry);
 
     public void OnSimulationResult(MatchResult result)
     {
