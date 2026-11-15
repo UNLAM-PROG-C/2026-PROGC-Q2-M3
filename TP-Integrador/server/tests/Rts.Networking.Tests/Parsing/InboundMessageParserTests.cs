@@ -74,6 +74,17 @@ public class InboundMessageParserTests
     AssertViolation(result, NetworkErrors.UnsupportedVersion);
   }
 
+  [Theory]
+  [InlineData("Hello")]
+  [InlineData("Ping")]
+  public void Parse_DifferentVersion_CarriesTheMessageType(string type)
+  {
+    // 08 §3: un Hello con otra versión cierra la conexión; cualquier otro mensaje con otra versión es solo una falta.
+    var result = ParseLine("{\"protocolVersion\":2,\"type\":\"" + type + "\"}");
+
+    Assert.Equal(type, result.MessageType);
+  }
+
   [Fact]
   public void Parse_ServerVersionFromConstructor_IsTheOneAccepted()
   {
