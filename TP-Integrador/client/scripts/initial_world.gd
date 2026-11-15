@@ -1,15 +1,18 @@
 extends Node3D
 
 const PROTOCOL_CODEC = preload("res://scripts/network/protocol_codec.gd")
+const CLIENT_NAVIGATION_SCRIPT = preload("res://scripts/client_navigation.gd")
 
 signal world_preparation_completed(initialization_id: int)
 signal world_preparation_failed(initialization_id: int, detail: String)
 signal world_discarded(initialization_id: int)
+signal unit_removed(unit_id: int)
 signal world_sync_warning(error_code: String, detail: String)
 signal world_sync_failed(detail: String)
 signal map_revision_changed(revision: int)
 signal command_result_received(client_command_id: int, result: Dictionary)
 signal command_rejected_received(message_id: int, error_code: String)
+signal repath_response_failed(error_code: String, detail: String)
 signal resources_changed(resources: Dictionary)
 signal production_changed(producer_id: int, production: Dictionary)
 signal repath_requested(request: Dictionary)
@@ -88,18 +91,34 @@ var _position_samples: Dictionary = {}
 var _position_clock_tick := -1
 var _position_clock_received_usec := 0
 var _recent_command_result_ids: Array[int] = []
+var next_client_message_id := 1
+var pending_move_requests: Dictionary = {}
+var pending_repath_responses: Dictionary = {}
+var pending_move_by_unit: Dictionary = {}
+var accepted_move_intents: Dictionary = {}
+var _units_calculating_move: Dictionary = {}
+var _batch_unit_order_changes: Array[Dictionary] = []
 
 
 func _ready() -> void:
 	set_process(true)
+	var map_revision_callable := Callable(self, "_on_map_revision_changed")
+	if not is_connected("map_revision_changed", map_revision_callable):
+		connect("map_revision_changed", map_revision_callable)
+	var repath_callable := Callable(self, "_on_repath_requested")
+	if not is_connected("repath_requested", repath_callable):
+		connect("repath_requested", repath_callable)
 	_session_controller = get_node_or_null("/root/SessionController")
 	if _session_controller != null:
 		var callbacks := {
 			"initial_state_preparation_requested": Callable(self, "_on_initial_state_preparation_requested"),
 			"initial_state_discard_requested": Callable(self, "_on_initial_state_discard_requested"),
+			"session_state_changed": Callable(self, "_on_session_state_changed"),
 		}
 		for signal_name in callbacks:
 			if not _session_controller.has_signal(signal_name):
+				if signal_name == "session_state_changed":
+					continue
 				_report_error(
 					"InvalidSessionController",
 					"SessionController no expone la señal %s." % signal_name
@@ -131,15 +150,25 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	_invalidate_world_navigation(active_world)
 	if is_instance_valid(_session_controller):
 		var callbacks := {
 			"initial_state_preparation_requested": Callable(self, "_on_initial_state_preparation_requested"),
 			"initial_state_discard_requested": Callable(self, "_on_initial_state_discard_requested"),
+			"session_state_changed": Callable(self, "_on_session_state_changed"),
 		}
 		for signal_name in callbacks:
+			if not _session_controller.has_signal(signal_name):
+				continue
 			var callback: Callable = callbacks[signal_name]
 			if _session_controller.is_connected(signal_name, callback):
 				_session_controller.disconnect(signal_name, callback)
+	var map_revision_callable := Callable(self, "_on_map_revision_changed")
+	if is_connected("map_revision_changed", map_revision_callable):
+		disconnect("map_revision_changed", map_revision_callable)
+	var repath_callable := Callable(self, "_on_repath_requested")
+	if is_connected("repath_requested", repath_callable):
+		disconnect("repath_requested", repath_callable)
 	if is_instance_valid(_network_client):
 		var message_callable := Callable(self, "_on_network_message_received")
 		if _network_client.is_connected("message_received", message_callable):
@@ -184,6 +213,7 @@ func prepare_initial_state(
 	_reset_synchronization_cursors()
 
 	if previous_world != null and is_instance_valid(previous_world):
+		_invalidate_world_navigation(previous_world)
 		remove_child(previous_world)
 		previous_world.queue_free()
 
@@ -198,6 +228,7 @@ func discard_initial_state(initialization_id: int) -> void:
 		return
 
 	if active_world != null and is_instance_valid(active_world):
+		_invalidate_world_navigation(active_world)
 		remove_child(active_world)
 		active_world.queue_free()
 	active_world = null
@@ -207,6 +238,400 @@ func discard_initial_state(initialization_id: int) -> void:
 	active_initialization_id = 0
 	_clear_synchronization_state()
 	world_discarded.emit(initialization_id)
+
+
+func calculate_move_routes(destination: Vector2, unit_ids: Array[int] = []) -> Dictionary:
+	if active_world == null:
+		return {"ok": false, "error": "WorldNotReady", "detail": "No hay un mundo activo para calcular rutas."}
+	var world_instance := active_world
+	var target_ids := _distinct_sorted_array(unit_ids)
+	if target_ids.is_empty():
+		return {"ok": false, "error": "NoUnitsSelected", "detail": "No hay unidades elegidas para mover."}
+	var navigation: Node = _get_active_navigation()
+	if navigation == null:
+		return {"ok": false, "error": "NavigationUnavailable", "detail": "El mundo no contiene ClientNavigation."}
+	var route_revision := -1
+	var routes: Array[Dictionary] = []
+	for entity_id: int in target_ids:
+		var entity: Node3D = entities_by_id.get(entity_id)
+		if entity == null or entity.get_meta("entity_kind", "") != "unit":
+			continue
+		var state: Dictionary = entity.get_meta("entity_state", {})
+		if int(state.get("owner", 0)) != int(active_snapshot.get("playerId", 0)):
+			continue
+		var official_position: Variant = entity.get_meta("official_position", null)
+		if typeof(official_position) != TYPE_VECTOR2:
+			return {"ok": false, "error": "OfficialPositionUnavailable", "detail": "La unidad %d no tiene posición oficial." % entity_id}
+		var origin: Vector2 = official_position
+		var route_result: Dictionary = await _calculate_candidate_route_stable(
+			navigation,
+			origin,
+			destination,
+			map_revision
+		)
+		if active_world != world_instance:
+			return {"ok": false, "error": "WorldChanged", "detail": "El mundo cambió durante el cálculo de rutas."}
+		if entities_by_id.get(entity_id) != entity:
+			return {"ok": false, "error": "UnitMissing", "detail": "La unidad %d desapareció durante el cálculo." % entity_id}
+		var latest_position: Variant = entity.get_meta("official_position", null)
+		if typeof(latest_position) != TYPE_VECTOR2:
+			return {"ok": false, "error": "OfficialPositionUnavailable", "detail": "La unidad %d perdió su posición oficial." % entity_id}
+		var latest_position_vector: Vector2 = latest_position
+		if not latest_position_vector.is_equal_approx(origin):
+			return {"ok": false, "error": "OfficialPositionChanged", "detail": "La posición oficial de la unidad cambió durante el cálculo."}
+		if not bool(route_result.get("ok", false)):
+			return route_result
+		var current_route_revision := int(route_result["revision"])
+		if route_revision >= 0 and current_route_revision != route_revision:
+			return {"ok": false, "error": "MapRevisionChanged", "detail": "El mapa cambió mientras se calculaban las rutas del grupo."}
+		route_revision = current_route_revision
+		routes.append({
+				"unitId": entity_id,
+				"waypoints": route_result["waypoints"],
+			})
+	if routes.is_empty():
+		return {"ok": false, "error": "NoUnitsReady", "detail": "Ninguna unidad elegida está lista para mover."}
+	var payload := {
+		"destination": {"x": float(destination.x), "z": float(destination.y)},
+		"routeMapRevision": route_revision,
+		"routes": routes,
+	}
+	return {"ok": true, "payload": payload}
+
+
+func build_move_payload(destination: Vector2, unit_ids: Array[int] = []) -> Dictionary:
+	return await calculate_move_routes(destination, unit_ids)
+
+
+func generate_move_command(destination: Vector2, unit_ids: Array[int] = []) -> Dictionary:
+	return await issue_move_command(destination, unit_ids)
+
+
+func create_move_command(destination: Vector2, unit_ids: Array[int] = []) -> Dictionary:
+	return await issue_move_command(destination, unit_ids)
+
+
+func issue_move_command(destination: Vector2, unit_ids: Array[int] = []) -> Dictionary:
+	if _session_controller == null or not _session_controller.can_issue_gameplay():
+		return {"ok": false, "error": "MatchNotRunning", "detail": "La sesión no está en Running."}
+	if _network_client == null or not _network_client.has_method("send_message"):
+		return {"ok": false, "error": "NetworkUnavailable", "detail": "No hay un NetworkClient disponible."}
+	var target_ids := _distinct_sorted_array(unit_ids)
+	if target_ids.is_empty():
+		return {"ok": false, "error": "NoUnitsSelected", "detail": "No hay unidades elegidas para mover."}
+	var request_initialization_id := active_initialization_id
+	for unit_id: int in target_ids:
+		if pending_move_by_unit.has(unit_id) or _units_calculating_move.has(unit_id):
+			return {"ok": false, "error": "MoveAlreadyPending", "detail": "La unidad %d ya tiene un Move pendiente." % unit_id}
+	for unit_id: int in target_ids:
+		_units_calculating_move[unit_id] = true
+	var route_result: Dictionary = await calculate_move_routes(destination, target_ids)
+	for unit_id: int in target_ids:
+		_units_calculating_move.erase(unit_id)
+	if not route_result["ok"]:
+		return route_result
+	if request_initialization_id != active_initialization_id:
+		return {"ok": false, "error": "WorldChanged", "detail": "El mundo cambió durante el cálculo de rutas."}
+	if _session_controller == null or not _session_controller.can_issue_gameplay():
+		return {"ok": false, "error": "MatchNotRunning", "detail": "La sesión dejó de estar en Running durante el cálculo."}
+	var message_id := _allocate_client_message_id()
+	if message_id < 0:
+		return {"ok": false, "error": "MessageIdExhausted", "detail": "Se agotó el rango de messageId permitido."}
+	var payload: Dictionary = route_result["payload"]
+	var routed_unit_ids: Array[int] = []
+	for route: Dictionary in payload["routes"]:
+		routed_unit_ids.append(int(route["unitId"]))
+	for unit_id: int in routed_unit_ids:
+		if pending_move_by_unit.has(unit_id):
+			return {"ok": false, "error": "MoveAlreadyPending", "detail": "La unidad %d recibió otro Move durante el cálculo." % unit_id}
+	var outbound: bool = bool(_network_client.call("send_message", "Move", payload, message_id))
+	if not outbound:
+		return {"ok": false, "error": "SendFailed", "detail": "No se pudo enviar el comando Move."}
+	pending_move_requests[message_id] = {
+		"type": "Move",
+		"status": "awaiting_result",
+		"payload": payload.duplicate(true),
+		"unitIds": routed_unit_ids,
+	}
+	for unit_id: int in routed_unit_ids:
+		pending_move_by_unit[unit_id] = message_id
+	return {"ok": true, "messageId": message_id, "payload": payload}
+
+
+func build_repath_response_payload(request: Dictionary) -> Dictionary:
+	if (
+		not request.has("unitId")
+		or not request.has("orderId")
+		or not _is_positive_integer(request["unitId"])
+		or not _is_positive_integer(request["orderId"])
+		or not request.has("mapRevision")
+		or not _is_non_negative_integer(request["mapRevision"])
+	):
+		return {"ok": false, "error": "InvalidRequest", "detail": "RepathRequest requiere unitId y orderId."}
+	var unit_id: int = int(request["unitId"])
+	var order_id: int = int(request["orderId"])
+	if request.has("targetId"):
+		return {"ok": false, "error": "UnsupportedTarget", "detail": "El cliente todavía no calcula rutas de persecución con targetId."}
+	if not request.has("destination") or typeof(request["destination"]) != TYPE_DICTIONARY:
+		return {"ok": false, "error": "InvalidRequest", "detail": "RepathRequest debe contener destination para una orden Move."}
+	if not entities_by_id.has(unit_id):
+		return {"ok": false, "error": "UnitMissing", "detail": "La unidad no existe en el mundo local."}
+	var unit: Node3D = entities_by_id[unit_id]
+	var unit_state: Dictionary = unit.get_meta("entity_state", {})
+	var intent: Dictionary = accepted_move_intents.get(unit_id, {})
+	if (
+		unit.get_meta("entity_kind", "") != "unit"
+		or int(unit_state.get("owner", 0)) != int(active_snapshot.get("playerId", 0))
+		or str(unit_state.get("order", "")) != "Move"
+		or int(unit_state.get("orderId", 0)) != order_id
+		or intent.is_empty()
+		or int(intent.get("orderId", 0)) != order_id
+	):
+		return {"ok": false, "error": "StaleOrder", "detail": "RepathRequest ya no corresponde a la orden Move vigente."}
+	var destination_data: Dictionary = request["destination"]
+	if (
+		not destination_data.has("x")
+		or not destination_data.has("z")
+		or not _is_finite_number(destination_data["x"])
+		or not _is_finite_number(destination_data["z"])
+	):
+		return {"ok": false, "error": "InvalidRequest", "detail": "destination requiere coordenadas X/Z finitas."}
+	var destination := Vector2(float(destination_data["x"]), float(destination_data["z"]))
+	var intended_destination: Vector2 = intent["destination"]
+	if not destination.is_equal_approx(intended_destination):
+		return {"ok": false, "error": "StaleDestination", "detail": "RepathRequest no coincide con el destino de la orden aceptada."}
+	var official_position: Variant = unit.get_meta("official_position", null)
+	if typeof(official_position) != TYPE_VECTOR2:
+		return {"ok": false, "error": "OfficialPositionUnavailable", "detail": "La unidad no tiene posición oficial."}
+	var navigation: Node = _get_active_navigation()
+	if navigation == null:
+		return {"ok": false, "error": "NavigationUnavailable", "detail": "El mundo no contiene ClientNavigation."}
+	var requested_revision := int(request["mapRevision"])
+	var origin: Vector2 = official_position
+	var request_initialization_id := active_initialization_id
+	var route_result: Dictionary = await _calculate_candidate_route_stable(
+		navigation,
+		origin,
+		destination,
+		requested_revision
+	)
+	if request_initialization_id != active_initialization_id:
+		return {"ok": false, "error": "WorldChanged", "detail": "El mundo cambió durante el cálculo del repath."}
+	if not bool(route_result.get("ok", false)):
+		return route_result
+	var latest_position: Variant = unit.get_meta("official_position", null)
+	if typeof(latest_position) != TYPE_VECTOR2:
+		return {"ok": false, "error": "OfficialPositionUnavailable", "detail": "La unidad perdió su posición oficial durante el repath."}
+	var latest_position_vector: Vector2 = latest_position
+	if not latest_position_vector.is_equal_approx(origin):
+		return {"ok": false, "error": "OfficialPositionChanged", "detail": "La posición oficial cambió durante el cálculo del repath."}
+	var current_unit: Node3D = entities_by_id.get(unit_id)
+	if (
+		current_unit == null
+		or int(current_unit.get_meta("entity_state", {}).get("orderId", 0)) != order_id
+		or int(accepted_move_intents.get(unit_id, {}).get("orderId", 0)) != order_id
+	):
+		return {"ok": false, "error": "StaleOrder", "detail": "La orden cambió durante el cálculo del repath."}
+	return {
+		"ok": true,
+		"payload": {
+			"unitId": unit_id,
+			"orderId": order_id,
+			"mapRevision": int(route_result["revision"]),
+			"waypoints": route_result["waypoints"],
+		},
+	}
+
+
+func send_repath_response(request: Dictionary, message_id: int = -1) -> Dictionary:
+	if _session_controller == null or not _session_controller.can_issue_gameplay():
+		return {"ok": false, "error": "MatchNotRunning", "detail": "La sesión no está en Running."}
+	if _network_client == null or not _network_client.has_method("send_message"):
+		return {"ok": false, "error": "NetworkUnavailable", "detail": "No hay un NetworkClient disponible."}
+	var payload_result: Dictionary = await build_repath_response_payload(request)
+	if not payload_result.get("ok", false):
+		return payload_result
+	if _session_controller == null or not _session_controller.can_issue_gameplay():
+		return {"ok": false, "error": "MatchNotRunning", "detail": "La sesión dejó de estar en Running durante el cálculo."}
+	var effective_message_id := message_id if message_id > 0 else _allocate_client_message_id()
+	if effective_message_id < 0 or effective_message_id > PROTOCOL_CODEC.MAX_SAFE_MESSAGE_ID:
+		return {"ok": false, "error": "MessageIdExhausted", "detail": "Se agotó el rango de messageId permitido."}
+	if message_id > 0:
+		if message_id < next_client_message_id:
+			return {"ok": false, "error": "MessageIdAlreadyUsed", "detail": "El messageId debe ser nuevo y creciente."}
+		next_client_message_id = message_id + 1
+	var payload: Dictionary = payload_result["payload"]
+	if not _network_client.call("send_message", "RepathResponse", payload, effective_message_id):
+		return {"ok": false, "error": "SendFailed", "detail": "No se pudo enviar RepathResponse."}
+	pending_repath_responses[effective_message_id] = {
+		"type": "RepathResponse",
+		"status": "awaiting_result",
+		"payload": payload.duplicate(true),
+		"unitId": int(payload["unitId"]),
+		"orderId": int(payload["orderId"]),
+	}
+	return {"ok": true, "messageId": effective_message_id, "payload": payload}
+
+
+func retry_rejected_command(message_id: int) -> Dictionary:
+	if _session_controller == null or not _session_controller.can_issue_gameplay():
+		return {"ok": false, "error": "MatchNotRunning", "detail": "La sesión no está en Running."}
+	var command: Dictionary = pending_move_requests.get(message_id, {})
+	var commands := pending_move_requests
+	if command.is_empty():
+		command = pending_repath_responses.get(message_id, {})
+		commands = pending_repath_responses
+	if command.is_empty() or str(command.get("status", "")) != "rejected":
+		return {"ok": false, "error": "CommandNotRetryable", "detail": "No hay un rechazo reintentable con ese messageId."}
+	if _network_client == null or not _network_client.has_method("send_message"):
+		return {"ok": false, "error": "NetworkUnavailable", "detail": "No hay un NetworkClient disponible."}
+	if not _network_client.call("send_message", str(command["type"]), command["payload"], message_id):
+		return {"ok": false, "error": "SendFailed", "detail": "No se pudo reenviar el comando original."}
+	command["status"] = "awaiting_result"
+	commands[message_id] = command
+	return {"ok": true, "messageId": message_id, "payload": command["payload"]}
+
+
+func discard_rejected_command(message_id: int) -> bool:
+	var command: Dictionary = pending_move_requests.get(message_id, {})
+	if not command.is_empty():
+		if str(command.get("status", "")) != "rejected":
+			return false
+		_release_pending_move(message_id, command)
+		pending_move_requests.erase(message_id)
+		return true
+	command = pending_repath_responses.get(message_id, {})
+	if command.is_empty() or str(command.get("status", "")) != "rejected":
+		return false
+	pending_repath_responses.erase(message_id)
+	return true
+
+
+func _distinct_sorted_array(values: Array[int]) -> Array[int]:
+	var seen: Dictionary = {}
+	var result: Array[int] = []
+	for value: Variant in values:
+		if typeof(value) != TYPE_INT:
+			continue
+		var unit_id := int(value)
+		if seen.has(unit_id):
+			continue
+		seen[unit_id] = true
+		result.append(unit_id)
+	result.sort()
+	return result
+
+
+func _get_active_navigation() -> Node:
+	if active_world == null:
+		return null
+	return active_world.get_node_or_null("ClientNavigation")
+
+
+func _invalidate_world_navigation(world: Node3D) -> void:
+	if not is_instance_valid(world):
+		return
+	var navigation: Node = world.get_node_or_null("ClientNavigation")
+	if navigation != null:
+		navigation.call("invalidate")
+
+
+func _calculate_candidate_route_stable(
+	navigation: Node,
+	origin: Vector2,
+	destination: Vector2,
+	minimum_revision: int
+) -> Dictionary:
+	while true:
+		if not is_instance_valid(navigation):
+			return {"ok": false, "error": "NavigationUnavailable", "detail": "La navegación se cerró durante el cálculo."}
+		if bool(navigation.call("is_invalidated")):
+			return {"ok": false, "error": "NavigationUnavailable", "detail": "La navegación se cerró durante el cálculo."}
+		var last_error := str(navigation.get("last_error"))
+		if not last_error.is_empty():
+			return {"ok": false, "error": "NavigationBakeFailed", "detail": last_error}
+		while int(navigation.get("ready_revision")) < minimum_revision:
+			if bool(navigation.call("is_invalidated")):
+				return {"ok": false, "error": "NavigationUnavailable", "detail": "La navegación se cerró durante el cálculo."}
+			last_error = str(navigation.get("last_error"))
+			if not last_error.is_empty():
+				return {"ok": false, "error": "NavigationBakeFailed", "detail": last_error}
+			if int(navigation.get("required_revision")) < minimum_revision:
+				return {"ok": false, "error": "NavigationRevisionUnavailable", "detail": "No se recibió la revisión de mapa solicitada."}
+			await Signal(navigation, "navigation_state_changed")
+			if not is_instance_valid(navigation):
+				return {"ok": false, "error": "NavigationUnavailable", "detail": "La navegación se cerró durante el cálculo."}
+		var revision := int(navigation.get("ready_revision"))
+		if not bool(navigation.call("is_ready_for", revision)):
+			await Signal(navigation, "navigation_state_changed")
+			continue
+		var result: Dictionary = await navigation.call(
+			"calculate_candidate_route",
+			origin,
+			destination,
+			revision
+		)
+		if not is_instance_valid(navigation):
+			return {"ok": false, "error": "NavigationUnavailable", "detail": "La navegación se cerró durante el cálculo."}
+		if bool(navigation.call("is_invalidated")):
+			return {"ok": false, "error": "NavigationUnavailable", "detail": "La navegación se cerró durante el cálculo."}
+		if (
+			int(navigation.get("ready_revision")) != revision
+			or not bool(navigation.call("is_ready_for", revision))
+		):
+			continue
+		if not bool(result.get("ok", false)):
+			return result
+		result["revision"] = revision
+		return result
+	return {"ok": false, "error": "NavigationQueryFailed", "detail": "No se pudo completar la consulta de navegación."}
+
+
+func _allocate_client_message_id() -> int:
+	if next_client_message_id < 1 or next_client_message_id > PROTOCOL_CODEC.MAX_SAFE_MESSAGE_ID:
+		return -1
+	var message_id := next_client_message_id
+	next_client_message_id += 1
+	return message_id
+
+
+func _on_map_revision_changed(revision: int) -> void:
+	navigation_required_revision = revision
+	var navigation := _get_active_navigation()
+	if navigation == null:
+		_report_sync_warning("NavigationUnavailable", "El mundo activo no contiene ClientNavigation.")
+		return
+	navigation.call(
+		"request_revision",
+		active_snapshot.get("map", {}),
+		active_snapshot.get("buildings", []),
+		revision
+	)
+
+
+func _on_navigation_bake_failed(revision: int, detail: String) -> void:
+	_report_sync_warning(
+		"NavigationBakeFailed",
+		"No se pudo preparar la navegación para la revisión %d: %s" % [revision, detail]
+	)
+
+
+func _on_repath_requested(request: Dictionary) -> void:
+	var result: Dictionary = await send_repath_response(request)
+	if not bool(result.get("ok", false)):
+		_report_sync_warning(
+			str(result.get("error", "RepathResponseFailed")),
+			str(result.get("detail", "No se pudo responder a RepathRequested."))
+		)
+		repath_response_failed.emit(
+			str(result.get("error", "RepathResponseFailed")),
+			str(result.get("detail", "No se pudo responder a RepathRequested."))
+		)
+
+
+func _on_session_state_changed(_state: int, state_name: String) -> void:
+	if ["AwaitingAssignment", "Ended", "Disconnected"].has(state_name):
+		_clear_command_tracking()
 
 
 func _on_initial_state_preparation_requested(initialization_id: int, payload: Dictionary) -> void:
@@ -255,7 +680,20 @@ func _handle_command_rejected(payload: Variant) -> void:
 			"CommandRejected requiere messageId seguro y error no vacío."
 		)
 		return
-	command_rejected_received.emit(int(data["messageId"]), str(data["error"]))
+	var message_id := int(data["messageId"])
+	var error_code := str(data["error"])
+	var command: Dictionary = pending_move_requests.get(message_id, {})
+	if not command.is_empty():
+		command["status"] = "rejected"
+		command["error"] = error_code
+		pending_move_requests[message_id] = command
+	else:
+		command = pending_repath_responses.get(message_id, {})
+		if not command.is_empty():
+			command["status"] = "rejected"
+			command["error"] = error_code
+			pending_repath_responses[message_id] = command
+	command_rejected_received.emit(message_id, error_code)
 
 
 func apply_state_events(payload: Variant) -> bool:
@@ -348,6 +786,7 @@ func apply_state_events(payload: Variant) -> bool:
 		)
 
 	var notifications: Array[Dictionary] = []
+	_batch_unit_order_changes.clear()
 	for event_index in range(events.size()):
 		var event_data: Dictionary = events[event_index]
 		var result := _apply_state_event(event_data, tick)
@@ -366,22 +805,25 @@ func apply_state_events(payload: Variant) -> bool:
 	navigation_required_revision = simulated_revision
 	active_snapshot["map"]["revision"] = simulated_revision
 
-	for notification in notifications:
-		match notification["type"]:
+	var repath_notifications: Array[Dictionary] = []
+	for event_notification in notifications:
+		match event_notification["type"]:
 			"map_revision":
-				map_revision_changed.emit(int(notification["revision"]))
+				map_revision_changed.emit(int(event_notification["revision"]))
 			"resources":
-				resources_changed.emit(notification["value"].duplicate(true))
+				resources_changed.emit(event_notification["value"].duplicate(true))
 			"production":
 				production_changed.emit(
-					int(notification["producerId"]),
-					notification["value"].duplicate(true)
+					int(event_notification["producerId"]),
+					event_notification["value"].duplicate(true)
 				)
 			"repath":
-				repath_requested.emit(notification["value"].duplicate(true))
+				repath_notifications.append(event_notification["value"].duplicate(true))
 
 	for command_result: Dictionary in data["commandResults"]:
 		_remember_command_result(command_result)
+	for request: Dictionary in repath_notifications:
+		repath_requested.emit(request)
 
 	return true
 
@@ -408,10 +850,10 @@ func apply_position_update(payload: Variant, received_usec: int = -1) -> bool:
 	var positions: Array = data["units"]
 	var position_ids: Dictionary = {}
 	for index in range(positions.size()):
-		var position: Variant = positions[index]
-		if typeof(position) != TYPE_DICTIONARY:
+		var position_entry: Variant = positions[index]
+		if typeof(position_entry) != TYPE_DICTIONARY:
 			return _fail_synchronization("PositionUpdate.units[%d] debe ser un objeto." % index)
-		var position_data: Dictionary = position
+		var position_data: Dictionary = position_entry
 		if (
 			not position_data.has("id")
 			or not position_data.has("x")
@@ -486,12 +928,12 @@ func _validate_state_event(
 			):
 				return _event_validation_failure("BuildingPlaced contiene identidad o tipo inválido.", simulated_revision)
 			var building_id := int(event["buildingId"])
-			var owner := int(event["owner"])
+			var owner_id := int(event["owner"])
 			var building_type: String = event["buildingType"]
 			if (
-				not _has_player(owner)
+				not _has_player(owner_id)
 				or not BUILDING_VISUAL_PATHS.has(building_type)
-				or _building_visual_path(building_type, owner).is_empty()
+				or _building_visual_path(building_type, owner_id).is_empty()
 			):
 				return _event_validation_failure("BuildingPlaced contiene identidad o tipo inválido.", simulated_revision)
 			if simulated_entities.has(building_id) or simulated_destroyed.has(building_id):
@@ -532,6 +974,8 @@ func _validate_state_event(
 				"buildingType": building_type,
 				"owner": owner,
 			}
+			id_field = "buildingId"
+			expected_kind = "building"
 		"UnitSpawned":
 			var required_unit := _first_missing_key(
 				event,
@@ -574,6 +1018,8 @@ func _validate_state_event(
 				"unitType": unit_type,
 				"owner": int(event["owner"]),
 			}
+			id_field = "unitId"
+			expected_kind = "unit"
 		"BuildingProgressChanged", "BuildingCompleted":
 			id_field = "buildingId"
 			expected_kind = "building"
@@ -778,7 +1224,7 @@ func _validate_command_results(command_results: Array) -> String:
 
 func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 	var event_type: String = event["type"]
-	var notification: Dictionary = {}
+	var event_notification: Dictionary = {}
 	match event_type:
 		"BuildingPlaced":
 			var building: Dictionary = {
@@ -791,7 +1237,7 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 			}
 			var footprint: Dictionary = building["footprint"]
 			var cell_size := float(active_snapshot["map"]["cellSize"])
-			var position := Vector3(
+			var building_position := Vector3(
 				(float(footprint["column"]) + float(footprint["width"]) / 2.0) * cell_size,
 				0.0,
 				(float(footprint["row"]) + float(footprint["height"]) / 2.0) * cell_size
@@ -801,7 +1247,7 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 				path,
 				"Building_%d" % building["buildingId"],
 				building,
-				position
+				building_position
 			)
 			if not bool(building_instance_result["ok"]):
 				return {"ok": false, "detail": str(building_instance_result["detail"])}
@@ -867,16 +1313,22 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 				}
 			)
 		"MapRevisionChanged":
-			notification = {"type": "map_revision", "revision": int(event["revision"])}
+			event_notification = {"type": "map_revision", "revision": int(event["revision"])}
 		"EntityDamaged":
 			_update_entity_state(int(event["entityId"]), {"hp": int(event["hp"])})
 		"EntityDestroyed":
 			var entity_id := int(event["entityId"])
 			var node: Node3D = entities_by_id[entity_id]
+			var entity_kind := str(node.get_meta("entity_kind", ""))
+			if entity_kind == "unit":
+				unit_removed.emit(entity_id)
 			entities_by_id.erase(entity_id)
+			if entity_kind == "unit":
+				pending_move_by_unit.erase(entity_id)
+			accepted_move_intents.erase(entity_id)
 			_position_samples.erase(entity_id)
 			destroyed_entity_ids[entity_id] = true
-			_remove_entity_snapshot(entity_id, node.get_meta("entity_kind", ""))
+			_remove_entity_snapshot(entity_id, entity_kind)
 			node.queue_free()
 		"TreeDepleted":
 			var depleted_tree_id := int(event["treeId"])
@@ -889,19 +1341,26 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 			var respawned_tree: Node3D = entities_by_id[respawned_tree_id]
 			respawned_tree.visible = true
 		"UnitOrderChanged":
+			var unit_id := int(event["unitId"])
 			_update_entity_state(
-				int(event["unitId"]),
+				unit_id,
 				{"orderId": int(event["orderId"]), "order": event["kind"]}
 			)
+			accepted_move_intents.erase(unit_id)
+			_batch_unit_order_changes.append({
+				"unitId": unit_id,
+				"orderId": int(event["orderId"]),
+				"kind": str(event["kind"]),
+			})
 		"RepathRequested":
-			notification = {"type": "repath", "value": event.duplicate(true)}
+			event_notification = {"type": "repath", "value": event.duplicate(true)}
 		"ProductionChanged":
 			var producer_id := int(event["producerId"])
 			var production := event.duplicate(true)
 			production.erase("type")
 			production.erase("index")
 			_replace_own_production(producer_id, production)
-			notification = {
+			event_notification = {
 				"type": "production",
 				"producerId": producer_id,
 				"value": production,
@@ -909,10 +1368,10 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 		"ResourcesChanged":
 			var resources := {"wood": int(event["wood"]), "food": int(event["food"])}
 			active_snapshot["ownResources"] = resources.duplicate(true)
-			notification = {"type": "resources", "value": resources}
+			event_notification = {"type": "resources", "value": resources}
 
-	if not notification.is_empty():
-		return {"ok": true, "notification": notification}
+	if not event_notification.is_empty():
+		return {"ok": true, "notification": event_notification}
 	return {"ok": true}
 
 
@@ -1036,10 +1495,64 @@ func _remember_command_result(result: Dictionary) -> void:
 	while _recent_command_result_ids.size() > MAX_RECENT_COMMAND_RESULTS:
 		var expired_id: int = _recent_command_result_ids.pop_front()
 		recent_command_results.erase(expired_id)
+	var pending_move: Dictionary = pending_move_requests.get(client_command_id, {})
+	if not pending_move.is_empty():
+		_release_pending_move(client_command_id, pending_move)
+		pending_move_requests.erase(client_command_id)
+		_reconcile_accepted_move(pending_move, result)
+	pending_repath_responses.erase(client_command_id)
 	command_result_received.emit(client_command_id, result.duplicate(true))
 
 
+func _release_pending_move(message_id: int, command: Dictionary) -> void:
+	for unit_id_value: Variant in command.get("unitIds", []):
+		var unit_id := int(unit_id_value)
+		if int(pending_move_by_unit.get(unit_id, -1)) == message_id:
+			pending_move_by_unit.erase(unit_id)
+
+
+func _reconcile_accepted_move(command: Dictionary, result: Dictionary) -> void:
+	if not ["Accepted", "PartiallyAccepted"].has(str(result.get("outcome", ""))):
+		return
+	var destination_data: Dictionary = command.get("payload", {}).get("destination", {})
+	if destination_data.is_empty():
+		return
+	var destination := Vector2(
+		float(destination_data.get("x", 0.0)),
+		float(destination_data.get("z", 0.0))
+	)
+	for entity_result_value: Variant in result.get("entityResults", []):
+		if typeof(entity_result_value) != TYPE_DICTIONARY:
+			continue
+		var entity_result: Dictionary = entity_result_value
+		if entity_result.get("error", null) != null:
+			continue
+		var unit_id := int(entity_result.get("entityId", 0))
+		if not command.get("unitIds", []).has(unit_id):
+			continue
+		var matching_changes: Array[Dictionary] = []
+		for order_change: Dictionary in _batch_unit_order_changes:
+			if int(order_change["unitId"]) == unit_id and str(order_change["kind"]) == "Move":
+				matching_changes.append(order_change)
+		if matching_changes.size() != 1:
+			continue
+		var unit: Node3D = entities_by_id.get(unit_id)
+		if unit == null:
+			continue
+		var current_state: Dictionary = unit.get_meta("entity_state", {})
+		if (
+			str(current_state.get("order", "")) != "Move"
+			or int(current_state.get("orderId", 0)) != int(matching_changes[0]["orderId"])
+		):
+			continue
+		accepted_move_intents[unit_id] = {
+			"orderId": int(matching_changes[0]["orderId"]),
+			"destination": destination,
+		}
+
+
 func _reset_synchronization_cursors() -> void:
+	_clear_command_tracking()
 	initial_state_tick = int(active_snapshot["tick"])
 	last_state_events_tick = initial_state_tick
 	last_position_update_tick = initial_state_tick
@@ -1066,6 +1579,7 @@ func _reset_synchronization_cursors() -> void:
 
 
 func _clear_synchronization_state() -> void:
+	_clear_command_tracking()
 	initial_state_tick = -1
 	last_state_events_tick = -1
 	last_position_update_tick = -1
@@ -1080,14 +1594,23 @@ func _clear_synchronization_state() -> void:
 	_position_clock_received_usec = 0
 
 
+func _clear_command_tracking() -> void:
+	pending_move_requests.clear()
+	pending_repath_responses.clear()
+	pending_move_by_unit.clear()
+	accepted_move_intents.clear()
+	_units_calculating_move.clear()
+	_batch_unit_order_changes.clear()
+
+
 func _add_position_sample(
 	entity_id: int,
 	tick: int,
-	position: Vector2,
+	world_position: Vector2,
 	received_usec: int
 ) -> void:
 	var samples: Array = _position_samples.get(entity_id, [])
-	var sample := {"tick": tick, "position": position, "received_usec": received_usec}
+	var sample := {"tick": tick, "position": world_position, "received_usec": received_usec}
 	if not samples.is_empty() and int(samples[-1]["tick"]) == tick:
 		samples[-1] = sample
 	else:
@@ -1098,10 +1621,10 @@ func _add_position_sample(
 
 	var node: Node3D = entities_by_id[entity_id]
 	var state: Dictionary = node.get_meta("entity_state", {}).duplicate(true)
-	state["x"] = position.x
-	state["z"] = position.y
+	state["x"] = world_position.x
+	state["z"] = world_position.y
 	node.set_meta("entity_state", state)
-	node.set_meta("official_position", position)
+	node.set_meta("official_position", world_position)
 	_store_entity_snapshot(entity_id, state)
 
 
@@ -1743,6 +2266,19 @@ func _build_staged_world(state: Dictionary, initialization_id: int) -> Dictionar
 		var node: Node3D = instance_result["node"]
 		trees_container.add_child(node)
 		entity_nodes[int(tree["treeId"])] = node
+
+	var navigation := CLIENT_NAVIGATION_SCRIPT.new() as Node3D
+	if navigation == null:
+		staged_world.free()
+		return {"ok": false, "detail": "No se pudo crear ClientNavigation."}
+	navigation.name = "ClientNavigation"
+	navigation.call("configure", map, state["buildings"], int(map.get("revision", 0)))
+	var bake_failed_callable := Callable(self, "_on_navigation_bake_failed")
+	var signal_error: Error = navigation.connect("navigation_bake_failed", bake_failed_callable)
+	if signal_error != OK:
+		staged_world.free()
+		return {"ok": false, "detail": "No se pudo enlazar navigation_bake_failed."}
+	staged_world.add_child(navigation)
 
 	return {"ok": true, "world": staged_world, "entities": entity_nodes}
 
