@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using Rts.Server;
 using Rts.Server.Composition;
 using Rts.Server.Configuration;
+using Rts.Server.Diagnostics;
 using Rts.Server.Validation;
 using Rts.Shared.Match;
 using Rts.Shared.World;
@@ -11,13 +12,15 @@ using Rts.Shared.World;
 // juego; el bucle de ticks vive en Simulation.
 
 // Logging de consola asincrónico: escribe en segundo plano y no frena al hilo de Simulation (D-083).
+// El diagnóstico de Simulation pasa en todos los niveles: qué escribe lo decide SimulationConfig.Diagnostics, una sola perilla (D-100).
 using ILoggerFactory loggers = LoggerFactory.Create(builder => builder
     .AddSimpleConsole(options =>
     {
       options.SingleLine = true;
       options.TimestampFormat = "HH:mm:ss.fff ";
     })
-    .SetMinimumLevel(LogLevel.Information));
+    .SetMinimumLevel(LogLevel.Information)
+    .AddFilter(LoggingSimulationDiagnostics.CategoryName, LogLevel.Debug));
 ILogger log = loggers.CreateLogger("Rts.Server");
 
 // 1. Argumentos.

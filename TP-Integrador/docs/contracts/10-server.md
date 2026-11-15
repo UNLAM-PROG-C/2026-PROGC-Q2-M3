@@ -36,6 +36,7 @@ Se ejecuta **una vez** por proceso:
 - **RECOMENDADO (D-083): configuración y logging.**
   - **Configuración:** un `server.json` con una sección por módulo, leído con el lector JSON de .NET. La ruta del mapa es relativa al archivo de configuración. Por línea de comandos se pueden pasar `--config`, `--port` y `--validate-only`.
   - **Logging:** el de consola estándar de .NET (`Microsoft.Extensions.Logging.Console`), que escribe en segundo plano y no frena el tick. El Server es el único que escribe: traduce a `ILogger` el diagnóstico de Simulation (DECIDIDO D-095) y les pasa `ILogger<T>` a GameSession y Networking (RECOMENDADO D-096).
+  - **Diagnóstico de Simulation (DECIDIDO D-100):** lo escribe `LoggingSimulationDiagnostics` (`Rts.Server.Diagnostics`), categoría `Rts.Simulation`. Qué se escribe lo decide solo `SimulationConfig.Diagnostics`; por eso `Program` deja pasar esa categoría en todos los niveles. La composición lo crea junto al loop y llama `WriteFinalSummary()` cuando la sesión terminó.
 - **DECIDIDO (D-084): apagado ordenado.**
   - El primer Ctrl+C (o SIGTERM) cancela `RunAsync`, y GameSession lo recibe como `ShutdownRequested`.
   - Si no hay otro resultado, la partida termina como final técnico con motivo nuevo `ServerShutdown`, sin declarar un "error" que no ocurrió.

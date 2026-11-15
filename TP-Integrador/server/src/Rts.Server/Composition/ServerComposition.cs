@@ -45,8 +45,9 @@ internal static class ServerComposition
     //      var modules = new DomainModules(<reglas y calculadores de los cinco módulos de dominio>);
     //      ISimulationEngine engine = SimulationFactory.CreateEngine(
     //          config.Simulation, map, EconomyParameters.FromConfig(config.Economy), commands, modules, TimeProvider.System);
+    //      var diagnostics = new LoggingSimulationDiagnostics(loggers, config.Simulation);   // D-095, D-098, D-100
     //      ISimulationLoop simulation = SimulationFactory.CreateLoop(
-    //          engine, config.Simulation, stateSync, inbox, <adaptador de ISimulationDiagnostics a ILogger, D-095>, TimeProvider.System);
+    //          engine, config.Simulation, stateSync, inbox, diagnostics, TimeProvider.System);
     //
     // 6. Consumidor de sesión (GameSession): el único que necesita a casi todos, por eso va al final.
     //      var effects = new SessionEffectsAdapter(network, stateSync);
@@ -56,6 +57,7 @@ internal static class ServerComposition
     // Arranque y fin (contrato 10 §5):
     //      Task listening = network.RunAsync(shutdown);       // aceptación en segundo plano
     //      MatchResult result = await session.RunAsync(shutdown); // hasta Ended: ya detuvo ticks y drenó conexiones
+    //      diagnostics.WriteFinalSummary();                    // los ticks ya están detenidos: no llegan más (D-097)
     //      await listening;                                    // termina al completar el drenaje
     //      return result;
     throw new NotImplementedException(

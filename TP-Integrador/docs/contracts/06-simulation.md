@@ -188,7 +188,7 @@ En `Summary` se registran resúmenes y errores; en `Debug`, el detalle por tick.
 
 Si la falla fue en una fase, las métricas de ese tick llegan por `OnTickCompleted` justo después del reporte.
 
-**Niveles (DECIDIDO D-098)**, que aplica quien implementa el observador (el adaptador del Server):
+**Niveles (DECIDIDO D-098)**, que aplica quien implementa el observador (el adaptador del Server, `LoggingSimulationDiagnostics`, D-100):
 
 | Nivel | Qué se registra |
 |---|---|
