@@ -1,7 +1,14 @@
 using Microsoft.Extensions.Logging;
+using Rts.GameSession;
+using Rts.GameSession.Model;
+using Rts.Networking;
 using Rts.Server.Configuration;
+using Rts.Shared.Ids;
 using Rts.Shared.Match;
 using Rts.Shared.World;
+using Rts.Simulation.Commands;
+using Rts.StateSync;
+using Rts.StateSync.Projection;
 
 namespace Rts.Server.Composition;
 
@@ -24,20 +31,10 @@ internal static class ServerComposition
     ArgumentNullException.ThrowIfNull(catalog);
     ArgumentNullException.ThrowIfNull(loggers);
 
-    // Orden de construcción (contrato 10 §4). Cada paso solo usa lo creado en pasos anteriores:
-    //
-    // 1. Cola global de comandos (Simulation): ICommandSink para Networking, ICommandSource para Simulation.
-    //      var commands = new CommandQueue(config.Simulation.CommandQueueCapacity);
-    //
-    // 2. Buzón y vista de sesión (GameSession): pasivos, sin dependencias.
-    //      var inbox = new SessionInbox(config.GameSession.EventQueueCapacity);
-    //      var sessionView = new SessionStateStore(GameSessionState.Initial(SessionId.New()));
-    //
-    // 3. Networking: deposita en el buzón, lee la vista y admite en la cola.
-    //      var network = new NetworkServer(config.Networking, inbox, sessionView, commands, TimeProvider.System, loggers);
-    //
-    // 4. State Sync: proyecta y encola en las colas de salida de Networking.
-    //      var stateSync = new StateSyncPublisher(new StateProjector(config.StateSync, config.Simulation.TickRate), network, catalog);
+    // Orden de construcción (contrato 10 §4). Cada paso solo usa lo creado en pasos anteriores.
+    TransportPieces transport = CreateTransport(config, catalog, loggers); // Pasos 1 a 4.
+
+    // PENDIENTE: lo que sigue todavía es borrador (las variables sueltas pasan a ser las de transport).
     //
     // 5. Simulation: el mapa, el motor con los cinco módulos de dominio y el loop de 20 Hz. Publica en State Sync y avisa su
     //    resultado al buzón.
@@ -60,8 +57,31 @@ internal static class ServerComposition
     //      diagnostics.WriteFinalSummary();                    // los ticks ya están detenidos: no llegan más (D-097)
     //      await listening;                                    // termina al completar el drenaje
     //      return result;
+    _ = transport;
     throw new NotImplementedException(
-        "La composición necesita las implementaciones de los módulos (cola de comandos, buzón y vista de sesión, NetworkServer, "
-        + "StateSyncPublisher, SimulationEngine/Loop, SessionHost). Se completa en la vertical slice (AGENTS §8).");
+        "La composición todavía no crea Simulation (paso 5) ni el host de sesión (paso 6). Se completa en la vertical slice (AGENTS §8).");
+  }
+
+  /// <summary>
+  /// Pasos 1 a 4 (contrato 10 §4), "buzones primero" (D-082): primero lo pasivo (cola, buzón, vista), después Networking, que
+  /// deposita en esas tres, y por último State Sync, que escribe en las colas de salida de Networking. Crear no arranca nada.
+  /// </summary>
+  internal static TransportPieces CreateTransport(ServerConfig config, GameCatalog catalog, ILoggerFactory loggers)
+  {
+    // 1. Cola global de comandos (Simulation).
+    var commands = new CommandQueue(config.Simulation.CommandQueueCapacity);
+
+    // 2. Buzón y vista de sesión (GameSession): pasivos, sin dependencias. La sesión empieza esperando jugadores.
+    var inbox = new SessionInbox(config.GameSession.EventQueueCapacity);
+    var sessionView = new SessionStateStore(GameSessionState.Initial(SessionId.New()));
+
+    // 3. Networking: deposita eventos en el buzón, lee la vista para saber quién es quién y admite comandos en la cola.
+    var network = new NetworkServer(config.Networking, inbox, sessionView, commands, TimeProvider.System, loggers);
+
+    // 4. State Sync: proyecta cada tick y lo encola en las colas de salida de Networking.
+    var projector = new StateProjector(config.StateSync, config.Simulation.TickRate);
+    var stateSync = new StateSyncPublisher(projector, network, catalog);
+
+    return new TransportPieces(commands, inbox, sessionView, network, stateSync);
   }
 }
