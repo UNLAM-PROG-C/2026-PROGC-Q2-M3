@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Rts.GameSession.Actions;
 using Rts.GameSession.Configuration;
 using Rts.GameSession.Events;
@@ -22,6 +23,10 @@ namespace Rts.GameSession;
 /// como eventos (<see cref="SimulationStopped"/>, <see cref="ShutdownCompleted"/>). No toma locks sobre WorldState ni llama a
 /// módulos de dominio (07 §8).
 /// </para>
+/// <para>
+/// Registra en el log (D-096) cada cambio de estado, las plazas, los cierres, el resultado oficial y, con su excepción, toda
+/// falla que absorbe para que la sesión termine igual. El texto lo arma <see cref="SessionHostLog"/>; quien escribe es el Server.
+/// </para>
 /// Se usa una sola vez: para otra partida se lanza el servidor de nuevo (D-058).
 /// </summary>
 public sealed class SessionHost : ISessionHost
@@ -34,6 +39,7 @@ public sealed class SessionHost : ISessionHost
   private readonly ISessionEffects _effects;
   private readonly ISimulationControl _simulation;
   private readonly TimeProvider _clock;
+  private readonly ILogger<SessionHost> _logger;
 
   // Solo las toca el consumidor: se agregan mientras corre el bucle y se liberan al terminar.
   private readonly List<ITimer> _timers = [];
@@ -47,7 +53,8 @@ public sealed class SessionHost : ISessionHost
       ISessionEffects effects,
       ISimulationControl simulation,
       GameSessionConfig config,
-      TimeProvider clock)
+      TimeProvider clock,
+      ILogger<SessionHost> logger)
   {
     _inbox = inbox ?? throw new ArgumentNullException(nameof(inbox));
     _store = store ?? throw new ArgumentNullException(nameof(store));
@@ -55,6 +62,7 @@ public sealed class SessionHost : ISessionHost
     _effects = effects ?? throw new ArgumentNullException(nameof(effects));
     _simulation = simulation ?? throw new ArgumentNullException(nameof(simulation));
     _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+    _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     ArgumentNullException.ThrowIfNull(config);
     config.Validate();
   }
@@ -97,6 +105,7 @@ public sealed class SessionHost : ISessionHost
     {
       SessionEvent sessionEvent = await _inbox.ReadAsync(CancellationToken.None);
       SessionTransition transition = _machine.Apply(state, sessionEvent);
+      SessionHostLog.Transition(_logger, state, sessionEvent, transition.State);
       state = transition.State;
       _store.Publish(state);
       Execute(transition.Actions, state.Session);
@@ -110,6 +119,7 @@ public sealed class SessionHost : ISessionHost
   {
     foreach (SessionAction action in actions)
     {
+      SessionHostLog.Action(_logger, action);
       Execute(action, session);
     }
   }
@@ -153,6 +163,7 @@ public sealed class SessionHost : ISessionHost
     }
     catch (Exception exception)
     {
+      _logger.LogError(exception, "Sesión: no se pudo preparar el estado inicial {Initialization}; la partida termina con CriticalError", prepare.Initialization);
       _inbox.PostInternal(new InitializationFailed(exception.Message));
     }
   }
@@ -169,8 +180,8 @@ public sealed class SessionHost : ISessionHost
   }
 
   /// <summary>
-  /// Arranca el loop de ticks. Que falle no está previsto en el contrato: SUPUESTO TEMPORAL, se informa como falla crítica para que
-  /// la sesión termine ordenada en vez de quedar en Running sin ticks. Pendiente de confirmar con Luca (dueño de Simulation).
+  /// Arranca el loop de ticks. Si falla, se informa como falla crítica para que la sesión termine ordenada en vez de quedar en
+  /// Running sin ticks (DECIDIDO D-086, confirmada por el dueño de Simulation).
   /// </summary>
   private void BeginTicks()
   {
@@ -178,8 +189,9 @@ public sealed class SessionHost : ISessionHost
     {
       _simulation.StartTicks();
     }
-    catch (Exception)
+    catch (Exception exception)
     {
+      _logger.LogError(exception, "Sesión: no se pudieron arrancar los ticks; la partida termina con CriticalError (D-086)");
       _inbox.OnSimulationResult(MatchResult.CriticalError(null));
     }
   }
@@ -195,8 +207,9 @@ public sealed class SessionHost : ISessionHost
     {
       lastConfirmed = await _simulation.StopTicksAsync();
     }
-    catch (Exception)
+    catch (Exception exception)
     {
+      _logger.LogError(exception, "Sesión: falló la detención de los ticks; el resultado se fija sin último tick");
       lastConfirmed = null;
     }
 
@@ -210,9 +223,10 @@ public sealed class SessionHost : ISessionHost
     {
       await _effects.DrainAndCloseAllAsync();
     }
-    catch (Exception)
+    catch (Exception exception)
     {
-      // Se ignora: Networking acota el drenaje con su plazo, y la sesión debe terminar igual.
+      // No se propaga: Networking acota el drenaje con su plazo, y la sesión debe terminar igual.
+      _logger.LogError(exception, "Sesión: falló el drenaje de las conexiones; la sesión termina igual");
     }
     finally
     {

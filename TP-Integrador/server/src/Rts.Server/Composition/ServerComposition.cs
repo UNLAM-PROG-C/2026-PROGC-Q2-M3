@@ -46,7 +46,7 @@ internal static class ServerComposition
     // Orden de construcción (contrato 10 §4). Cada paso solo usa lo creado en pasos anteriores.
     TransportPieces transport = CreateTransport(config, catalog, loggers);           // Pasos 1 a 4.
     SimulationPieces simulation = CreateSimulation(config, map, transport, loggers); // Paso 5.
-    ISessionHost session = CreateSession(config, transport, simulation);             // Paso 6.
+    ISessionHost session = CreateSession(config, transport, simulation, loggers);    // Paso 6.
 
     return await RunAsync(transport.Network, session, simulation.Diagnostics, shutdown);
   }
@@ -127,14 +127,16 @@ internal static class ServerComposition
   /// <summary>
   /// Paso 6 (contrato 10 §4): el consumidor único de la sesión. Va al final porque es el que necesita a casi todos: lee del buzón,
   /// escribe la vista, habla con la red y State Sync por el adaptador de efectos (10 §5) y controla los ticks con el loop.
-  /// Sin logger: la O-011 sigue abierta (propuesta D-096).
+  /// Recibe su <c>ILogger</c> de la fábrica de la composición (D-096, que cerró la O-011): el único que escribe es el Server.
   /// </summary>
-  internal static ISessionHost CreateSession(ServerConfig config, TransportPieces transport, SimulationPieces simulation)
+  internal static ISessionHost CreateSession(
+      ServerConfig config, TransportPieces transport, SimulationPieces simulation, ILoggerFactory loggers)
   {
     var effects = new SessionEffectsAdapter(transport.Network, transport.StateSync);
     var machine = new SessionStateMachine(config.GameSession);
     return new SessionHost(
-        transport.Inbox, transport.SessionView, machine, effects, simulation.Loop, config.GameSession, TimeProvider.System);
+        transport.Inbox, transport.SessionView, machine, effects, simulation.Loop, config.GameSession, TimeProvider.System,
+        loggers.CreateLogger<SessionHost>());
   }
 
   /// <summary>
