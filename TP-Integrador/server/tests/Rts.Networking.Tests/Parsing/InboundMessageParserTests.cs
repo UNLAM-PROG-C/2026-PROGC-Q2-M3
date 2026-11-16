@@ -1,5 +1,6 @@
 using System.Text;
 using Rts.Networking.Parsing;
+using Rts.Protocol;
 using Rts.Shared.Collections;
 using Rts.Shared.Commands;
 using Rts.Shared.Entities;
@@ -116,6 +117,18 @@ public class InboundMessageParserTests
     var result = ParseLine($$"""{"protocolVersion":1,"type":"{{type}}"}""");
 
     AssertViolation(result, NetworkErrors.UnknownType);
+  }
+
+  // Todo tipo que un cliente puede enviar tiene su conversión: ninguno cae en el default del parser.
+  public static TheoryData<string> ClientToServerTypes => [.. ProtocolMessageTypes.ClientToServer];
+
+  [Theory]
+  [MemberData(nameof(ClientToServerTypes))]
+  public void Parse_EveryClientToServerType_IsHandledByTheParser(string type)
+  {
+    var result = ParseLine("{\"protocolVersion\":1,\"type\":\"" + type + "\",\"messageId\":1}");
+
+    Assert.NotEqual(NetworkErrors.UnknownType, result.Error);
   }
 
   // El messageId se devuelve en el error cuando se pudo leer, para que el cliente correlacione.

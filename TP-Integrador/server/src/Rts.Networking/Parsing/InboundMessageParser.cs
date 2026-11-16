@@ -113,8 +113,8 @@ internal sealed class InboundMessageParser : IInboundMessageParser
           dto => new TrainUnitCommand(new EntityId(dto.ProducerId), dto.UnitType)),
       ProtocolMessageTypes.RepathResponse => ParseGameplay<RepathResponseCommandDto>(type, payload, messageId, BuildRepathResponse),
 
-      // Llegan acá los comandos de gameplay de la fase 2: se reconocen pero todavía no se convierten (decisión provisoria).
-      _ => ParseResult.Violation(NetworkErrors.UnknownType, messageId, $"El tipo '{type}' todavía no está soportado."),
+      // Solo llega acá un tipo agregado a ClientToServer sin su conversión: una prueba lo detecta antes de que pase.
+      _ => ParseResult.Violation(NetworkErrors.UnknownType, messageId, $"El tipo '{type}' no tiene conversión en el parser."),
     };
   }
 
