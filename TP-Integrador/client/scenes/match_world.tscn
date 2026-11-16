@@ -11,6 +11,11 @@
 [ext_resource type="Script" path="res://scripts/unit_animation_controller.gd" id="9_unit_animation"]
 [ext_resource type="Script" path="res://scripts/ui/entity_status_overlay.gd" id="10_status_overlay"]
 [ext_resource type="Theme" path="res://themes/rts_theme.tres" id="11_theme"]
+[ext_resource type="Script" path="res://scripts/match_cursor.gd" id="12_match_cursor"]
+[ext_resource type="Script" path="res://scripts/match_music.gd" id="13_match_music"]
+[ext_resource type="Script" path="res://scripts/match_sfx.gd" id="14_match_sfx"]
+[ext_resource type="Script" path="res://scripts/match_pause.gd" id="15_match_pause"]
+[ext_resource type="Script" path="res://scripts/ui/options_menu.gd" id="16_options_menu"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_world"]
 panorama = ExtResource("2_sky")
@@ -36,11 +41,31 @@ script = ExtResource("4_world")
 [node name="UnitCommandController" type="Node" parent="." unique_id=1989907308]
 script = ExtResource("5_unit_controller")
 
+[node name="MatchPause" type="Node" parent="." node_paths=PackedStringArray("pause_menu", "placement_controller")]
+script = ExtResource("15_match_pause")
+pause_menu = NodePath("../CanvasLayer/PauseMenu")
+placement_controller = NodePath("../BuildPlacementController")
+
 [node name="BuildPlacementController" type="Node3D" parent="."]
 script = ExtResource("8_build_placement")
 
 [node name="UnitAnimationController" type="Node" parent="."]
 script = ExtResource("9_unit_animation")
+
+[node name="MatchCursor" type="Node" parent="." node_paths=PackedStringArray("camera_rig", "command_controller", "placement_controller")]
+script = ExtResource("12_match_cursor")
+camera_rig = NodePath("../RTSCamera")
+command_controller = NodePath("../UnitCommandController")
+placement_controller = NodePath("../BuildPlacementController")
+
+[node name="MatchMusic" type="Node" parent="."]
+script = ExtResource("13_match_music")
+
+[node name="MatchSfx" type="Node" parent="." node_paths=PackedStringArray("command_controller", "placement_controller", "animation_controller")]
+script = ExtResource("14_match_sfx")
+command_controller = NodePath("../UnitCommandController")
+placement_controller = NodePath("../BuildPlacementController")
+animation_controller = NodePath("../UnitAnimationController")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=80036505]
 transform = Transform3D(0.7253744, 0.3337209, -0.60204846, 0, 0.8746197, 0.4848096, 0.68835455, -0.35166848, 0.6344268, 0, 0, 0)
@@ -99,3 +124,14 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("6_session_screens")
+
+[node name="PauseMenu" type="Control" parent="CanvasLayer"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("16_options_menu")
+back_text = "Volver a la partida"

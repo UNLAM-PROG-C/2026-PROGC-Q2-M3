@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://qa0vbjhydpwf"]
 
 [ext_resource type="PackedScene" uid="uid://d2po8dbg0jmgl" path="res://assets/buildings/blue/building_tower_B_blue.gltf" id="1_pb3th"]
+[ext_resource type="PackedScene" uid="uid://bggavbt61rxgn" path="res://assets/buildings/neutral/building_scaffolding.gltf" id="2_3uqjm"]
 
 [node name="Tower" type="Node3D" unique_id=468697195]
 
@@ -8,3 +9,7 @@
 
 [node name="building_tower_B_blue2" parent="Colored" unique_id=501454773 instance=ExtResource("1_pb3th")]
 transform = Transform3D(0.8, 0, 0, 0, 0.8, 0, 0, 0, 0.8, 0, 0, 0)
+
+[node name="Scaffolding" type="Node3D" parent="." unique_id=472321248]
+
+[node name="building_scaffolding2" parent="Scaffolding" unique_id=76127485 instance=ExtResource("2_3uqjm")]

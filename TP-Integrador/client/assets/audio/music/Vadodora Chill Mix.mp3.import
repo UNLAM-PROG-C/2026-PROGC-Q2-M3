@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://v131t0bah5vn"
+path="res://.godot/imported/Vadodora Chill Mix.mp3-c2d3e9126b91f97811c1d48c0f66608e.mp3str"
+
+[deps]
+
+source_file="res://assets/audio/music/Vadodora Chill Mix.mp3"
+dest_files=["res://.godot/imported/Vadodora Chill Mix.mp3-c2d3e9126b91f97811c1d48c0f66608e.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

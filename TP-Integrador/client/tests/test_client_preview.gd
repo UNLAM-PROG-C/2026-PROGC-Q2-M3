@@ -27,6 +27,22 @@ func _run() -> void:
 	_check(session.get_state_name() == "Running", "Quick start reaches Running with examples 01, 02 and 04.")
 	_check(world.active_world != null and hud.visible, "The world and the HUD are shown.")
 	_check(_sent_types(preview).has("ClientReady"), "Loading the world sends ClientReady through the simulated network.")
+	for player_id: int in [1, 2]:
+		var types: Array = []
+		var soldiers := 0
+		for node: Node in world.entities_by_id.values():
+			var state: Dictionary = node.get_meta("entity_state", {})
+			if int(state.get("owner", 0)) != player_id:
+				continue
+			if node.get_meta("entity_kind", "") == "building":
+				types.append(state["buildingType"])
+			elif state.get("unitType", "") == "Soldier":
+				soldiers += 1
+		types.sort()
+		_check(types == ["Barracks", "Farm", "Fence", "MainCenter", "Tower"], "Player %d has one building of each type: %s" % [player_id, str(types)])
+		_check(soldiers == 2, "Player %d has soldiers." % player_id)
+	_check(not world.get_own_production(102).is_empty(), "The own barracks can train in the preview.")
+	_check(world.get_own_production(112).is_empty(), "The rival barracks queue stays private.")
 
 	var applied := 0
 	while preview.apply_next_example():
