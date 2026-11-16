@@ -132,7 +132,7 @@ El código del servidor vive en `server/` (solución `server/Rts.slnx`; `dotnet 
 
 Todos los asuntos abiertos detectados en `docs/modules/` (O-001 a O-010) están resueltos. En `Rts.Server` ya funcionan la carga y validación de la configuración, el catálogo y el apagado ordenado (`rts-server --validate-only`).
 
-**Implementado:** Simulation completó sus Fases 1 y 2 contra fakes de los módulos de dominio (cola de comandos, cargador de mapa, motor con las 9 fases del tick, los 8 handlers de comandos, loop de 20 Hz con supervisión y `SimulationFactory`; decisiones D-087 a D-094) y su Fase 3 de diagnóstico (métricas, resúmenes, fallas críticas con motivo, el adaptador de log del Server y la medición de paralelo frente a secuencial; D-095 a D-101). Las pruebas de integración (`server/tests/Rts.Integration.Tests`) ya corren el motor con Economy, Combat y Movement reales. Ver el estado del contrato 06.
+**Implementado:** Simulation completó sus Fases 1 y 2 contra fakes de los módulos de dominio (cola de comandos, cargador de mapa, motor con las 9 fases del tick, los 8 handlers de comandos, loop de 20 Hz con supervisión y `SimulationFactory`; decisiones D-087 a D-094) y su Fase 3 de diagnóstico (métricas, resúmenes, fallas críticas con motivo, el adaptador de log del Server y la medición de paralelo frente a secuencial; D-095 a D-101). Las pruebas de integración (`server/tests/Rts.Integration.Tests`) ya corren el motor con Economy, Combat, Movement y Construction reales; solo Production sigue con un stub. Ver el estado del contrato 06.
 
 **PENDIENTE:**
 

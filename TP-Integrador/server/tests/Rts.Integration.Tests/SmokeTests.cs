@@ -11,7 +11,7 @@ using Rts.Simulation.State;
 namespace Rts.Integration.Tests;
 
 /// <summary>
-/// Prueba de humo de la integración: el motor de Simulation con Economy, Combat y Movement <b>reales</b>, la configuración de
+/// Prueba de humo de la integración: el motor de Simulation con Economy, Combat, Movement y Construction <b>reales</b>, la configuración de
 /// <c>server.example.json</c> y comandos como los mandaría un cliente. No busca cubrir reglas (eso lo hacen las pruebas de cada
 /// módulo), sino que las piezas encajen: que un comando aceptado termine en el efecto esperado y que la partida llegue a su fin.
 /// Cada escenario corre con Economy ∥ Combat en paralelo y en secuencia, y las dos corridas tienen que ser idénticas (D-051).
@@ -58,8 +58,7 @@ public class SmokeTests
     AssertIdenticalRuns(parallel, sequential);
   }
 
-  [Fact(Skip = "Pendiente de Movement (Ivan): avanzar hacia el objetivo en órdenes de tarea, contrato 04 §5 pasos 5 a 7. "
-      + "Hoy MovementCalculator solo mueve órdenes Move, lo que pide el work-plan para la vertical slice.")]
+  [Fact]
   public void WorkerSentToGatherFromAfar_WalksToTheTreeAndIsCreditedWood()
   {
     ServerConfig config = IntegrationMatch.LoadConfig();

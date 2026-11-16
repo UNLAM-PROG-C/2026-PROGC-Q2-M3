@@ -1,4 +1,5 @@
 using Rts.Combat;
+using Rts.Construction;
 using Rts.Economy;
 using Rts.Integration.Tests.Stubs;
 using Rts.Movement;
@@ -14,8 +15,8 @@ using Rts.Simulation.State;
 namespace Rts.Measurement;
 
 /// <summary>
-/// Una partida para medir: el motor de <see cref="SimulationFactory"/> con Economy, Combat y Movement reales (Construction y
-/// Production son stubs porque todavía no existen) y la cola de comandos real. Los ticks se avanzan a mano, sin el loop de 20 Hz:
+/// Una partida para medir: el motor de <see cref="SimulationFactory"/> con Economy, Combat, Movement y Construction reales
+/// (Production es un stub porque todavía no existe) y la cola de comandos real. Los ticks se avanzan a mano, sin el loop de 20 Hz:
 /// se mide el cálculo, no la espera entre ticks.
 /// </summary>
 internal sealed class MeasuredMatch
@@ -83,7 +84,6 @@ internal sealed class MeasuredMatch
   private static DomainModules AvailableModules(ServerConfig config)
   {
     var movementRules = new MovementRules(config.Movement, config.Simulation.TickRate);
-    var construction = new ConstructionStub(config.Construction);
     var production = new ProductionStub();
     return new DomainModules(
         movementRules,
@@ -92,8 +92,8 @@ internal sealed class MeasuredMatch
         new EconomyCalculator(config.Economy),
         new CombatRules(config.Combat),
         new CombatCalculator(config.Combat),
-        construction,
-        construction,
+        new ConstructionRules(config.Construction),
+        new ConstructionCalculator(config.Construction),
         production,
         production);
   }
