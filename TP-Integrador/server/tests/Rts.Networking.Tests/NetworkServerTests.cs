@@ -381,4 +381,51 @@ public class NetworkServerTests
     await client.SendLineAsync(PingLine(4));
     Assert.Equal(PongLine(4), await client.ReadLineAsync());
   }
+
+  // ───────────── Monitor: heartbeat (08 §8) ─────────────
+
+  private static readonly TimeSpan ShortHeartbeat = TimeSpan.FromMilliseconds(200);
+
+  private static NetworkServerHarness HarnessWithShortHeartbeat() =>
+      new(config => config with { PingIdleInterval = ShortHeartbeat, PongTimeout = ShortHeartbeat });
+
+  [Fact]
+  public async Task AnIdleClient_ReceivesAPing()
+  {
+    await using var harness = HarnessWithShortHeartbeat();
+    await harness.StartAsync();
+    var (client, _) = await ConnectWithHelloAsync(harness);
+
+    Assert.Equal(PingLine(1), await client.ReadLineAsync());
+  }
+
+  [Fact]
+  public async Task AClientThatDoesNotAnswerThePing_IsClosedWithHeartbeatTimeoutOnce()
+  {
+    await using var harness = HarnessWithShortHeartbeat();
+    await harness.StartAsync();
+    var (client, id) = await ConnectWithHelloAsync(harness);
+
+    Assert.Equal(PingLine(1), await client.ReadLineAsync());
+    Assert.Equal(
+        "{\"protocolVersion\":1,\"type\":\"Disconnecting\",\"payload\":{\"reason\":\"Network.HeartbeatTimeout\"}}",
+        await client.ReadLineAsync());
+    Assert.Null(await client.ReadLineAsync());
+    await WaitUntil(() => harness.Session.Closed.Count == 1);
+    Assert.Equal([id], harness.Session.Closed);
+  }
+
+  [Fact]
+  public async Task AClientThatAnswersThePing_KeepsItsConnection()
+  {
+    await using var harness = HarnessWithShortHeartbeat();
+    await harness.StartAsync();
+    var (client, _) = await ConnectWithHelloAsync(harness);
+
+    Assert.Equal(PingLine(1), await client.ReadLineAsync());
+    await client.SendLineAsync(PongLine(1));
+
+    // Sigue viva: después de otro intervalo sin actividad llega el Ping siguiente, no el cierre.
+    Assert.Equal(PingLine(2), await client.ReadLineAsync());
+  }
 }

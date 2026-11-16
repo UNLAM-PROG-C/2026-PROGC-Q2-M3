@@ -43,6 +43,7 @@ internal sealed class Connection : IConnectionOutput
   private readonly SendLoop _sendLoop;
   private readonly ReceiveLoop _receiveLoop;
   private readonly InboundRouter _router;
+  private readonly Heartbeat _heartbeat;
   private readonly CancellationTokenSource _receiveCancellation = new();
   private readonly CancellationTokenSource _sendCancellation = new();
   private int _closing;
@@ -73,7 +74,8 @@ internal sealed class Connection : IConnectionOutput
     var rateLimiter = new TokenBucketRateLimiter(config.CommandBurst, config.CommandsPerSecond, time);
     var admitter = new CommandAdmitter(id, gate, rateLimiter, commands);
     var violations = new ViolationTracker(config.MaxViolations, config.ViolationWindow, time);
-    _router = new InboundRouter(id, config.ProtocolVersion, session, admitter, violations, this);
+    _heartbeat = new Heartbeat(config.PingIdleInterval, config.PongTimeout, time);
+    _router = new InboundRouter(id, config.ProtocolVersion, session, admitter, violations, _heartbeat, this);
     _receiveLoop = new ReceiveLoop(
         new LineFrameDecoder(config.MaxInboundMessageBytes),
         new InboundMessageParser(config.ProtocolVersion),
@@ -125,15 +127,36 @@ internal sealed class Connection : IConnectionOutput
   }
 
   /// <summary>
-  /// Revisa los plazos de la conexión con el reloj actual; lo llama el <see cref="ConnectionMonitor"/> en cada vuelta. Sin
-  /// <c>Hello</c> dentro de <c>HandshakeTimeout</c> desde que se aceptó: <c>Disconnecting(HandshakeTimeout)</c> (08 §3).
+  /// Revisa los plazos de la conexión con el reloj actual; lo llama el <see cref="ConnectionMonitor"/> en cada vuelta.
+  /// <list type="bullet">
+  /// <item>Sin <c>Hello</c> dentro de <c>HandshakeTimeout</c> desde que se aceptó: <c>Disconnecting(HandshakeTimeout)</c> (08 §3).</item>
+  /// <item>Heartbeat (08 §8): tras <c>PingIdleInterval</c> sin entrada válida, encola un <c>Ping</c>; si no se responde dentro de
+  /// <c>PongTimeout</c>, <c>Disconnecting(HeartbeatTimeout)</c>. El cierre se informa a GameSession como cualquier otro.</item>
+  /// </list>
+  /// Una conexión que ya se está cerrando no se revisa.
   /// </summary>
   public void CheckTimeouts()
   {
-    long now = _time.GetTimestamp();
-    if (Phase == ConnectionPhase.AwaitingHello && _time.GetElapsedTime(_acceptedAt, now) >= _handshakeTimeout)
+    ConnectionPhase phase = Phase;
+    if (phase is ConnectionPhase.Closing or ConnectionPhase.Closed)
+    {
+      return;
+    }
+
+    if (phase == ConnectionPhase.AwaitingHello && _time.GetElapsedTime(_acceptedAt, _time.GetTimestamp()) >= _handshakeTimeout)
     {
       Close(NetworkErrors.HandshakeTimeout);
+      return;
+    }
+
+    switch (_heartbeat.Check(out long pingId))
+    {
+      case HeartbeatStatus.PingDue:
+        Send(new OutboundMessage(ProtocolMessageTypes.Ping, new PingDto(pingId), DeliveryClass.Essential));
+        break;
+      case HeartbeatStatus.TimedOut:
+        Close(NetworkErrors.HeartbeatTimeout);
+        break;
     }
   }
 

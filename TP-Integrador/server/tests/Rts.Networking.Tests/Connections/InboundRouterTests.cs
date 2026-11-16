@@ -16,6 +16,10 @@ public class InboundRouterTests
 {
   private const int ServerVersion = 1;
 
+  private static readonly TimeSpan IdleInterval = TimeSpan.FromSeconds(3);
+  private static readonly TimeSpan PongTimeout = TimeSpan.FromSeconds(5);
+  private static readonly TimeSpan Instant = TimeSpan.FromMilliseconds(1);
+
   private static readonly ConnectionId Connection = new(7);
 
   private static readonly GameplayMessage Gameplay = new(
@@ -28,9 +32,16 @@ public class InboundRouterTests
   private readonly FakeRateLimiter _rateLimiter = new();
   private readonly FakeCommandSink _commands = new();
   private readonly FakeViolationTracker _violations = new();
+  private readonly ManualTimeProvider _time = new();
+  private readonly Heartbeat _heartbeat;
+
+  public InboundRouterTests()
+  {
+    _heartbeat = new Heartbeat(IdleInterval, PongTimeout, _time);
+  }
 
   private InboundRouter CreateRouter() =>
-      new(Connection, ServerVersion, _session, new CommandAdmitter(Connection, _gate, _rateLimiter, _commands), _violations, _output);
+      new(Connection, ServerVersion, _session, new CommandAdmitter(Connection, _gate, _rateLimiter, _commands), _violations, _heartbeat, _output);
 
   private InboundRouter CreateAcceptedRouter()
   {
@@ -376,5 +387,45 @@ public class InboundRouterTests
       default:
         throw new ArgumentOutOfRangeException(nameof(scenario), scenario, null);
     }
+  }
+
+  // ───────────── Heartbeat (08 §4, §8) ─────────────
+
+  [Fact]
+  public void AValidMessage_CountsAsActivity()
+  {
+    var router = CreateRouter();
+    _time.Advance(IdleInterval - Instant);
+
+    router.Handle(Parsed(new PingMessage(1)));
+    _time.Advance(Instant);
+
+    Assert.Equal(HeartbeatStatus.Alive, _heartbeat.Check(out _));
+  }
+
+  [Fact]
+  public void AnInvalidMessage_DoesNotCountAsActivity()
+  {
+    var router = CreateRouter();
+    _time.Advance(IdleInterval - Instant);
+
+    router.Handle(ParseResult.Violation(NetworkErrors.MalformedJson, null, "no es JSON"));
+    _time.Advance(Instant);
+
+    Assert.Equal(HeartbeatStatus.PingDue, _heartbeat.Check(out _));
+  }
+
+  [Fact]
+  public void APongWithThePendingId_AnswersThePing()
+  {
+    var router = CreateAcceptedRouter();
+    _time.Advance(IdleInterval);
+    Assert.Equal(HeartbeatStatus.PingDue, _heartbeat.Check(out long pingId));
+
+    router.Handle(Parsed(new PongMessage(pingId)));
+    _time.Advance(PongTimeout);
+
+    Assert.NotEqual(HeartbeatStatus.TimedOut, _heartbeat.Check(out _));
+    Assert.Empty(_output.Actions);
   }
 }

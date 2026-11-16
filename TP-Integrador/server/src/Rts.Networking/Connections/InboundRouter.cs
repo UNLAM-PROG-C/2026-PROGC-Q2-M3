@@ -18,7 +18,9 @@ namespace Rts.Networking.Connections;
 /// <item><b>Antes del Hello</b> solo se aceptan <c>Hello</c>, <c>Ping</c> y <c>Pong</c>; cualquier otro mensaje recibe
 /// <c>ProtocolError(HelloRequired)</c>.</item>
 /// <item><b>ClientReady:</b> va a GameSession; si su cola está llena, <c>ProtocolError(SessionBusy)</c> y la conexión sigue.</item>
-/// <item><b>Ping</b> responde <c>Pong</c> con el mismo <c>pingId</c>; un <c>Pong</c> se ignora.</item>
+/// <item><b>Ping</b> responde <c>Pong</c> con el mismo <c>pingId</c>. Un <c>Pong</c> se informa al <see cref="Heartbeat"/>, que lo da
+/// por respondido si es el del <c>Ping</c> pendiente; si no, se ignora sin falta.</item>
+/// <item><b>Actividad:</b> todo mensaje válido (parseado) reinicia el tiempo de inactividad del heartbeat (08 §4).</item>
 /// <item><b>Gameplay:</b> pasa por <see cref="CommandAdmitter"/>; si se rechaza, <c>CommandRejected</c> (D-075).</item>
 /// <item><b>Fallos del parser:</b> <c>ProtocolError</c>, o <c>CommandRejected(InvalidCommand)</c> si el comando traía un <c>messageId</c> válido.
 /// Un <c>Hello</c> con otra versión, además, cierra la conexión con <c>UnsupportedVersion</c>.</item>
@@ -27,7 +29,6 @@ namespace Rts.Networking.Connections;
 /// <c>SessionBusy</c>, que no son culpa del cliente. Al superar el límite, el cliente recibe la respuesta a su mensaje y después se
 /// cierra con <c>AbuseDetected</c>.</item>
 /// </list>
-/// Todavía no mide el heartbeat.
 /// </summary>
 internal sealed class InboundRouter
 {
@@ -36,6 +37,7 @@ internal sealed class InboundRouter
   private readonly ISessionEventSink _session;
   private readonly CommandAdmitter _admitter;
   private readonly IViolationTracker _violations;
+  private readonly Heartbeat _heartbeat;
   private readonly IConnectionOutput _output;
 
   public InboundRouter(
@@ -44,6 +46,7 @@ internal sealed class InboundRouter
       ISessionEventSink session,
       CommandAdmitter admitter,
       IViolationTracker violations,
+      Heartbeat heartbeat,
       IConnectionOutput output)
   {
     _connection = connection;
@@ -51,6 +54,7 @@ internal sealed class InboundRouter
     _session = session;
     _admitter = admitter;
     _violations = violations;
+    _heartbeat = heartbeat;
     _output = output;
   }
 
@@ -69,6 +73,7 @@ internal sealed class InboundRouter
     switch (result.Outcome)
     {
       case ParseOutcome.Parsed:
+        _heartbeat.RecordActivity();
         Route(result.Message!);
         break;
       case ParseOutcome.ProtocolViolation:
@@ -91,8 +96,8 @@ internal sealed class InboundRouter
       case PingMessage ping:
         Send(ProtocolMessageTypes.Pong, new PongDto(ping.PingId));
         break;
-      case PongMessage:
-        // Sin heartbeat todavía: un Pong se ignora, sin falta (08 §4).
+      case PongMessage pong:
+        _heartbeat.RecordPong(pong.PingId);
         break;
       case ClientReadyMessage ready:
         OnClientReady(ready);

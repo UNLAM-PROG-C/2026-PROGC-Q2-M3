@@ -1,4 +1,5 @@
 using Rts.Networking.Admission;
+using Rts.Networking.Configuration;
 using Rts.Networking.Connections;
 using Rts.Networking.Framing;
 using Rts.Networking.Parsing;
@@ -13,6 +14,8 @@ public class ReceiveLoopTests
 {
   private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
 
+  private static readonly NetworkingConfig Config = ContractsTests.ValidConfig();
+
   private const int MaxLineBytes = 100;
 
   private static readonly ConnectionId Connection = new(7);
@@ -24,7 +27,7 @@ public class ReceiveLoopTests
   private ReceiveLoop CreateLoop()
   {
     var admitter = new CommandAdmitter(Connection, new FakeSessionGate(), new FakeRateLimiter(), new FakeCommandSink());
-    var router = new InboundRouter(Connection, 1, _session, admitter, new FakeViolationTracker(), _output);
+    var router = new InboundRouter(Connection, 1, _session, admitter, new FakeViolationTracker(), new Heartbeat(Config.PingIdleInterval, Config.PongTimeout, TimeProvider.System), _output);
     return new ReceiveLoop(new LineFrameDecoder(MaxLineBytes), new InboundMessageParser(1), router, _output);
   }
 

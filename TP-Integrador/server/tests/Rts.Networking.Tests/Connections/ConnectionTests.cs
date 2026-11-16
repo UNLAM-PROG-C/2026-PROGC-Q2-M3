@@ -360,4 +360,41 @@ public class ConnectionTests
     _incoming.Complete();
     await run.WaitAsync(Patience);
   }
+
+  private static readonly TimeSpan PingIdleInterval = ContractsTests.ValidConfig().PingIdleInterval;
+
+  private static readonly TimeSpan PongTimeout = ContractsTests.ValidConfig().PongTimeout;
+
+  [Fact]
+  public async Task CheckTimeouts_AfterThePingIdleInterval_SendsAPingWithTheFirstId()
+  {
+    var time = new ManualTimeProvider();
+    var connection = Create(time: time);
+    var run = connection.RunAsync();
+
+    time.Advance(PingIdleInterval);
+    connection.CheckTimeouts();
+    await WaitUntil(() => Written.Count == 1);
+
+    Assert.Equal(PingLine(1), Written[0]);
+    _incoming.Complete();
+    await run.WaitAsync(Patience);
+  }
+
+  [Fact]
+  public async Task CheckTimeouts_WhenThePingIsNotAnswered_ClosesWithHeartbeatTimeout()
+  {
+    var time = new ManualTimeProvider();
+    var connection = Create(ContractsTests.ValidConfig() with { HandshakeTimeout = PingIdleInterval + PongTimeout + PongTimeout }, time);
+    var run = connection.RunAsync();
+    time.Advance(PingIdleInterval);
+    connection.CheckTimeouts();
+
+    time.Advance(PongTimeout);
+    connection.CheckTimeouts();
+    await run.WaitAsync(Patience);
+
+    Assert.Equal([PingLine(1), DisconnectingLine(NetworkErrors.HeartbeatTimeout)], Written);
+    Assert.Equal([Id], _session.Closed);
+  }
 }
