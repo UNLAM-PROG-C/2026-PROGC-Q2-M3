@@ -22,6 +22,13 @@ const GRASS_TEXTURE_PATH := "res://assets/textures/Cartoon_green_texture_grass.j
 const TREE_VISUAL_PATH := "res://assets/nature/Tree_1_A_Color1.gltf"
 const POSITION_RATE_HZ := 10
 const MAX_RECENT_COMMAND_RESULTS := 128
+const DEATH_ANIMATION := "die"
+## Tiempo que el cuerpo queda caído después de la animación de muerte.
+const DEATH_LINGER_SECONDS := 0.8
+## Después se hunde bajo el suelo antes de liberarse, en vez de desaparecer de golpe.
+## La profundidad supera la altura de los modelos de unidad (~0,8 m).
+const DEATH_SINK_DEPTH := 1.2
+const DEATH_SINK_SECONDS := 1.5
 const UNIT_ORDER_KINDS := [
 	"Idle",
 	"Move",
@@ -1826,7 +1833,10 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 			_position_samples.erase(entity_id)
 			destroyed_entity_ids[entity_id] = true
 			_remove_entity_snapshot(entity_id, entity_kind)
-			node.queue_free()
+			if entity_kind == "unit":
+				_play_death_and_free(node)
+			else:
+				node.queue_free()
 		"TreeDepleted":
 			var depleted_tree_id := int(event["treeId"])
 			_update_entity_state(depleted_tree_id, {"isAvailable": false})
@@ -1870,6 +1880,25 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 	if not event_notification.is_empty():
 		return {"ok": true, "notification": event_notification}
 	return {"ok": true}
+
+
+## Una unidad destruida ya salió del mundo lógico (índice, posiciones y snapshot): solo queda
+## su modelo, que reproduce `die` y se libera poco después. No se puede seleccionar ni ordenar
+## sobre ella, y una posición tardía no la revive (09 §5). Después de caer, el cuerpo se hunde
+## bajo el suelo y recién ahí se libera.
+func _play_death_and_free(unit: Node3D) -> void:
+	unit.set_meta("dying", true)
+	unit.name = "Dying_%s" % unit.name
+	var player := unit.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	if player == null or not player.has_animation(DEATH_ANIMATION):
+		unit.queue_free()
+		return
+	player.play(DEATH_ANIMATION, 0.1)
+	var tween := unit.create_tween()
+	tween.tween_interval(player.get_animation(DEATH_ANIMATION).length + DEATH_LINGER_SECONDS)
+	tween.tween_property(unit, "position:y", unit.position.y - DEATH_SINK_DEPTH, DEATH_SINK_SECONDS) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tween.tween_callback(unit.queue_free)
 
 
 func _make_simulated_entity_index() -> Dictionary:
