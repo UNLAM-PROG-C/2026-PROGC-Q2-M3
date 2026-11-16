@@ -66,7 +66,8 @@ internal sealed class Connection : IConnectionOutput
 
     var rateLimiter = new TokenBucketRateLimiter(config.CommandBurst, config.CommandsPerSecond, time);
     var admitter = new CommandAdmitter(id, gate, rateLimiter, commands);
-    var router = new InboundRouter(id, config.ProtocolVersion, session, admitter, this);
+    var violations = new ViolationTracker(config.MaxViolations, config.ViolationWindow, time);
+    var router = new InboundRouter(id, config.ProtocolVersion, session, admitter, violations, this);
     _receiveLoop = new ReceiveLoop(
         new LineFrameDecoder(config.MaxInboundMessageBytes),
         new InboundMessageParser(config.ProtocolVersion),

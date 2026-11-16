@@ -22,8 +22,12 @@ namespace Rts.Networking.Connections;
 /// <item><b>Gameplay:</b> pasa por <see cref="CommandAdmitter"/>; si se rechaza, <c>CommandRejected</c> (D-075).</item>
 /// <item><b>Fallos del parser:</b> <c>ProtocolError</c>, o <c>CommandRejected(InvalidCommand)</c> si el comando traía un <c>messageId</c> válido.
 /// Un <c>Hello</c> con otra versión, además, cierra la conexión con <c>UnsupportedVersion</c>.</item>
+/// <item><b>Faltas (D-074):</b> los fallos del parser, <c>HelloRequired</c>, <c>DuplicateHello</c> y <c>RateLimited</c> se registran
+/// en el <see cref="IViolationTracker"/>. No son faltas <c>MatchNotRunning</c>, <c>NotRegistered</c>, <c>CommandQueueFull</c> ni
+/// <c>SessionBusy</c>, que no son culpa del cliente. Al superar el límite, el cliente recibe la respuesta a su mensaje y después se
+/// cierra con <c>AbuseDetected</c>.</item>
 /// </list>
-/// Todavía no cuenta faltas (abuso) ni mide el heartbeat.
+/// Todavía no mide el heartbeat.
 /// </summary>
 internal sealed class InboundRouter
 {
@@ -31,6 +35,7 @@ internal sealed class InboundRouter
   private readonly int _protocolVersion;
   private readonly ISessionEventSink _session;
   private readonly CommandAdmitter _admitter;
+  private readonly IViolationTracker _violations;
   private readonly IConnectionOutput _output;
 
   public InboundRouter(
@@ -38,12 +43,14 @@ internal sealed class InboundRouter
       int protocolVersion,
       ISessionEventSink session,
       CommandAdmitter admitter,
+      IViolationTracker violations,
       IConnectionOutput output)
   {
     _connection = connection;
     _protocolVersion = protocolVersion;
     _session = session;
     _admitter = admitter;
+    _violations = violations;
     _output = output;
   }
 
@@ -62,6 +69,7 @@ internal sealed class InboundRouter
         break;
       case ParseOutcome.InvalidCommand:
         Send(ProtocolMessageTypes.CommandRejected, new CommandRejectedDto(result.ClientCommandId!.Value.Value, CommonErrors.InvalidCommand.Value));
+        RegisterViolation(CommonErrors.InvalidCommand);
         break;
     }
   }
@@ -93,6 +101,7 @@ internal sealed class InboundRouter
     if (HelloAccepted)
     {
       SendProtocolError(NetworkErrors.DuplicateHello, null);
+      RegisterViolation(NetworkErrors.DuplicateHello);
       return;
     }
 
@@ -110,6 +119,7 @@ internal sealed class InboundRouter
     if (!HelloAccepted)
     {
       SendProtocolError(NetworkErrors.HelloRequired, null);
+      RegisterViolation(NetworkErrors.HelloRequired);
       return;
     }
 
@@ -124,13 +134,21 @@ internal sealed class InboundRouter
     if (!HelloAccepted)
     {
       SendProtocolError(NetworkErrors.HelloRequired, gameplay.ClientCommandId.Value);
+      RegisterViolation(NetworkErrors.HelloRequired);
       return;
     }
 
     AdmissionDecision decision = _admitter.Admit(gameplay);
     if (!decision.IsAdmitted)
     {
-      Send(ProtocolMessageTypes.CommandRejected, new CommandRejectedDto(gameplay.ClientCommandId.Value, decision.Error!.Value.Value));
+      ErrorCode error = decision.Error!.Value;
+      Send(ProtocolMessageTypes.CommandRejected, new CommandRejectedDto(gameplay.ClientCommandId.Value, error.Value));
+
+      // De los rechazos de la admisión, solo el límite por segundo es culpa del cliente (08 §6).
+      if (error == NetworkErrors.RateLimited)
+      {
+        RegisterViolation(error);
+      }
     }
   }
 
@@ -142,10 +160,23 @@ internal sealed class InboundRouter
     // El cliente se entera de la versión del servidor para poder actualizarse (08 §2).
     SendProtocolError(error, result.MessageId, result.Detail, unsupportedVersion ? _protocolVersion : null);
 
-    // Un Hello con otra versión cierra la conexión; cualquier otro mensaje con otra versión es solo una falta (08 §3).
+    // Un Hello con otra versión cierra la conexión con ese motivo, sin contar la falta; cualquier otro mensaje con otra versión es
+    // solo una falta (08 §3).
     if (unsupportedVersion && result.MessageType == ProtocolMessageTypes.Hello)
     {
       _output.Close(NetworkErrors.UnsupportedVersion);
+      return;
+    }
+
+    RegisterViolation(error);
+  }
+
+  /// <summary>Registra una falta; si se superó el límite, cierra con <c>AbuseDetected</c> (D-074). Va después de responder.</summary>
+  private void RegisterViolation(ErrorCode violation)
+  {
+    if (_violations.Register(violation))
+    {
+      _output.Close(NetworkErrors.AbuseDetected);
     }
   }
 

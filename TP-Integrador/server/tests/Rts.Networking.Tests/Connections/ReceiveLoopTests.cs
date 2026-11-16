@@ -24,7 +24,7 @@ public class ReceiveLoopTests
   private ReceiveLoop CreateLoop()
   {
     var admitter = new CommandAdmitter(Connection, new FakeSessionGate(), new FakeRateLimiter(), new FakeCommandSink());
-    var router = new InboundRouter(Connection, 1, _session, admitter, _output);
+    var router = new InboundRouter(Connection, 1, _session, admitter, new FakeViolationTracker(), _output);
     return new ReceiveLoop(new LineFrameDecoder(MaxLineBytes), new InboundMessageParser(1), router, _output);
   }
 

@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using Rts.Networking.Admission;
 using Rts.Shared.Commands;
+using Rts.Shared.Errors;
 using Rts.Shared.Ids;
 using Rts.Shared.Session;
 
@@ -91,5 +92,23 @@ internal sealed class FakeCommandSink : ICommandSink
     }
 
     return Result;
+  }
+}
+
+internal sealed class FakeViolationTracker : IViolationTracker
+{
+  private readonly List<ErrorCode> _registered = [];
+
+  /// <summary>Lo que devuelve <see cref="Register"/>; verdadero simula que se superó el límite de faltas.</summary>
+  public bool LimitExceeded { get; set; }
+
+  public IReadOnlyList<ErrorCode> Registered => _registered;
+
+  public int RecentCount => _registered.Count;
+
+  public bool Register(ErrorCode violation)
+  {
+    _registered.Add(violation);
+    return LimitExceeded;
   }
 }

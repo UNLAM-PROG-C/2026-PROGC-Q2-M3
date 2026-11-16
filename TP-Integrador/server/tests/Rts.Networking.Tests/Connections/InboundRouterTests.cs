@@ -27,9 +27,10 @@ public class InboundRouterTests
   private readonly FakeSessionGate _gate = new() { Player = PlayerId.Two };
   private readonly FakeRateLimiter _rateLimiter = new();
   private readonly FakeCommandSink _commands = new();
+  private readonly FakeViolationTracker _violations = new();
 
   private InboundRouter CreateRouter() =>
-      new(Connection, ServerVersion, _session, new CommandAdmitter(Connection, _gate, _rateLimiter, _commands), _output);
+      new(Connection, ServerVersion, _session, new CommandAdmitter(Connection, _gate, _rateLimiter, _commands), _violations, _output);
 
   private InboundRouter CreateAcceptedRouter()
   {
@@ -275,5 +276,105 @@ public class InboundRouterTests
 
     AssertRejected(CommonErrors.InvalidCommand);
     Assert.Empty(_commands.Calls);
+  }
+
+  // ───────────── Faltas y abuso (08 §6, D-074) ─────────────
+
+  public static TheoryData<string> ViolationScenarios => ["parser", "invalidCommand", "readyBeforeHello", "gameplayBeforeHello", "duplicateHello", "rateLimited"];
+
+  public static TheoryData<string> NonViolationScenarios => ["matchNotRunning", "notRegistered", "commandQueueFull", "readySessionBusy", "unmatchedPong", "admitted"];
+
+  [Theory]
+  [MemberData(nameof(ViolationScenarios))]
+  public void Violation_IsRegisteredWithItsErrorCode(string scenario)
+  {
+    ErrorCode expected = Play(scenario);
+
+    Assert.Equal([expected], _violations.Registered);
+    Assert.Empty(_output.Closes);
+  }
+
+  [Theory]
+  [MemberData(nameof(NonViolationScenarios))]
+  public void NotTheClientsFault_IsNotRegistered(string scenario)
+  {
+    Play(scenario);
+
+    Assert.Empty(_violations.Registered);
+  }
+
+  [Theory]
+  [MemberData(nameof(ViolationScenarios))]
+  public void Violation_OverTheLimit_AnswersAndThenClosesWithAbuseDetected(string scenario)
+  {
+    _violations.LimitExceeded = true;
+
+    Play(scenario);
+
+    // El cliente recibe la respuesta a su mensaje y después el cierre, que encola el Disconnecting detrás.
+    Assert.IsType<OutboundMessage>(_output.Actions[^2]);
+    Assert.Equal(NetworkErrors.AbuseDetected, Assert.IsType<ErrorCode>(_output.Actions[^1]));
+  }
+
+  [Fact]
+  public void UnsupportedVersion_OfHello_ClosesWithUnsupportedVersionEvenOverTheLimit()
+  {
+    _violations.LimitExceeded = true;
+    var router = CreateRouter();
+
+    router.Handle(ParseResult.Violation(NetworkErrors.UnsupportedVersion, null, "Versión 2 no soportada.", ProtocolMessageTypes.Hello));
+
+    Assert.Equal([NetworkErrors.UnsupportedVersion], _output.Closes);
+  }
+
+  /// <summary>Prepara y ejecuta un caso; devuelve el código que el cliente debería ver como falta, si lo es.</summary>
+  private ErrorCode Play(string scenario)
+  {
+    switch (scenario)
+    {
+      case "parser":
+        CreateRouter().Handle(ParseResult.Violation(NetworkErrors.MalformedJson, null, "no es JSON"));
+        return NetworkErrors.MalformedJson;
+      case "invalidCommand":
+        CreateAcceptedRouter().Handle(ParseResult.InvalidCommand(Gameplay.ClientCommandId, "estructura inválida"));
+        return CommonErrors.InvalidCommand;
+      case "readyBeforeHello":
+        CreateRouter().Handle(Parsed(new ClientReadyMessage(new InitializationId(1))));
+        return NetworkErrors.HelloRequired;
+      case "gameplayBeforeHello":
+        CreateRouter().Handle(Parsed(Gameplay));
+        return NetworkErrors.HelloRequired;
+      case "duplicateHello":
+        CreateAcceptedRouter().Handle(Parsed(new HelloMessage(null)));
+        return NetworkErrors.DuplicateHello;
+      case "rateLimited":
+        _rateLimiter.HasTokens = false;
+        CreateAcceptedRouter().Handle(Parsed(Gameplay));
+        return NetworkErrors.RateLimited;
+      case "matchNotRunning":
+        _gate.AcceptsGameplay = false;
+        CreateAcceptedRouter().Handle(Parsed(Gameplay));
+        return CommonErrors.MatchNotRunning;
+      case "notRegistered":
+        _gate.Player = null;
+        CreateAcceptedRouter().Handle(Parsed(Gameplay));
+        return NetworkErrors.NotRegistered;
+      case "commandQueueFull":
+        _commands.Result = CommandAdmission.Rejected(CommonErrors.CommandQueueFull);
+        CreateAcceptedRouter().Handle(Parsed(Gameplay));
+        return CommonErrors.CommandQueueFull;
+      case "readySessionBusy":
+        _session.AcceptReady = false;
+        CreateAcceptedRouter().Handle(Parsed(new ClientReadyMessage(new InitializationId(1))));
+        return NetworkErrors.SessionBusy;
+      case "unmatchedPong":
+        CreateAcceptedRouter().Handle(Parsed(new PongMessage(1)));
+        return default;
+      case "admitted":
+        CreateAcceptedRouter().Handle(Parsed(Gameplay));
+        return default;
+      default:
+        throw new ArgumentOutOfRangeException(nameof(scenario), scenario, null);
+    }
   }
 }

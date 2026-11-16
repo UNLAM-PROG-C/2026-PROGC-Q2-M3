@@ -259,4 +259,50 @@ public class NetworkServerTests
 
     harness.Server.Enqueue(PlayerId.One, Pong(9)); // No lanza ni se entrega a un socket muerto.
   }
+
+  // ───────────── Abuso (08 §6, D-074) ─────────────
+
+  [Fact]
+  public async Task AClientThatKeepsSendingInvalidLines_IsClosedWithAbuseDetected()
+  {
+    const int maxViolations = 2;
+    await using var harness = new NetworkServerHarness(config => config with { MaxViolations = maxViolations });
+    await harness.StartAsync();
+    TestClient client = await harness.ConnectAsync();
+
+    for (int i = 0; i <= maxViolations; i++)
+    {
+      await client.SendLineAsync("esto no es JSON");
+    }
+
+    // Cada falta recibe su ProtocolError; la que supera el límite, además, el cierre.
+    for (int i = 0; i <= maxViolations; i++)
+    {
+      Assert.Contains("Network.MalformedJson", await client.ReadLineAsync());
+    }
+
+    Assert.Equal(
+        "{\"protocolVersion\":1,\"type\":\"Disconnecting\",\"payload\":{\"reason\":\"Network.AbuseDetected\"}}",
+        await client.ReadLineAsync());
+    Assert.Null(await client.ReadLineAsync());
+    await WaitUntil(() => harness.Session.Closed.Count == 1);
+  }
+
+  [Fact]
+  public async Task AClientWithinTheViolationLimit_KeepsItsConnection()
+  {
+    const int maxViolations = 2;
+    await using var harness = new NetworkServerHarness(config => config with { MaxViolations = maxViolations });
+    await harness.StartAsync();
+    TestClient client = await harness.ConnectAsync();
+
+    for (int i = 0; i < maxViolations; i++)
+    {
+      await client.SendLineAsync("esto no es JSON");
+      Assert.Contains("Network.MalformedJson", await client.ReadLineAsync());
+    }
+
+    await client.SendLineAsync(PingLine(3));
+    Assert.Equal(PongLine(3), await client.ReadLineAsync());
+  }
 }
