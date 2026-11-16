@@ -20,11 +20,6 @@
     <ProjectReference Include="..\..\src\Rts.Server\Rts.Server.csproj" />
   </ItemGroup>
 
-  <!-- Los mismos stubs que las pruebas de integración (Construction y Production todavía no existen): se borran todos juntos. -->
-  <ItemGroup>
-    <Compile Include="..\..\tests\Rts.Integration.Tests\Stubs\*.cs" LinkBase="Stubs" />
-  </ItemGroup>
-
   <!-- La misma configuración que el servidor: el balance de los módulos sale de acá. -->
   <ItemGroup>
     <None Include="..\..\config\server.example.json" Link="server.example.json" CopyToOutputDirectory="PreserveNewest" />

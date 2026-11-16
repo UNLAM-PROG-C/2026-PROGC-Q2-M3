@@ -138,13 +138,12 @@ Crear no arranca nada: la red escucha recién en `RunAsync` y los ticks los arra
 **Pruebas** (`server/tests/Rts.Server.Tests`):
 
 - `Composition/ServerCompositionTests`: cada grupo por separado, el apagado sin jugadores (`ServerShutdown`) y el puerto ocupado (código 5).
-- `EndToEnd/FullMatchTests`: **prueba de punta a punta.** Dos clientes TCP que hablan JSON crudo por líneas, como Godot: `Hello` → `PlayerAssigned` → `InitialState` → `ClientReady` → `MatchStarted` → un `Stop` aceptado y un `TrainUnit` rechazado, de ida y vuelta → Ctrl+C → `MatchEnded` antes que `Disconnecting` → cierre.
+- `EndToEnd/FullMatchTests`: **prueba de punta a punta.** Dos clientes TCP que hablan JSON crudo por líneas, como Godot: `Hello` → `PlayerAssigned` → `InitialState` → `ClientReady` → `MatchStarted` → un `Stop` y un `TrainUnit` aceptados, de ida y vuelta → Ctrl+C → `MatchEnded` antes que `Disconnecting` → cierre.
 
-**Provisorio:** `UnavailableProduction` ocupa el lugar de Production: rechaza todo `TrainUnit` con `Production.NotAvailable` y nunca lanza (ver «Comportamientos provisorios» en [decisiones](../decisions.md)). Se reemplaza por las reglas y el calculador reales en `CreateDomainModules` cuando existan, junto con el stub de `Rts.Integration.Tests` y `Rts.Measurement`.
+**Production real (2026-11-16):** `CreateDomainModules` arma `ProductionRules` y `ProductionCalculator`, y le pasa al calculador `EconomyConfig.UnitFoodCosts` (D-015, contrato 05 §1). Reemplazó al provisorio `UnavailableProduction` y al stub de `Rts.Integration.Tests` y `Rts.Measurement`, que se borraron.
 
 **PENDIENTE:**
 
-- Production real (ver arriba).
 - Prueba manual con el cliente Godot real: dos instancias contra `rts-server` (08 §11).
 - Logging de `SessionHost`: se le pasará `ILogger<T>` si se acepta la D-096 (O-011).
 - El archivo de mapa real (formato D-052) y los valores definitivos de configuración.

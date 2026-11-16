@@ -5,6 +5,7 @@ using Rts.Server.Composition;
 using Rts.Server.Configuration;
 using Rts.Shared.Commands;
 using Rts.Shared.Entities;
+using Rts.Shared.Events;
 using Rts.Shared.Ids;
 using Rts.Shared.Match;
 using Rts.Shared.Session;
@@ -79,7 +80,7 @@ public class ServerCompositionTests
   }
 
   [Fact]
-  public void ProvisionalProduction_RejectsTrainUnit_WithoutEndingTheMatch()
+  public void RealProduction_AcceptsTrainUnit_StartsTheTrainingAndChargesTheFoodOnce()
   {
     ServerConfig config = LoadExampleConfig();
     var commands = new CommandQueue(config.Simulation.CommandQueueCapacity);
@@ -97,10 +98,15 @@ public class ServerCompositionTests
     commands.Admit(PlayerId.One, new ClientCommandId(1), new TrainUnitCommand(mainCenter.BuildingId, UnitType.Worker));
     TickOutcome outcome = engine.AdvanceTick();
 
-    Assert.Null(outcome.Failure); // Rechazar no es una falla: la partida sigue.
+    // El pedido entra a la cola en la fase 1 y, con el productor libre y comida suficiente, empieza en la fase 8 del mismo tick.
+    Assert.Null(outcome.Failure); // Simulation verificó que lo cobrado por Production es el costo de Economy (05 §5).
     CommandResult result = Assert.Single(outcome.Publication!.CommandResults);
-    Assert.Equal(CommandOutcome.Rejected, result.Outcome);
-    Assert.Equal(UnavailableProduction.NotAvailable, result.Error);
+    Assert.Equal(CommandOutcome.Accepted, result.Outcome);
+    ProductionChanged training = outcome.Publication.Events.Select(e => e.Payload).OfType<ProductionChanged>().Last();
+    Assert.Equal(ProducerStatus.Training, training.Status);
+    Assert.Equal(config.Production.TrainingDurationTicks[UnitType.Worker], training.RemainingTicks);
+    ResourcesChanged charged = outcome.Publication.Events.Select(e => e.Payload).OfType<ResourcesChanged>().Single();
+    Assert.Equal(config.Economy.InitialBalance.Food - config.Economy.UnitFoodCosts[UnitType.Worker], charged.Balance.Food);
   }
 
   [Fact]
@@ -137,16 +143,5 @@ public class ServerCompositionTests
     {
       blocker.Stop();
     }
-  }
-
-  [Fact]
-  public void ProvisionalProduction_AnswersTrainingDurationFromTheConfig()
-  {
-    ServerConfig config = LoadExampleConfig();
-    var production = new UnavailableProduction(config.Production);
-
-    Assert.Equal(
-        config.Production.TrainingDurationTicks[UnitType.Soldier],
-        production.GetTrainingDurationTicks(UnitType.Soldier));
   }
 }

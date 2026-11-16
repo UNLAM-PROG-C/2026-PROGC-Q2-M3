@@ -6,6 +6,7 @@ using Rts.GameSession;
 using Rts.GameSession.Model;
 using Rts.Movement;
 using Rts.Networking;
+using Rts.Production;
 using Rts.Server.Configuration;
 using Rts.Server.Diagnostics;
 using Rts.Shared.Ids;
@@ -139,12 +140,13 @@ internal static class ServerComposition
 
   /// <summary>
   /// Las reglas y calculadores de los cinco módulos de dominio (D-090), cada uno con su propia sección de la configuración.
-  /// Production es provisorio hasta que exista el módulo real (<see cref="UnavailableProduction"/>).
+  /// Production no depende de Economy (D-015): recibe acá el costo en comida de cada unidad, el mismo que Simulation verifica
+  /// al cobrar cada inicio de entrenamiento (contrato 05 §5).
   /// </summary>
   internal static DomainModules CreateDomainModules(ServerConfig config)
   {
     var movementRules = new MovementRules(config.Movement, config.Simulation.TickRate);
-    var production = new UnavailableProduction(config.Production);
+    var productionRules = new ProductionRules(config.Production);
     return new DomainModules(
         movementRules,
         new MovementCalculator(movementRules),
@@ -154,7 +156,7 @@ internal static class ServerComposition
         new CombatCalculator(config.Combat),
         new ConstructionRules(config.Construction),
         new ConstructionCalculator(config.Construction),
-        production,
-        production);
+        productionRules,
+        new ProductionCalculator(productionRules, config.Economy.UnitFoodCosts));
   }
 }
