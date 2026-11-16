@@ -55,9 +55,11 @@ func _test_buses_and_volume(music: Node) -> void:
 	)
 	var player := music.get_node("MusicPlayer") as AudioStreamPlayer
 	_check(player.bus == &"Music", "Music plays on the Music bus.")
+	# AudioSettings carga los volúmenes guardados del jugador: se compara contra el valor previo.
+	var sfx_volume_before := AudioServer.get_bus_volume_db(sfx_bus)
 	music.set_music_volume(0.5)
 	_check(is_equal_approx(music.get_music_volume(), 0.5), "The music volume can be changed.")
-	_check(is_zero_approx(AudioServer.get_bus_volume_db(sfx_bus)), "Changing the music volume does not touch sound effects.")
+	_check(is_equal_approx(AudioServer.get_bus_volume_db(sfx_bus), sfx_volume_before), "Changing the music volume does not touch sound effects.")
 	music.set_music_muted(true)
 	_check(music.is_music_muted() and not AudioServer.is_bus_mute(sfx_bus), "Music can be muted on its own.")
 	music.set_music_muted(false)

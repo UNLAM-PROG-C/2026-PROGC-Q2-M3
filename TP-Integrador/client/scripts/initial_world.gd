@@ -23,7 +23,13 @@ signal production_changed(producer_id: int, production: Dictionary)
 signal repath_requested(request: Dictionary)
 
 const GRASS_TEXTURE_PATH := "res://assets/textures/Cartoon_green_texture_grass.jpg"
-const TREE_VISUAL_PATH := "res://assets/nature/Tree_1_A_Color1.gltf"
+## Variantes del árbol. Cada árbol elige una según su treeId, así se ve siempre igual (al
+## recargar el estado o al reaparecer) y ambos jugadores ven el mismo bosque.
+const TREE_VISUAL_PATHS := [
+	"res://assets/nature/Tree_1_A_Color1.gltf",
+	"res://assets/nature/Tree_1_B_Color1.gltf",
+	"res://assets/nature/Tree_1_C_Color1.gltf",
+]
 const POSITION_RATE_HZ := 10
 const MAX_RECENT_COMMAND_RESULTS := 128
 const DEATH_ANIMATION := "die"
@@ -2921,7 +2927,7 @@ func _build_staged_world(state: Dictionary, initialization_id: int) -> Dictionar
 
 	for tree: Dictionary in state["trees"]:
 		var instance_result := _create_entity_node(
-			TREE_VISUAL_PATH,
+			tree_visual_path(int(tree["treeId"])),
 			"Tree_%d" % int(tree["treeId"]),
 			tree,
 			Vector3(float(tree["x"]), 0.0, float(tree["z"]))
@@ -3173,6 +3179,12 @@ func _load_visual_scene(path: String) -> PackedScene:
 static func unit_visual_path(unit_type: String, owner_id: int) -> String:
 	var paths: Dictionary = UNIT_VISUAL_PATHS.get(unit_type, {})
 	return str(paths.get(owner_id, ""))
+
+
+## Modelo de un árbol: se mezcla el treeId para que árboles con ids seguidos no repitan
+## siempre la misma secuencia de variantes.
+static func tree_visual_path(tree_id: int) -> String:
+	return str(TREE_VISUAL_PATHS[posmod(hash(tree_id), TREE_VISUAL_PATHS.size())])
 
 
 func _building_visual_path(building_type: String, owner_id: int) -> String:
