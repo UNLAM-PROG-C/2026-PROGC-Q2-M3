@@ -1,6 +1,7 @@
 using Rts.Protocol.State;
 using Rts.Shared.Entities;
 using Rts.Shared.Ids;
+using Rts.Shared.Resources;
 using Rts.Shared.Time;
 using Rts.Shared.World;
 using Rts.StateSync.Configuration;
@@ -32,9 +33,9 @@ public sealed class StateProjector : IStateProjector
         [.. world.Units.Select(ToDto)],
         [.. world.Buildings.Select(ToDto)],
         [.. world.Trees.Select(ToDto)],
-        new ResourcesDto(recipient.Resources.Wood, recipient.Resources.Food),
+        ToDto(recipient.Resources),
         [.. world.Producers.Where(p => p.Owner == request.Recipient).Select(ToDto)],
-        Catalog: null!); // PENDIENTE 1.2: conversión de GameCatalog a CatalogDto.
+        ToDto(request.Catalog));
   }
 
   public TickProjection ProjectTick(TickPublication publication) =>
@@ -56,4 +57,19 @@ public sealed class StateProjector : IStateProjector
 
   private static ProducerDto ToDto(ProducerView p) =>
       new(p.ProducerId.Value, p.Status, p.ActiveUnitType, p.RemainingTicks, [.. p.PendingUnitTypes]);
+
+  private static CatalogDto ToDto(GameCatalog c) =>
+      new(c.TickRate.TicksPerSecond, [.. c.Units.Select(ToDto)], [.. c.Buildings.Select(ToDto)],
+          ToDto(c.FarmRepairCost), c.FarmRepairWorkRequired, c.GatherRange, c.BuildRange);
+
+  private static UnitCatalogDto ToDto(UnitCatalogEntry u) =>
+      new(u.UnitType, u.MaxHp, ToDto(u.Cost), u.TrainingDurationTicks, u.SpeedPerSecond, ToDto(u.Attack));
+
+  private static BuildingCatalogDto ToDto(BuildingCatalogEntry b) =>
+      new(b.BuildingType, b.MaxHp, b.Footprint.Width, b.Footprint.Height, b.Cost is { } cost ? ToDto(cost) : null, ToDto(b.Attack));
+
+  private static AttackDto? ToDto(AttackStatsView? a) =>
+      a is null ? null : new(a.Damage, a.Range, a.CooldownTicks);
+
+  private static ResourcesDto ToDto(ResourceAmount r) => new(r.Wood, r.Food);
 }

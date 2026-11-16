@@ -55,6 +55,8 @@ public class InitialStateProjectionTests
     Assert.Equal(p1.Units, p2.Units);
     Assert.Equal(p1.Buildings, p2.Buildings);
     Assert.Equal(p1.Trees, p2.Trees);
+    Assert.Equal(p1.Catalog.Units, p2.Catalog.Units);
+    Assert.Equal(p1.Catalog.Buildings, p2.Catalog.Buildings);
   }
 
   [Fact]
@@ -77,6 +79,29 @@ public class InitialStateProjectionTests
     Assert.Equal(20, p2Producer.ProducerId);
     Assert.Equal(ProducerStatus.Idle, p2Producer.Status);
     Assert.Empty(p2Producer.Pending);
+  }
+
+  [Fact]
+  public void BuildInitialState_MapsCatalog()
+  {
+    CatalogDto catalog = Build(PlayerId.One).Catalog;
+
+    Assert.Equal(20, catalog.TicksPerSecond);
+    Assert.Equal(
+        [new UnitCatalogDto(UnitType.Worker, 40, new ResourcesDto(0, 50), 200, 3.0, null),
+         new UnitCatalogDto(UnitType.Soldier, 80, new ResourcesDto(0, 80), 300, 3.5, new AttackDto(8, 1.5, 20))],
+        catalog.Units);
+    Assert.Equal(
+        [new BuildingCatalogDto(BuildingType.MainCenter, 1000, 4, 4, null, null),
+         new BuildingCatalogDto(BuildingType.Farm, 200, 2, 2, new ResourcesDto(60, 0), null),
+         new BuildingCatalogDto(BuildingType.Barracks, 400, 3, 3, new ResourcesDto(150, 0), null),
+         new BuildingCatalogDto(BuildingType.Tower, 300, 2, 2, new ResourcesDto(120, 0), new AttackDto(10, 6.0, 30)),
+         new BuildingCatalogDto(BuildingType.Fence, 100, 1, 1, new ResourcesDto(5, 0), null)],
+        catalog.Buildings);
+    Assert.Equal(new ResourcesDto(30, 0), catalog.FarmRepairCost);
+    Assert.Equal(100, catalog.FarmRepairWorkRequired);
+    Assert.Equal(1.5, catalog.GatherRange);
+    Assert.Equal(1.5, catalog.BuildRange);
   }
 
   private static InitialStateDto Build(PlayerId recipient)
