@@ -120,7 +120,6 @@ public class InboundMessageParserTests
 
   // Decisión provisoria de Flor (opción A): los comandos de la fase 2 todavía no se convierten.
   [Theory]
-  [InlineData("Build")]
   [InlineData("RepathResponse")]
   public void Parse_GameplayTypeNotYetSupported_ReturnsUnknownTypeViolation(string type)
   {
@@ -433,6 +432,71 @@ public class InboundMessageParserTests
     var result = ParseLine("""{"protocolVersion":1,"type":"TrainUnit","messageId":4,"payload":""" + payload + "}");
 
     AssertInvalidCommand(result, 4);
+  }
+
+  // Build: dos formas (D-032). Colocar lleva tipo, columna y fila; continuar, solo el id de la obra.
+  private static string BuildLine(string form, string routes = TargetedRoutes) =>
+      "{\"protocolVersion\":1,\"type\":\"Build\",\"messageId\":9,\"payload\":{" + form + "," + routes + "}}";
+
+  [Fact]
+  public void Parse_BuildToPlace_ReturnsGameplayMessageWithPlaceCommand()
+  {
+    var result = ParseLine(BuildLine("\"buildingType\":\"Farm\",\"anchorColumn\":8,\"anchorRow\":10"));
+
+    Assert.Equal(ParseOutcome.Parsed, result.Outcome);
+    Assert.Equal(
+        new GameplayMessage(new ClientCommandId(9), BuildCommand.Place(BuildingType.Farm, new GridCell(8, 10), new MapRevision(2), ExpectedTargetedRoutes())),
+        result.Message);
+  }
+
+  [Fact]
+  public void Parse_BuildToContinue_ReturnsGameplayMessageWithContinueCommand()
+  {
+    var result = ParseLine(BuildLine("\"buildingId\":11"));
+
+    Assert.Equal(ParseOutcome.Parsed, result.Outcome);
+    Assert.Equal(
+        new GameplayMessage(new ClientCommandId(9), BuildCommand.Continue(new EntityId(11), new MapRevision(2), ExpectedTargetedRoutes())),
+        result.Message);
+  }
+
+  [Fact]
+  public void Parse_BuildWithoutMessageId_ReturnsInvalidMessageIdViolation()
+  {
+    var result = ParseLine(BuildLine("\"buildingId\":11").Replace("\"messageId\":9,", ""));
+
+    AssertViolation(result, NetworkErrors.InvalidMessageId);
+  }
+
+  // 08 §4: mezclar las dos formas, o no completar ninguna, es un comando inválido. También lo son un tipo desconocido o
+  // numérico, una obra 0 y las rutas mal armadas.
+  [Theory]
+  [InlineData("\"buildingType\":\"Farm\",\"anchorColumn\":8,\"anchorRow\":10,\"buildingId\":11")]
+  [InlineData("\"buildingType\":\"Farm\",\"buildingId\":11")]
+  [InlineData("\"anchorColumn\":8,\"anchorRow\":10,\"buildingId\":11")]
+  [InlineData("\"buildingType\":\"Farm\",\"anchorColumn\":8")]
+  [InlineData("\"anchorColumn\":8,\"anchorRow\":10")]
+  [InlineData("\"buildingType\":\"Farm\"")]
+  [InlineData("\"buildingId\":null")]
+  [InlineData("\"buildingType\":\"Castle\",\"anchorColumn\":8,\"anchorRow\":10")]
+  [InlineData("\"buildingType\":2,\"anchorColumn\":8,\"anchorRow\":10")]
+  [InlineData("\"buildingId\":0")]
+  public void Parse_BuildWithMixedOrIncompleteForm_ReturnsInvalidCommand(string form)
+  {
+    var result = ParseLine(BuildLine(form));
+
+    AssertInvalidCommand(result, 9);
+  }
+
+  [Theory]
+  [InlineData("\"routeMapRevision\":2")]
+  [InlineData("\"routeMapRevision\":2,\"routes\":[null]")]
+  [InlineData("\"routeMapRevision\":2,\"routes\":[]")]
+  public void Parse_BuildWithBadRoutes_ReturnsInvalidCommand(string routes)
+  {
+    var result = ParseLine(BuildLine("\"buildingId\":11", routes));
+
+    AssertInvalidCommand(result, 9);
   }
 
   // El playerId nunca viene del cliente: si lo manda, se ignora.

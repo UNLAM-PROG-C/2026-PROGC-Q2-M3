@@ -104,6 +104,7 @@ internal sealed class InboundMessageParser : IInboundMessageParser
           dto => new AttackCommand(new EntityId(dto.TargetId), new MapRevision(dto.RouteMapRevision), ReadRoutes(type, dto.Routes))),
       ProtocolMessageTypes.GatherWood => ParseGameplay<GatherWoodCommandDto>(type, payload, messageId,
           dto => new GatherWoodCommand(new EntityId(dto.TreeId), new MapRevision(dto.RouteMapRevision), ReadRoutes(type, dto.Routes))),
+      ProtocolMessageTypes.Build => ParseGameplay<BuildCommandDto>(type, payload, messageId, BuildBuild),
       ProtocolMessageTypes.RepairFarm => ParseGameplay<RepairFarmCommandDto>(type, payload, messageId,
           dto => new RepairFarmCommand(new EntityId(dto.FarmId), new MapRevision(dto.RouteMapRevision), ReadRoutes(type, dto.Routes))),
 
@@ -228,6 +229,29 @@ internal sealed class InboundMessageParser : IInboundMessageParser
             new EntityId(route.UnitId),
             route.Waypoints.Select(point => new PositionXZ(point.X, point.Z)).ToEquatableArray()))
         .ToEquatableArray();
+  }
+
+  /// <summary>
+  /// DTO → <see cref="BuildCommand"/>, en una de sus dos formas (D-032): colocar (tipo, columna y fila) o continuar una obra
+  /// (<c>buildingId</c>). Mezclarlas, o no completar ninguna, es un comando inválido (08 §4).
+  /// </summary>
+  private static BuildCommand BuildBuild(BuildCommandDto dto)
+  {
+    bool anyPlacementField = dto.BuildingType is not null || dto.AnchorColumn is not null || dto.AnchorRow is not null;
+    EquatableArray<UnitRouteCandidate> routes = ReadRoutes(ProtocolMessageTypes.Build, dto.Routes);
+    var revision = new MapRevision(dto.RouteMapRevision);
+
+    if (dto.BuildingId is { } buildingId && !anyPlacementField)
+    {
+      return BuildCommand.Continue(new EntityId(buildingId), revision, routes);
+    }
+
+    if (dto.BuildingId is null && dto is { BuildingType: { } buildingType, AnchorColumn: { } column, AnchorRow: { } row })
+    {
+      return BuildCommand.Place(buildingType, new GridCell(column, row), revision, routes);
+    }
+
+    throw new ArgumentException("Build lleva buildingType, anchorColumn y anchorRow para colocar, o solo buildingId para continuar.");
   }
 
   /// <summary>DTO → <see cref="StopCommand"/>. El constructor rechaza la lista vacía y las unidades inválidas o repetidas.</summary>
