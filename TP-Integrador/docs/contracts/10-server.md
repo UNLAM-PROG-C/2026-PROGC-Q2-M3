@@ -1,6 +1,6 @@
 # Contrato 10 — Server (composición)
 
-> **Estado:** esqueleto implementado y probado (`server/src/Rts.Server`, `server/tests/Rts.Server.Tests`). Están completos: configuración, validación cruzada, catálogo, adaptador de efectos, diagnóstico de Simulation (D-100), códigos de salida y apagado ordenado. La creación de las piezas (§4) se completa en la vertical slice, cuando existan las implementaciones de los módulos.
+> **Estado:** implementado y probado (`server/src/Rts.Server`, `server/tests/Rts.Server.Tests`). El servidor arma las seis piezas reales en el orden de §4 y corre una partida completa; una prueba de punta a punta con dos clientes TCP la recorre entera (§6). Están completos también la configuración, la validación cruzada y la carga del mapa, el catálogo, el adaptador de efectos, el diagnóstico de Simulation (D-100), los códigos de salida y el apagado ordenado. **Provisorio:** Production, hasta que exista el módulo real (§6).
 > **Etiquetas:** **DECIDIDO** = aprobado por el equipo (ver [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **No es un módulo:** no tiene reglas de juego ni lógica de interacción. Es el `main()` del servidor (contrato 00 §1), y el único proyecto que referencia a todos.
 
@@ -125,14 +125,26 @@ Cada paso usa solo lo creado en los anteriores (D-082):
 
 ## 6. Estado actual y pendientes
 
-- `ServerComposition.RunMatchAsync` crea las seis piezas en el orden de §4 y corre la partida (2026-11-16). Production es provisorio (`UnavailableProduction`, ver «Comportamientos provisorios» en [decisiones](../decisions.md)). El resto de esta sección se actualiza al cerrar la composición.
-- `rts-server --validate-only` ya funciona: carga, valida, arma el catálogo y muestra el resumen.
-- **Listo del lado de Simulation:** la cola de comandos (`CommandQueue`), el cargador de mapa (`MapLoader`) y la fábrica `SimulationFactory` (`CreateEngine`, `CreateLoop`), que reciben los cinco módulos de dominio agrupados en `DomainModules` (D-090) y el observador de diagnóstico (D-095).
-- **Listo del lado del Server:** `LoggingSimulationDiagnostics`, que la composición pasa a `CreateLoop` y al que le pide `WriteFinalSummary()` al terminar (D-100).
-- **Listo en otros módulos** (2026-11-15): buzón, vista y `SessionHost` (GameSession); reglas y calculadores de Economy, Combat y Movement (este último solo mueve órdenes `Move`; las de tarea están pendientes, 04 §5).
-- **PENDIENTE:** las implementaciones que faltan para completar la composición:
-  - `NetworkServer` (Networking) y `StateSyncPublisher` (State Sync);
-  - reglas y calculadores de Construction y Production.
+**Composición (2026-11-16).** `ServerComposition.RunMatchAsync` arma las piezas en tres grupos, uno por método, cada uno probado por separado:
 
-  Se agregan en la vertical slice (AGENTS §8).
-- **PENDIENTE:** el archivo de mapa real (formato D-052) y los valores definitivos de configuración.
+| Método | Piezas de §4 | Devuelve |
+|---|---|---|
+| `CreateTransport` | 1 a 4: cola de comandos, buzón y vista de sesión, `NetworkServer`, `StateSyncPublisher` | `TransportPieces` |
+| `CreateSimulation` | 5: motor con los cinco módulos de dominio (`CreateDomainModules`) y loop, con `LoggingSimulationDiagnostics` | `SimulationPieces` (loop y diagnóstico) |
+| `CreateSession` | 6: `SessionStateMachine`, `SessionEffectsAdapter` y `SessionHost` | `ISessionHost` |
+
+Crear no arranca nada: la red escucha recién en `RunAsync` y los ticks los arranca GameSession con `StartTicks`. Después corre la secuencia de «Arranque y fin» de §4.
+
+**Pruebas** (`server/tests/Rts.Server.Tests`):
+
+- `Composition/ServerCompositionTests`: cada grupo por separado, el apagado sin jugadores (`ServerShutdown`) y el puerto ocupado (código 5).
+- `EndToEnd/FullMatchTests`: **prueba de punta a punta.** Dos clientes TCP que hablan JSON crudo por líneas, como Godot: `Hello` → `PlayerAssigned` → `InitialState` → `ClientReady` → `MatchStarted` → un `Stop` aceptado y un `TrainUnit` rechazado, de ida y vuelta → Ctrl+C → `MatchEnded` antes que `Disconnecting` → cierre.
+
+**Provisorio:** `UnavailableProduction` ocupa el lugar de Production: rechaza todo `TrainUnit` con `Production.NotAvailable` y nunca lanza (ver «Comportamientos provisorios» en [decisiones](../decisions.md)). Se reemplaza por las reglas y el calculador reales en `CreateDomainModules` cuando existan, junto con el stub de `Rts.Integration.Tests` y `Rts.Measurement`.
+
+**PENDIENTE:**
+
+- Production real (ver arriba).
+- Prueba manual con el cliente Godot real: dos instancias contra `rts-server` (08 §11).
+- Logging de `SessionHost`: se le pasará `ILogger<T>` si se acepta la D-096 (O-011).
+- El archivo de mapa real (formato D-052) y los valores definitivos de configuración.
