@@ -22,25 +22,19 @@ namespace Rts.Server.Tests.Composition;
 public class ServerCompositionTests
 {
   private const int MainCentersInAMatch = 2;
-  private const string Loopback = "127.0.0.1";
   private const int AnyFreePort = 0;
 
   /// <summary>Plazo de seguridad: una partida sin jugadores termina en milisegundos; si no termina, la prueba falla en vez de colgarse.</summary>
   private static readonly TimeSpan MatchEndTimeout = TimeSpan.FromSeconds(10);
 
-  private static ServerConfig LoadExampleConfig() =>
-      ServerConfigLoader.Load(Path.Combine(AppContext.BaseDirectory, "server.example.json"));
+  private static ServerConfig LoadExampleConfig() => ExampleSetup.LoadConfig();
 
-  /// <summary>Solo en la máquina local (sin pedir permisos de firewall) y en el puerto indicado.</summary>
-  private static ServerConfig OnLoopback(ServerConfig config, int port) =>
-      config with { Networking = config.Networking with { ListenAddress = Loopback, Port = port } };
+  private static ServerConfig OnLoopback(ServerConfig config, int port) => ExampleSetup.OnLoopback(config, port);
 
   private static Task<MatchResult> RunMatchAsync(ServerConfig config, CancellationToken shutdown) =>
-      ServerComposition.RunMatchAsync(
-          config, LoadExampleMap(config), GameCatalogBuilder.Build(config), NullLoggerFactory.Instance, shutdown);
+      ExampleSetup.RunMatchAsync(config, shutdown);
 
-  private static MapDefinition LoadExampleMap(ServerConfig config) =>
-      MapLoader.Load(config.MapFile, config.Construction.FootprintSizes[BuildingType.MainCenter]);
+  private static MapDefinition LoadExampleMap(ServerConfig config) => ExampleSetup.LoadMap(config);
 
   private static TransportPieces CreateTransport(ServerConfig config) =>
       ServerComposition.CreateTransport(config, GameCatalogBuilder.Build(config), NullLoggerFactory.Instance);
