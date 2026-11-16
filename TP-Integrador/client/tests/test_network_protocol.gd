@@ -18,6 +18,7 @@ func _run() -> void:
 	_test_codec_round_trip()
 	_test_invalid_messages()
 	await _test_tcp_control_flow()
+	await _test_client_heartbeat()
 	if _failed:
 		quit(1)
 		return
@@ -270,6 +271,87 @@ func _test_tcp_control_flow() -> void:
 		closed_reasons == ["Network.UnsupportedVersion"],
 		"The remote close was not reported exactly once with its reason."
 	)
+
+	server_peer.disconnect_from_host()
+	server.stop()
+	client.queue_free()
+
+
+## Heartbeat del cliente (D-079): Ping tras inactividad, cualquier mensaje del servidor cuenta
+## como respuesta, y sin respuesta la conexión se cierra con ServerNotResponding.
+## El tiempo se controla con update_heartbeat(now) para no depender de esperas reales.
+func _test_client_heartbeat() -> void:
+	var server := TCPServer.new()
+	_check(server.listen(0, "127.0.0.1") == OK, "The heartbeat test server failed to listen.")
+	var client = Client.new()
+	client.ping_idle_seconds = 30.0
+	client.pong_timeout_seconds = 60.0
+	root.add_child(client)
+	var closed_reasons: Array[String] = []
+	var correlated_pongs: Array[int] = []
+	client.connection_closed.connect(func(reason: String) -> void: closed_reasons.append(reason))
+	client.pong_received.connect(
+		func(ping_id: int, correlated: bool) -> void:
+			if correlated:
+				correlated_pongs.append(ping_id)
+	)
+	client.connect_to_server("127.0.0.1", server.get_local_port(), "heartbeat-test")
+	var server_peer: StreamPeerTCP
+	for _attempt in range(200):
+		if server.is_connection_available():
+			server_peer = server.take_connection()
+			break
+		await process_frame
+	_check(server_peer != null, "The heartbeat server did not receive the client.")
+	if server_peer == null:
+		client.queue_free()
+		server.stop()
+		return
+	var decoder = Decoder.new()
+	await _read_frames(server_peer, decoder, 1)
+
+	var now: int = Time.get_ticks_usec()
+	client.update_heartbeat(now)
+	_check(client.pending_heartbeat_ping_id() == 0, "No Ping while the connection was just active.")
+	var idle := now + 31_000_000
+	client.update_heartbeat(idle)
+	var first_ping: int = client.pending_heartbeat_ping_id()
+	_check(first_ping > 0, "After the idle interval the client sends its own Ping.")
+	var ping_frames: Array = await _read_frames(server_peer, decoder, 1)
+	_check(ping_frames.size() == 1, "The server receives the client Ping.")
+	if ping_frames.size() == 1:
+		var ping := Codec.parse_line(ping_frames[0])
+		_check(ping["ok"] and ping["envelope"]["type"] == "Ping" and int(ping["payload"]["pingId"]) == first_ping, "The heartbeat is a valid Ping with its pingId.")
+	client.update_heartbeat(idle + 1_000_000)
+	_check(client.pending_heartbeat_ping_id() == first_ping, "Only one heartbeat Ping is pending at a time.")
+
+	server_peer.put_data(Codec.encode_message("Pong", {"pingId": first_ping})["bytes"])
+	for _attempt in range(60):
+		if correlated_pongs.has(first_ping):
+			break
+		await process_frame
+	_check(correlated_pongs.has(first_ping), "The matching Pong is correlated.")
+	_check(client.pending_heartbeat_ping_id() == 0, "The Pong answers the heartbeat.")
+
+	client.update_heartbeat(Time.get_ticks_usec() + 31_000_000)
+	var second_ping: int = client.pending_heartbeat_ping_id()
+	_check(second_ping > first_ping, "Heartbeat pingIds increase.")
+	await _read_frames(server_peer, decoder, 1)
+	server_peer.put_data(Codec.encode_message("Ping", {"pingId": 99})["bytes"])
+	for _attempt in range(60):
+		if client.pending_heartbeat_ping_id() == 0:
+			break
+		await process_frame
+	_check(client.pending_heartbeat_ping_id() == 0, "Any valid server message proves the server is alive.")
+
+	var last_seen: int = Time.get_ticks_usec()
+	client.update_heartbeat(last_seen + 31_000_000)
+	_check(client.pending_heartbeat_ping_id() > second_ping, "A new idle period sends another Ping.")
+	client.update_heartbeat(last_seen + 31_000_000 + 59_000_000)
+	_check(closed_reasons.is_empty(), "The connection survives until the Pong timeout.")
+	client.update_heartbeat(last_seen + 31_000_000 + 60_000_000)
+	_check(closed_reasons == [client.SERVER_NOT_RESPONDING], "Without an answer the connection closes as ServerNotResponding.")
+	_check(client.connection_state == 0, "The client ends disconnected.")
 
 	server_peer.disconnect_from_host()
 	server.stop()

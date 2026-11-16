@@ -47,6 +47,7 @@ const DISCONNECT_REASON_TEXTS := {
 	"Session.MatchFull": "La partida ya tiene dos jugadores.",
 	"Session.ReadyTimeoutExpired": "No se confirmó la carga del mundo a tiempo.",
 	"ConnectionFailed": "No se pudo conectar al servidor.",
+	"ServerNotResponding": "El servidor dejó de responder.",
 	"ConnectionLost": "Se perdió la conexión con el servidor.",
 	"RemoteClosed": "El servidor cerró la conexión.",
 	"SocketError": "Error en la conexión con el servidor.",
