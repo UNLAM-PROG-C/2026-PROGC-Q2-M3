@@ -119,7 +119,6 @@ public class InboundMessageParserTests
 
   // Decisión provisoria de Flor (opción A): los comandos de la fase 2 todavía no se convierten.
   [Theory]
-  [InlineData("Stop")]
   [InlineData("Attack")]
   [InlineData("GatherWood")]
   [InlineData("Build")]
@@ -292,6 +291,52 @@ public class InboundMessageParserTests
     var result = ParseLine(line);
 
     AssertInvalidCommand(result, 8);
+  }
+
+  // Stop: solo la lista de unidades.
+  [Fact]
+  public void Parse_ValidStop_ReturnsGameplayMessageWithStopCommand()
+  {
+    var result = ParseLine("""{"protocolVersion":1,"type":"Stop","messageId":4,"payload":{"unitIds":[3,8]}}""");
+
+    Assert.Equal(ParseOutcome.Parsed, result.Outcome);
+    Assert.Equal(
+        new GameplayMessage(new ClientCommandId(4), new StopCommand(EquatableArray.Create<EntityId>([new EntityId(3), new EntityId(8)]))),
+        result.Message);
+  }
+
+  [Fact]
+  public void Parse_StopWithoutMessageId_ReturnsInvalidMessageIdViolation()
+  {
+    var result = ParseLine("""{"protocolVersion":1,"type":"Stop","payload":{"unitIds":[3]}}""");
+
+    AssertViolation(result, NetworkErrors.InvalidMessageId);
+  }
+
+  [Theory]
+  [InlineData("")]
+  [InlineData(""","payload":null""")]
+  [InlineData(""","payload":{}""")]
+  [InlineData(""","payload":{"unitIds":"x"}""")]
+  [InlineData(""","payload":{"unitIds":[null]}""")]
+  [InlineData(""","payload":{"unitIds":["tres"]}""")]
+  public void Parse_StopWithMalformedPayload_ReturnsInvalidCommandWithItsClientCommandId(string payloadProperty)
+  {
+    var result = ParseLine("""{"protocolVersion":1,"type":"Stop","messageId":6""" + payloadProperty + "}");
+
+    AssertInvalidCommand(result, 6);
+  }
+
+  // Estructura correcta, pero el constructor de StopCommand se queja: sin unidades, una inválida o una repetida.
+  [Theory]
+  [InlineData("[]")]
+  [InlineData("[0]")]
+  [InlineData("[3,3]")]
+  public void Parse_StopWhoseConstructorRejectsIt_ReturnsInvalidCommand(string unitIds)
+  {
+    var result = ParseLine("""{"protocolVersion":1,"type":"Stop","messageId":6,"payload":{"unitIds":""" + unitIds + "}}");
+
+    AssertInvalidCommand(result, 6);
   }
 
   // El playerId nunca viene del cliente: si lo manda, se ignora.

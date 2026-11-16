@@ -98,7 +98,8 @@ internal sealed class InboundMessageParser : IInboundMessageParser
       ProtocolMessageTypes.ClientReady => ParseClientReady(payload, messageId),
       ProtocolMessageTypes.Ping => ParsePing(payload, messageId),
       ProtocolMessageTypes.Pong => ParsePong(payload, messageId),
-      ProtocolMessageTypes.Move => ParseMove(payload, messageId),
+      ProtocolMessageTypes.Move => ParseGameplay<MoveCommandDto>(type, payload, messageId, BuildMove),
+      ProtocolMessageTypes.Stop => ParseGameplay<StopCommandDto>(type, payload, messageId, BuildStop),
 
       // Llegan acá los comandos de gameplay de la fase 2: se reconocen pero todavía no se convierten (decisión provisoria).
       _ => ParseResult.Violation(NetworkErrors.UnknownType, messageId, $"El tipo '{type}' todavía no está soportado."),
@@ -154,7 +155,13 @@ internal sealed class InboundMessageParser : IInboundMessageParser
   private static ParseResult InvalidPayload(long? messageId, string detail) =>
       ParseResult.Violation(NetworkErrors.InvalidPayload, messageId, detail);
 
-  private static ParseResult ParseMove(JsonElement? payload, long? messageId)
+  /// <summary>
+  /// Los controles comunes a todo comando de gameplay. Después, <paramref name="build"/> convierte el DTO en el comando de dominio:
+  /// si un campo obligatorio vino en <c>null</c>, o el constructor de dominio rechaza los valores, lanza
+  /// <see cref="ArgumentException"/>, que acá se traduce en un comando inválido en vez de dejarla escapar.
+  /// </summary>
+  private static ParseResult ParseGameplay<TDto>(string type, JsonElement? payload, long? messageId, Func<TDto, IGameCommand> build)
+      where TDto : class
   {
     // Control 6: en gameplay el messageId es obligatorio y es el ClientCommandId, en [1, 2^53] (D-005).
     if (messageId is not long id || !new ClientCommandId(id).IsInValidRange)
@@ -162,59 +169,55 @@ internal sealed class InboundMessageParser : IInboundMessageParser
       return ParseResult.Violation(
           NetworkErrors.InvalidMessageId,
           messageId,
-          $"Move requiere un messageId entero entre 1 y {ClientCommandId.MaxValue}.");
+          $"{type} requiere un messageId entero entre 1 y {ClientCommandId.MaxValue}.");
     }
 
     var clientCommandId = new ClientCommandId(id);
 
     // Desde acá el messageId es válido: si el payload falla, el cliente recibe un CommandRejected con ese id (D-075).
-    if (!TryReadPayload(payload, out MoveCommandDto? dto))
+    if (!TryReadPayload(payload, out TDto? dto))
     {
-      return ParseResult.InvalidCommand(clientCommandId, "El payload de Move no tiene la estructura esperada.");
-    }
-
-    if (!TryBuildMove(dto, out MoveCommand? command, out string detail))
-    {
-      return ParseResult.InvalidCommand(clientCommandId, detail);
-    }
-
-    return ParseResult.Parsed(new GameplayMessage(clientCommandId, command));
-  }
-
-  /// <summary>
-  /// DTO → <see cref="MoveCommand"/>. Los campos que el deserializador deja en <c>null</c> se revisan a mano, y las
-  /// <see cref="ArgumentException"/> de los constructores de dominio (coordenadas no finitas, sin rutas, unidad repetida o inválida)
-  /// se traducen en un fallo en vez de dejarlas escapar.
-  /// </summary>
-  private static bool TryBuildMove(MoveCommandDto dto, [NotNullWhen(true)] out MoveCommand? command, out string detail)
-  {
-    command = null;
-
-    if (dto.Destination is null
-        || dto.Routes is null
-        || dto.Routes.Any(route => route is null || route.Waypoints is null || route.Waypoints.Any(point => point is null)))
-    {
-      detail = "Move necesita destination y routes completos, sin elementos nulos.";
-      return false;
+      return ParseResult.InvalidCommand(clientCommandId, $"El payload de {type} no tiene la estructura esperada.");
     }
 
     try
     {
-      EquatableArray<UnitRouteCandidate> routes = dto.Routes
-          .Select(route => new UnitRouteCandidate(
-              new EntityId(route.UnitId),
-              route.Waypoints.Select(point => new PositionXZ(point.X, point.Z)).ToEquatableArray()))
-          .ToEquatableArray();
-
-      command = new MoveCommand(new PositionXZ(dto.Destination.X, dto.Destination.Z), new MapRevision(dto.RouteMapRevision), routes);
-      detail = string.Empty;
-      return true;
+      return ParseResult.Parsed(new GameplayMessage(clientCommandId, build(dto)));
     }
     catch (ArgumentException exception)
     {
-      detail = exception.Message;
-      return false;
+      return ParseResult.InvalidCommand(clientCommandId, exception.Message);
     }
+  }
+
+  /// <summary>DTO → <see cref="MoveCommand"/>. El constructor rechaza coordenadas no finitas, rutas vacías y unidades repetidas o inválidas.</summary>
+  private static MoveCommand BuildMove(MoveCommandDto dto)
+  {
+    if (dto.Destination is null
+        || dto.Routes is null
+        || dto.Routes.Any(route => route is null || route.Waypoints is null || route.Waypoints.Any(point => point is null)))
+    {
+      throw new ArgumentException("Move necesita destination y routes completos, sin elementos nulos.");
+    }
+
+    EquatableArray<UnitRouteCandidate> routes = dto.Routes
+        .Select(route => new UnitRouteCandidate(
+            new EntityId(route.UnitId),
+            route.Waypoints.Select(point => new PositionXZ(point.X, point.Z)).ToEquatableArray()))
+        .ToEquatableArray();
+
+    return new MoveCommand(new PositionXZ(dto.Destination.X, dto.Destination.Z), new MapRevision(dto.RouteMapRevision), routes);
+  }
+
+  /// <summary>DTO → <see cref="StopCommand"/>. El constructor rechaza la lista vacía y las unidades inválidas o repetidas.</summary>
+  private static StopCommand BuildStop(StopCommandDto dto)
+  {
+    if (dto.UnitIds is null)
+    {
+      throw new ArgumentException("Stop necesita unitIds.");
+    }
+
+    return new StopCommand(dto.UnitIds.Select(id => new EntityId(id)).ToEquatableArray());
   }
 
   /// <summary><c>messageId</c> si es un entero que cabe en 64 bits; no valida el rango (eso es solo para gameplay).</summary>
