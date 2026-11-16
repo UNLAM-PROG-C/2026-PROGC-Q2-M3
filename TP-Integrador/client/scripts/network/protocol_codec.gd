@@ -2,7 +2,7 @@ extends RefCounted
 class_name ProtocolCodec
 
 const PROTOCOL_VERSION := 1
-const MAX_SAFE_MESSAGE_ID := 9_007_199_254_740_992
+const MAX_SAFE_MESSAGE_ID := 9_007_199_254_740_991
 
 const MESSAGE_TYPES := [
 	"Hello",

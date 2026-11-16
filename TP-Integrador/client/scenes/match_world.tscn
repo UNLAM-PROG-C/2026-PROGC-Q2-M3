@@ -2,8 +2,20 @@
 
 [ext_resource type="PackedScene" uid="uid://ctb8ipxe3g57d" path="res://scenes/camera/rts_camera.tscn" id="1_camera"]
 [ext_resource type="Texture2D" uid="uid://dgo1ucaqxvrh1" path="res://assets/textures/skybox.jpg" id="2_sky"]
-[ext_resource type="Script" uid="uid://do67d6bbvdif1" path="res://scripts/edge_margin_overlay.gd" id="3_overlay"]
+[ext_resource type="Script" uid="uid://do67d6bbvdif1" path="res://scripts/ui/edge_margin_overlay.gd" id="3_overlay"]
 [ext_resource type="Script" uid="uid://cplwyijcnhnqw" path="res://scripts/initial_world.gd" id="4_world"]
+[ext_resource type="Script" uid="uid://bt6xv31gcgu7i" path="res://scripts/unit_command_controller.gd" id="5_unit_controller"]
+[ext_resource type="Script" uid="uid://b4o6688n6mpvf" path="res://scripts/ui/session_screens.gd" id="6_session_screens"]
+[ext_resource type="Script" uid="uid://c82nnpidyqm6a" path="res://scripts/ui/match_hud.gd" id="7_match_hud"]
+[ext_resource type="Script" path="res://scripts/build_placement_controller.gd" id="8_build_placement"]
+[ext_resource type="Script" path="res://scripts/unit_animation_controller.gd" id="9_unit_animation"]
+[ext_resource type="Script" path="res://scripts/ui/entity_status_overlay.gd" id="10_status_overlay"]
+[ext_resource type="Theme" path="res://themes/rts_theme.tres" id="11_theme"]
+[ext_resource type="Script" path="res://scripts/match_cursor.gd" id="12_match_cursor"]
+[ext_resource type="Script" path="res://scripts/match_music.gd" id="13_match_music"]
+[ext_resource type="Script" path="res://scripts/match_sfx.gd" id="14_match_sfx"]
+[ext_resource type="Script" path="res://scripts/match_pause.gd" id="15_match_pause"]
+[ext_resource type="Script" path="res://scripts/ui/options_menu.gd" id="16_options_menu"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_world"]
 panorama = ExtResource("2_sky")
@@ -21,10 +33,39 @@ ambient_light_color = Color(1, 1, 1, 1)
 ambient_light_energy = 0.4
 tonemap_mode = 3
 
-[node name="MatchWorld" type="Node3D" unique_id=1524502370]
+[node name="MatchWorld2" type="Node3D" unique_id=1524502370]
 script = ExtResource("4_world")
 
 [node name="RTSCamera" parent="." unique_id=211214968 instance=ExtResource("1_camera")]
+
+[node name="UnitCommandController" type="Node" parent="." unique_id=1989907308]
+script = ExtResource("5_unit_controller")
+
+[node name="MatchPause" type="Node" parent="." node_paths=PackedStringArray("pause_menu", "placement_controller")]
+script = ExtResource("15_match_pause")
+pause_menu = NodePath("../CanvasLayer/PauseMenu")
+placement_controller = NodePath("../BuildPlacementController")
+
+[node name="BuildPlacementController" type="Node3D" parent="."]
+script = ExtResource("8_build_placement")
+
+[node name="UnitAnimationController" type="Node" parent="."]
+script = ExtResource("9_unit_animation")
+
+[node name="MatchCursor" type="Node" parent="." node_paths=PackedStringArray("camera_rig", "command_controller", "placement_controller")]
+script = ExtResource("12_match_cursor")
+camera_rig = NodePath("../RTSCamera")
+command_controller = NodePath("../UnitCommandController")
+placement_controller = NodePath("../BuildPlacementController")
+
+[node name="MatchMusic" type="Node" parent="."]
+script = ExtResource("13_match_music")
+
+[node name="MatchSfx" type="Node" parent="." node_paths=PackedStringArray("command_controller", "placement_controller", "animation_controller")]
+script = ExtResource("14_match_sfx")
+command_controller = NodePath("../UnitCommandController")
+placement_controller = NodePath("../BuildPlacementController")
+animation_controller = NodePath("../UnitAnimationController")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=80036505]
 transform = Transform3D(0.7253744, 0.3337209, -0.60204846, 0, 0.8746197, 0.4848096, 0.68835455, -0.35166848, 0.6344268, 0, 0, 0)
@@ -37,6 +78,7 @@ environment = SubResource("Environment_world")
 [node name="CanvasLayer" type="CanvasLayer" parent="." unique_id=1115445953]
 
 [node name="EdgeMarginOverlay" type="Control" parent="CanvasLayer" unique_id=190512673 node_paths=PackedStringArray("rts_camera")]
+visible = false
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -47,3 +89,49 @@ mouse_filter = 2
 script = ExtResource("3_overlay")
 rts_camera = NodePath("../../RTSCamera")
 line_width = 5.0
+
+[node name="EntityStatusOverlay" type="Control" parent="CanvasLayer" node_paths=PackedStringArray("world", "command_controller")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = ExtResource("11_theme")
+script = ExtResource("10_status_overlay")
+world = NodePath("../..")
+command_controller = NodePath("../../UnitCommandController")
+
+[node name="MatchHud" type="Control" parent="CanvasLayer" unique_id=1117846785 node_paths=PackedStringArray("world", "command_controller", "placement_controller")]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("7_match_hud")
+world = NodePath("../..")
+command_controller = NodePath("../../UnitCommandController")
+placement_controller = NodePath("../../BuildPlacementController")
+
+[node name="SessionScreens" type="Control" parent="CanvasLayer" unique_id=1814132572]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("6_session_screens")
+
+[node name="PauseMenu" type="Control" parent="CanvasLayer"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("16_options_menu")
+back_text = "Volver a la partida"

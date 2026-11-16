@@ -1,6 +1,7 @@
 using Rts.Economy.Contracts;
 using Rts.Economy.Model;
 using Rts.Shared.Collections;
+using Rts.Shared.Entities;
 using Rts.Shared.Events;
 using Rts.Shared.Ids;
 using Rts.Shared.Resources;
@@ -105,7 +106,22 @@ public class ContractsTests
   public void EconomyErrors_UseEconomyArea()
   {
     Assert.All(
-        [EconomyErrors.InsufficientWood, EconomyErrors.InsufficientFood, EconomyErrors.InsufficientResources],
+        [
+          EconomyErrors.InsufficientWood, EconomyErrors.InsufficientFood, EconomyErrors.InsufficientResources,
+          EconomyErrors.InvalidGatherTarget, EconomyErrors.TreeDepleted,
+        ],
         code => Assert.Equal("Economy", code.Area));
+  }
+
+  [Fact]
+  public void GatherTargetInfo_HasTreeStatusExactlyForTrees()
+  {
+    var tree = new GatherTargetInfo(TreeA, EntityKind.Tree, TreeStatus.Depleted);
+
+    Assert.Equal(TreeStatus.Depleted, tree.TreeStatus);
+    Assert.Null(new GatherTargetInfo(TreeB, EntityKind.Building, treeStatus: null).TreeStatus);
+    Assert.Throws<ArgumentException>(() => new GatherTargetInfo(TreeA, EntityKind.Tree, treeStatus: null));
+    Assert.Throws<ArgumentException>(() => new GatherTargetInfo(TreeB, EntityKind.Unit, TreeStatus.Available));
+    Assert.Throws<ArgumentException>(() => new GatherTargetInfo(EntityId.None, EntityKind.Building, treeStatus: null));
   }
 }

@@ -22,7 +22,12 @@ public sealed record PhaseTiming(SimulationPhase Phase, TimeSpan Duration);
 
 /// <summary>
 /// Métricas de un tick (06 §10), útiles para la defensa del TP: duración total y por fase, espera en la barrera,
-/// comandos (tomados, aceptados, rechazados, duplicados respondidos), eventos y si hubo sobrecarga (&gt; intervalo de tick).
+/// comandos (tomados, aceptados, rechazados, duplicados respondidos), eventos y si hubo sobrecarga.
+/// <para>
+/// <see cref="Total"/> es lo que tardó el <b>cálculo</b> del tick. <see cref="IsOverrun"/> es otra cosa: que la vuelta completa del
+/// loop (despertar, cálculo y publicación) no entró en el intervalo, así que el próximo tick arrancó tarde y la agenda se re-ancló
+/// (D-047). La completa el loop; el motor la deja en falso porque no ve ni la publicación ni el despertar.
+/// </para>
 /// </summary>
 public sealed record TickMetrics(
     TickId Tick,
@@ -36,5 +41,8 @@ public sealed record TickMetrics(
     int EventsPublished,
     bool IsOverrun);
 
-/// <summary>Falla crítica de un tick: fase y motivo (06 §7). El tick se descarta completo y la sesión termina en forma técnica.</summary>
-public sealed record SimulationFailure(SimulationPhase Phase, string Reason);
+/// <summary>
+/// Falla crítica de un tick: fase y motivo (06 §7). El tick se descarta completo y la sesión termina en forma técnica.
+/// <see cref="Cause"/> es la excepción original, para no perder su traza en el log (D-099).
+/// </summary>
+public sealed record SimulationFailure(SimulationPhase Phase, string Reason, Exception? Cause = null);

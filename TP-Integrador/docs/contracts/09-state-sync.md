@@ -1,6 +1,6 @@
 # Contrato 09 — State Sync
 
-> **Estado:** primera versión de contratos implementada (`server/src/Rts.StateSync`, DTOs en `server/src/Rts.Protocol`) y probada (`server/tests/Rts.StateSync.Tests`, `server/tests/Rts.Protocol.Tests`). El proyector y el publicador **todavía no tienen lógica**.
+> **Estado:** primera versión de contratos implementada (`server/src/Rts.StateSync`, DTOs en `server/src/Rts.Protocol`) y probada (`server/tests/Rts.StateSync.Tests`, `server/tests/Rts.Protocol.Tests`). **Fases 1 y 2 hechas:** InitialState con catálogo, `StateEvents` por destinatario, `PositionUpdate` cada N ticks y publicador; la política de visibilidad cubre la tabla completa de §3 y el proyector convierte los 17 eventos de dominio (mapeo 1:1, §5). Un evento que no está en la tabla sigue haciendo fallar la política (§3).
 > **Etiquetas:** **DECIDIDO** = aprobado por el equipo (ver [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Módulo:** [09 — State Sync](../modules/09-state-sync.md). **Vecinos:** [06 Simulation](06-simulation.md), [07 GameSession](07-game-session.md), [08 Networking](../modules/08-networking.md).
 

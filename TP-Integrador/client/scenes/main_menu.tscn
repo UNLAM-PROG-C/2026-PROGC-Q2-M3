@@ -1,0 +1,166 @@
+[gd_scene format=3 uid="uid://bg00mmeofejbq"]
+
+[ext_resource type="Texture2D" uid="uid://dqnitvm2lrcd6" path="res://assets/textures/Cartoon_green_texture_grass.jpg" id="3_oa1go"]
+[ext_resource type="PackedScene" uid="uid://bs827caik5upc" path="res://scenes/buildings/main_center.tscn" id="4_jk1qb"]
+[ext_resource type="Texture2D" uid="uid://dgo1ucaqxvrh1" path="res://assets/textures/skybox.jpg" id="4_tbmy8"]
+[ext_resource type="PackedScene" uid="uid://cl2ldw36phrmp" path="res://scenes/buildings/barracks.tscn" id="5_5dd4i"]
+[ext_resource type="PackedScene" uid="uid://qa0vbjhydpwf" path="res://scenes/buildings/tower.tscn" id="6_lgwnu"]
+[ext_resource type="PackedScene" uid="uid://c2reyx2wvlt48" path="res://scenes/buildings/farm.tscn" id="7_flqon"]
+[ext_resource type="PackedScene" uid="uid://epcij5ufj57r" path="res://assets/nature/Bush_1_A_Color1.gltf" id="9_flqon"]
+[ext_resource type="PackedScene" uid="uid://bkbqjo6pdt1qc" path="res://assets/nature/Grass_1_B_Color1.gltf" id="10_rcqid"]
+[ext_resource type="PackedScene" uid="uid://bo6ry40l1jeoe" path="res://assets/nature/Grass_1_C_Color1.gltf" id="11_1ajci"]
+[ext_resource type="PackedScene" uid="uid://b2ocddhsnwo1q" path="res://assets/nature/Grass_2_C_Singlesided_Color1.gltf" id="12_7b55j"]
+[ext_resource type="PackedScene" uid="uid://bjt37jcy7j40k" path="res://assets/units/mini_characters/character-knight.glb" id="13_knight"]
+[ext_resource type="PackedScene" uid="uid://fe2pm2uuq6ou" path="res://assets/units/mini_characters/character-male-b.glb" id="14_male_b"]
+[ext_resource type="Script" uid="uid://c8vb320cw20e2" path="res://scripts/ui/idle_character.gd" id="15_idle"]
+[ext_resource type="Theme" uid="uid://dug6jhtynlvyw" path="res://themes/rts_theme.tres" id="16_theme"]
+[ext_resource type="Script" uid="uid://mqwtkfunqyu" path="res://scripts/ui/main_menu.gd" id="17_menu"]
+[ext_resource type="Script" uid="uid://crxtij3ywnmw4" path="res://scripts/ui/options_menu.gd" id="18_options"]
+
+[sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_rcqid"]
+panorama = ExtResource("4_tbmy8")
+energy_multiplier = 0.45
+
+[sub_resource type="Sky" id="Sky_o5qli"]
+sky_material = SubResource("PanoramaSkyMaterial_rcqid")
+
+[sub_resource type="Environment" id="Environment_1ajci"]
+background_mode = 2
+background_color = Color(0.32266605, 0.65667504, 0.89629006, 1)
+sky = SubResource("Sky_o5qli")
+ambient_light_source = 2
+ambient_light_color = Color(1, 1, 1, 1)
+ambient_light_energy = 0.4
+tonemap_mode = 3
+
+[sub_resource type="PlaneMesh" id="PlaneMesh_7b55j"]
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_5pajh"]
+albedo_color = Color(0.89594275, 0.8959428, 0.8959428, 1)
+albedo_texture = ExtResource("3_oa1go")
+uv1_scale = Vector3(2.5, 2.5, 2.5)
+
+[node name="MainMenu" type="Node3D" unique_id=1524502370]
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="." unique_id=846525389]
+transform = Transform3D(0.7253744, 0.3337209, -0.60204846, 0, 0.8746197, 0.4848096, 0.68835455, -0.35166848, 0.6344268, 0, 0, 0)
+light_energy = 0.3
+shadow_enabled = true
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="." unique_id=1469000102]
+environment = SubResource("Environment_1ajci")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=196298306]
+transform = Transform3D(2, 0, 0, 0, 2, 0, 0, 0, 2, 0, 0, 0)
+mesh = SubResource("PlaneMesh_7b55j")
+surface_material_override/0 = SubResource("StandardMaterial3D_5pajh")
+
+[node name="Base" parent="." unique_id=1895642044 instance=ExtResource("4_jk1qb")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.014858723, 0, -1.0805817)
+
+[node name="Barracks" parent="." unique_id=98682975 instance=ExtResource("5_5dd4i")]
+transform = Transform3D(0.7109676, 0, 0.703225, 0, 1, 0, -0.703225, 0, 0.7109676, -1.5135846, 0, 0.041627407)
+
+[node name="Tower" parent="." unique_id=468697195 instance=ExtResource("6_lgwnu")]
+transform = Transform3D(0.73983675, 0, -0.6727864, 0, 1, 0, 0.6727864, 0, 0.73983675, 1.4141865, 0, -0.44561696)
+
+[node name="Farm" parent="." unique_id=1518792934 instance=ExtResource("7_flqon")]
+transform = Transform3D(0.8263653, 0, -0.56313443, 0, 1, 0, 0.56313443, 0, 0.8263653, 0.94583297, 0, 0.16503906)
+
+[node name="Camera3D" type="Camera3D" parent="." unique_id=513894574]
+transform = Transform3D(0.95857596, 0.08609776, 0.27151293, 0, 0.9532223, -0.30227032, -0.28483695, 0.2897491, 0.913736, 0.19652748, 0.38376582, 1.557353)
+
+[node name="Knight" type="Node3D" parent="." unique_id=600441311]
+transform = Transform3D(0.5939093, 0, 0.45800835, 0, 0.75, 0, -0.45800835, 0, 0.5939093, -0.47938323, 2.3841858e-07, 0.43362594)
+script = ExtResource("15_idle")
+
+[node name="Model" parent="Knight" unique_id=932190940 instance=ExtResource("13_knight")]
+
+[node name="MaleB" type="Node3D" parent="." unique_id=825064592]
+transform = Transform3D(0.57735205, 0, -0.16329336, 0, 0.6000001, 0, 0.16329336, 0, 0.57735205, 0.30639, 0.036811113, 0.21597323)
+script = ExtResource("15_idle")
+
+[node name="Model" parent="MaleB" unique_id=737655742 instance=ExtResource("14_male_b")]
+
+[node name="Nature" type="Node3D" parent="." unique_id=901928598]
+
+[node name="Grass_1_B_Color12" parent="Nature" unique_id=895046472 instance=ExtResource("10_rcqid")]
+transform = Transform3D(0.2, 0, 0, 0, 0.2, 0, 0, 0, 0.2, -0.31347355, 0.014014959, -0.098086596)
+
+[node name="Grass_1_C_Color12" parent="Nature" unique_id=641892963 instance=ExtResource("11_1ajci")]
+transform = Transform3D(0.1, 0, 0, 0, 0.1, 0, 0, 0, 0.1, -0.18716097, 0, -0.053964734)
+
+[node name="Grass_2_C_Singlesided_Color12" parent="Nature" unique_id=1511507758 instance=ExtResource("12_7b55j")]
+transform = Transform3D(0.2, 0, 0, 0, 0.4, 0, 0, 0, 0.2, 0.51384515, 1.1920929e-07, -0.04685676)
+
+[node name="Bush_1_A_Color12" parent="Nature" unique_id=1796225151 instance=ExtResource("9_flqon")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5253805, 0, -0.114613056)
+
+[node name="MenuLayer" type="CanvasLayer" parent="." unique_id=76055057]
+
+[node name="MenuUI" type="Control" parent="MenuLayer" unique_id=394141823]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("16_theme")
+script = ExtResource("17_menu")
+
+[node name="Margin" type="MarginContainer" parent="MenuLayer/MenuUI" unique_id=185109549]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 72
+
+[node name="Buttons" type="VBoxContainer" parent="MenuLayer/MenuUI/Margin" unique_id=1599967231]
+layout_mode = 2
+size_flags_horizontal = 0
+mouse_filter = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="GameTitle" type="Label" parent="MenuLayer/MenuUI/Margin/Buttons" unique_id=902001504]
+layout_mode = 2
+theme_type_variation = &"TitleLabel"
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 52
+text = "Age of Concurrency"
+horizontal_alignment = 1
+
+[node name="TitleSpacer" type="Control" parent="MenuLayer/MenuUI/Margin/Buttons" unique_id=160993602]
+custom_minimum_size = Vector2(0, 16)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="PlayButton" type="Button" parent="MenuLayer/MenuUI/Margin/Buttons" unique_id=860837530]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(260, 64)
+layout_mode = 2
+size_flags_horizontal = 0
+theme_override_font_sizes/font_size = 28
+text = "Jugar"
+
+[node name="OptionsButton" type="Button" parent="MenuLayer/MenuUI/Margin/Buttons" unique_id=571015783]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(260, 56)
+layout_mode = 2
+size_flags_horizontal = 0
+theme_override_font_sizes/font_size = 24
+text = "Opciones"
+
+[node name="OptionsMenu" type="Control" parent="MenuLayer/MenuUI" unique_id=513970445]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("18_options")

@@ -1,23 +1,50 @@
 extends Node3D
 
 const PROTOCOL_CODEC = preload("res://scripts/network/protocol_codec.gd")
+const CLIENT_NAVIGATION_SCRIPT = preload("res://scripts/client_navigation.gd")
 
 signal world_preparation_completed(initialization_id: int)
 signal world_preparation_failed(initialization_id: int, detail: String)
 signal world_discarded(initialization_id: int)
+signal unit_removed(unit_id: int)
+signal building_removed(building_id: int)
+## Unidad creada durante la partida (UnitSpawned), ya en el mundo.
+signal unit_spawned(unit_id: int)
+## Entidad dañada (EntityDamaged), con su HP ya actualizado.
+signal entity_damaged(entity_id: int)
 signal world_sync_warning(error_code: String, detail: String)
 signal world_sync_failed(detail: String)
 signal map_revision_changed(revision: int)
 signal command_result_received(client_command_id: int, result: Dictionary)
 signal command_rejected_received(message_id: int, error_code: String)
+signal repath_response_failed(error_code: String, detail: String)
 signal resources_changed(resources: Dictionary)
 signal production_changed(producer_id: int, production: Dictionary)
 signal repath_requested(request: Dictionary)
 
 const GRASS_TEXTURE_PATH := "res://assets/textures/Cartoon_green_texture_grass.jpg"
-const TREE_VISUAL_PATH := "res://assets/nature/Tree_1_A_Color1.gltf"
+## Variantes del árbol. Cada árbol elige una según su treeId, así se ve siempre igual (al
+## recargar el estado o al reaparecer) y ambos jugadores ven el mismo bosque.
+const TREE_VISUAL_PATHS := [
+	"res://assets/nature/Tree_1_A_Color1.gltf",
+	"res://assets/nature/Tree_1_B_Color1.gltf",
+	"res://assets/nature/Tree_1_C_Color1.gltf",
+]
 const POSITION_RATE_HZ := 10
 const MAX_RECENT_COMMAND_RESULTS := 128
+const DEATH_ANIMATION := "die"
+## Tiempo que el cuerpo queda caído después de la animación de muerte.
+const DEATH_LINGER_SECONDS := 0.8
+## Después se hunde bajo el suelo antes de liberarse, en vez de desaparecer de golpe.
+## La profundidad supera la altura de los modelos de unidad (~0,8 m).
+const DEATH_SINK_DEPTH := 1.2
+const DEATH_SINK_SECONDS := 1.5
+## Ruinas que deja un edificio destruido: solo visuales (el lugar ya quedó libre, 03 §6).
+const RUINS_VISUAL_PATH := "res://assets/buildings/neutral/building_destroyed.gltf"
+## Cuánto de la huella ocupan las ruinas.
+const RUINS_FOOTPRINT_FILL := 0.9
+const RUINS_LINGER_SECONDS := 4.0
+const RUINS_SINK_SECONDS := 1.5
 const UNIT_ORDER_KINDS := [
 	"Idle",
 	"Move",
@@ -27,30 +54,63 @@ const UNIT_ORDER_KINDS := [
 	"Attack",
 ]
 const PRODUCTION_STATUSES := ["Idle", "WaitingForResources", "Training", "PendingSpawn"]
-
-const UNIT_VISUAL_PATHS := {
-	"Worker": "res://assets/units/mini_characters/character-worker.glb",
-	"Soldier": "res://assets/units/mini_characters/character-soldier.glb",
+## Campo del payload que identifica el objetivo de cada orden de tarea (docs/protocol/examples).
+const TASK_TARGET_KEYS := {
+	"GatherWood": "treeId",
+	"Attack": "targetId",
+	"Build": "buildingId",
+	"RepairFarm": "farmId",
+}
+## Edificios que se pueden colocar con Build (el Centro Principal no: Construction.NotBuildable).
+const BUILDABLE_TYPES := ["Farm", "Barracks", "Tower", "Fence"]
+## Qué entrena cada edificio productor (contrato 05, ProducerCatalog, DECIDIDO 05 §1).
+const PRODUCER_UNIT_TYPES := {
+	"MainCenter": "Worker",
+	"Barracks": "Soldier",
+}
+## Tipo de unidad que acepta cada orden de tarea (contrato 04 §3, UnitOrderCompatibility).
+const TASK_UNIT_TYPES := {
+	"GatherWood": "Worker",
+	"Build": "Worker",
+	"RepairFarm": "Worker",
+	"Attack": "Soldier",
 }
 
+## Color de cada jugador para los detalles que no vienen en el modelo (banderines de vallas),
+## parecido al azul y rojo de los edificios.
+const TEAM_COLORS := {
+	1: Color(0.18, 0.42, 0.9),
+	2: Color(0.88, 0.2, 0.18),
+}
+const BANNER_BASE_HEIGHT := 0.45
+const BANNER_POLE_HEIGHT := 0.75
+const BANNER_OFFSET_X := 0.45
+const BANNER_FLAG_WIDTH := 0.42
+const BANNER_FLAG_HEIGHT := 0.26
+## Modelo de cada tipo de unidad según el jugador, como los edificios (azul P1, rojo P2):
+## P1 juega con trabajadores y caballeros, P2 con male-b y robots. Así los dos bandos se
+## distinguen de un vistazo y cada jugador ve el mismo mundo que el rival.
+const UNIT_VISUAL_PATHS := {
+	"Worker": {
+		1: "res://assets/units/mini_characters/character-worker.glb",
+		2: "res://assets/units/mini_characters/character-male-b.glb",
+	},
+	"Soldier": {
+		1: "res://assets/units/mini_characters/character-knight.glb",
+		2: "res://assets/units/mini_characters/character-robot.glb",
+	},
+}
+
+## Escena de cada tipo de edificio (scenes/buildings). Cada escena trae sus modelos azules en
+## el nodo "Colored" (P2 los cambia por los rojos, ver _apply_team_models), el andamio en
+## "Scaffolding" (visible solo en obra) y, la granja, su cultivo en "Grain". La valla no tiene
+## "Colored": su color va en un banderín. El Centro Principal no tiene andamio: nunca se construye.
 const BUILDING_VISUAL_PATHS := {
-	"MainCenter": {
-		1: "res://assets/buildings/blue/building_castle_blue.gltf",
-		2: "res://assets/buildings/red/building_castle_red.gltf",
-	},
-	"Farm": {
-		1: "res://assets/buildings/blue/building_home_A_blue.gltf",
-		2: "res://assets/buildings/red/building_home_A_red.gltf",
-	},
-	"Barracks": {
-		1: "res://assets/buildings/blue/building_barracks_blue.gltf",
-		2: "res://assets/buildings/red/building_barracks_red.gltf",
-	},
-	"Tower": {
-		1: "res://assets/buildings/blue/building_tower_B_blue.gltf",
-		2: "res://assets/buildings/red/building_tower_B_red.gltf",
-	},
-	"Fence": "res://assets/buildings/neutral/fence_wood_straight.gltf",
+	"MainCenter": "res://scenes/buildings/main_center.tscn",
+	"Farm": "res://scenes/buildings/farm.tscn",
+	"Barracks": "res://scenes/buildings/barracks.tscn",
+	"Tower": "res://scenes/buildings/tower.tscn",
+	"Fence": "res://scenes/buildings/fence.tscn",
 }
 
 const INITIAL_STATE_KEYS := [
@@ -88,18 +148,38 @@ var _position_samples: Dictionary = {}
 var _position_clock_tick := -1
 var _position_clock_received_usec := 0
 var _recent_command_result_ids: Array[int] = []
+var next_client_message_id := 1
+var pending_commands: Dictionary = {}
+var pending_repath_responses: Dictionary = {}
+var pending_command_by_unit: Dictionary = {}
+var accepted_order_intents: Dictionary = {}
+var _units_calculating_command: Dictionary = {}
+var _batch_unit_order_changes: Array[Dictionary] = []
+var _batch_placed_buildings: Array[Dictionary] = []
+## Ruinas visibles: building_id → {"node": Node3D, "rect": Rect2i}.
+var _ruins: Dictionary = {}
 
 
 func _ready() -> void:
 	set_process(true)
+	var map_revision_callable := Callable(self, "_on_map_revision_changed")
+	if not is_connected("map_revision_changed", map_revision_callable):
+		connect("map_revision_changed", map_revision_callable)
+	var repath_callable := Callable(self, "_on_repath_requested")
+	if not is_connected("repath_requested", repath_callable):
+		connect("repath_requested", repath_callable)
 	_session_controller = get_node_or_null("/root/SessionController")
 	if _session_controller != null:
 		var callbacks := {
 			"initial_state_preparation_requested": Callable(self, "_on_initial_state_preparation_requested"),
 			"initial_state_discard_requested": Callable(self, "_on_initial_state_discard_requested"),
+			"session_state_changed": Callable(self, "_on_session_state_changed"),
+			"session_reset": Callable(self, "_on_session_reset"),
 		}
 		for signal_name in callbacks:
 			if not _session_controller.has_signal(signal_name):
+				if signal_name == "session_state_changed" or signal_name == "session_reset":
+					continue
 				_report_error(
 					"InvalidSessionController",
 					"SessionController no expone la señal %s." % signal_name
@@ -131,15 +211,26 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	_invalidate_world_navigation(active_world)
 	if is_instance_valid(_session_controller):
 		var callbacks := {
 			"initial_state_preparation_requested": Callable(self, "_on_initial_state_preparation_requested"),
 			"initial_state_discard_requested": Callable(self, "_on_initial_state_discard_requested"),
+			"session_state_changed": Callable(self, "_on_session_state_changed"),
+			"session_reset": Callable(self, "_on_session_reset"),
 		}
 		for signal_name in callbacks:
+			if not _session_controller.has_signal(signal_name):
+				continue
 			var callback: Callable = callbacks[signal_name]
 			if _session_controller.is_connected(signal_name, callback):
 				_session_controller.disconnect(signal_name, callback)
+	var map_revision_callable := Callable(self, "_on_map_revision_changed")
+	if is_connected("map_revision_changed", map_revision_callable):
+		disconnect("map_revision_changed", map_revision_callable)
+	var repath_callable := Callable(self, "_on_repath_requested")
+	if is_connected("repath_requested", repath_callable):
+		disconnect("repath_requested", repath_callable)
 	if is_instance_valid(_network_client):
 		var message_callable := Callable(self, "_on_network_message_received")
 		if _network_client.is_connected("message_received", message_callable):
@@ -184,6 +275,7 @@ func prepare_initial_state(
 	_reset_synchronization_cursors()
 
 	if previous_world != null and is_instance_valid(previous_world):
+		_invalidate_world_navigation(previous_world)
 		remove_child(previous_world)
 		previous_world.queue_free()
 
@@ -198,6 +290,7 @@ func discard_initial_state(initialization_id: int) -> void:
 		return
 
 	if active_world != null and is_instance_valid(active_world):
+		_invalidate_world_navigation(active_world)
 		remove_child(active_world)
 		active_world.queue_free()
 	active_world = null
@@ -207,6 +300,868 @@ func discard_initial_state(initialization_id: int) -> void:
 	active_initialization_id = 0
 	_clear_synchronization_state()
 	world_discarded.emit(initialization_id)
+
+
+func calculate_move_routes(destination: Vector2, unit_ids: Array[int] = []) -> Dictionary:
+	if active_world == null:
+		return {"ok": false, "error": "WorldNotReady", "detail": "No hay un mundo activo para calcular rutas."}
+	var world_instance := active_world
+	var target_ids := _distinct_sorted_array(unit_ids)
+	if target_ids.is_empty():
+		return {"ok": false, "error": "NoUnitsSelected", "detail": "No hay unidades elegidas para mover."}
+	var navigation: Node = _get_active_navigation()
+	if navigation == null:
+		return {"ok": false, "error": "NavigationUnavailable", "detail": "El mundo no contiene ClientNavigation."}
+	var route_revision := -1
+	var routes: Array[Dictionary] = []
+	for entity_id: int in target_ids:
+		var entity: Node3D = entities_by_id.get(entity_id)
+		if entity == null or entity.get_meta("entity_kind", "") != "unit":
+			continue
+		var state: Dictionary = entity.get_meta("entity_state", {})
+		if int(state.get("owner", 0)) != int(active_snapshot.get("playerId", 0)):
+			continue
+		var official_position: Variant = entity.get_meta("official_position", null)
+		if typeof(official_position) != TYPE_VECTOR2:
+			return {"ok": false, "error": "OfficialPositionUnavailable", "detail": "La unidad %d no tiene posición oficial." % entity_id}
+		var origin: Vector2 = official_position
+		var route_result: Dictionary = await _calculate_candidate_route_stable(
+			navigation,
+			origin,
+			destination,
+			map_revision
+		)
+		if active_world != world_instance:
+			return {"ok": false, "error": "WorldChanged", "detail": "El mundo cambió durante el cálculo de rutas."}
+		if entities_by_id.get(entity_id) != entity:
+			return {"ok": false, "error": "UnitMissing", "detail": "La unidad %d desapareció durante el cálculo." % entity_id}
+		var latest_position: Variant = entity.get_meta("official_position", null)
+		if typeof(latest_position) != TYPE_VECTOR2:
+			return {"ok": false, "error": "OfficialPositionUnavailable", "detail": "La unidad %d perdió su posición oficial." % entity_id}
+		var latest_position_vector: Vector2 = latest_position
+		if not latest_position_vector.is_equal_approx(origin):
+			return {"ok": false, "error": "OfficialPositionChanged", "detail": "La posición oficial de la unidad cambió durante el cálculo."}
+		if not bool(route_result.get("ok", false)):
+			return route_result
+		var current_route_revision := int(route_result["revision"])
+		if route_revision >= 0 and current_route_revision != route_revision:
+			return {"ok": false, "error": "MapRevisionChanged", "detail": "El mapa cambió mientras se calculaban las rutas del grupo."}
+		route_revision = current_route_revision
+		routes.append({
+				"unitId": entity_id,
+				"waypoints": route_result["waypoints"],
+			})
+	if routes.is_empty():
+		return {"ok": false, "error": "NoUnitsReady", "detail": "Ninguna unidad elegida está lista para mover."}
+	var payload := {
+		"destination": {"x": float(destination.x), "z": float(destination.y)},
+		"routeMapRevision": route_revision,
+		"routes": routes,
+	}
+	return {"ok": true, "payload": payload}
+
+
+func build_move_payload(destination: Vector2, unit_ids: Array[int] = []) -> Dictionary:
+	return await calculate_move_routes(destination, unit_ids)
+
+
+func generate_move_command(destination: Vector2, unit_ids: Array[int] = []) -> Dictionary:
+	return await issue_move_command(destination, unit_ids)
+
+
+func create_move_command(destination: Vector2, unit_ids: Array[int] = []) -> Dictionary:
+	return await issue_move_command(destination, unit_ids)
+
+
+func issue_move_command(destination: Vector2, unit_ids: Array[int] = []) -> Dictionary:
+	return await _issue_routed_command(
+		"Move",
+		unit_ids,
+		func(ids: Array[int]) -> Dictionary: return await calculate_move_routes(destination, ids)
+	)
+
+
+## GatherWood: solo trabajadores propios; el resto de la selección se ignora (plan 06 §2).
+func issue_gather_wood_command(tree_id: int, unit_ids: Array[int] = []) -> Dictionary:
+	return await _issue_task_command("GatherWood", tree_id, unit_ids)
+
+
+## Attack: solo soldados propios contra una unidad o un edificio rival.
+func issue_attack_command(target_id: int, unit_ids: Array[int] = []) -> Dictionary:
+	return await _issue_task_command("Attack", target_id, unit_ids)
+
+
+## Build en su forma "continuar" (D-032): sumarse a una obra propia sin costo.
+func issue_build_continue_command(building_id: int, unit_ids: Array[int] = []) -> Dictionary:
+	return await _issue_task_command("Build", building_id, unit_ids)
+
+
+## RepairFarm: trabajadores propios sobre una granja propia, completada y agotada.
+func issue_repair_farm_command(farm_id: int, unit_ids: Array[int] = []) -> Dictionary:
+	return await _issue_task_command("RepairFarm", farm_id, unit_ids)
+
+
+## Stop: deja Idle a las unidades propias. No lleva rutas ni bloquea por comandos pendientes,
+## para que el jugador pueda frenar una orden recién dada.
+func issue_stop_command(unit_ids: Array[int] = []) -> Dictionary:
+	var precondition := _gameplay_precondition()
+	if not precondition.is_empty():
+		return precondition
+	var stop_ids: Array[int] = []
+	for unit_id: int in _distinct_sorted_array(unit_ids):
+		if not _owned_unit_type(unit_id).is_empty():
+			stop_ids.append(unit_id)
+	if stop_ids.is_empty():
+		return {"ok": false, "error": "NoUnitsSelected", "detail": "No hay unidades propias para detener."}
+	var payload := {"unitIds": stop_ids}
+	return _send_tracked_command("Stop", payload, [])
+
+
+## TrainUnit (contrato 05 §3): agrega una solicitud a la cola del productor. No exige comida:
+## sin comida la solicitud espera. La cola llena (`Production.QueueFull`) solo la puede
+## informar el servidor, porque `MaxPendingPerProducer` no viaja en el catálogo.
+func issue_train_unit_command(producer_id: int, unit_type: String) -> Dictionary:
+	var precondition := _gameplay_precondition()
+	if not precondition.is_empty():
+		return precondition
+	var trainable := trainable_unit_type(producer_id)
+	if not bool(trainable.get("ok", false)):
+		return trainable
+	if str(trainable["unitType"]) != unit_type:
+		return {"ok": false, "error": "WrongUnitType", "detail": "Ese edificio no entrena %s." % unit_type}
+	return _send_tracked_command("TrainUnit", {"producerId": producer_id, "unitType": unit_type}, [])
+
+
+## Tipo de unidad que entrena un edificio propio, o el error por el que no puede entrenar.
+func trainable_unit_type(producer_id: int) -> Dictionary:
+	var producer: Node3D = entities_by_id.get(producer_id)
+	if producer == null or producer.get_meta("entity_kind", "") != "building":
+		return {"ok": false, "error": "EntityNotFound", "detail": "El productor %d no existe." % producer_id}
+	var state: Dictionary = producer.get_meta("entity_state", {})
+	if int(state.get("owner", 0)) != int(active_snapshot.get("playerId", 0)):
+		return {"ok": false, "error": "NotOwner", "detail": "El edificio %d no es propio." % producer_id}
+	var unit_type: String = PRODUCER_UNIT_TYPES.get(str(state.get("buildingType", "")), "")
+	if unit_type.is_empty():
+		return {"ok": false, "error": "NotAProducer", "detail": "El edificio %d no entrena unidades." % producer_id}
+	if not bool(state.get("isCompleted", false)):
+		return {"ok": false, "error": "ProducerNotOperational", "detail": "El edificio %d todavía está en obra." % producer_id}
+	return {"ok": true, "unitType": unit_type}
+
+
+## Estado de producción propio de un productor (InitialState.ownProduction y ProductionChanged).
+func get_own_production(producer_id: int) -> Dictionary:
+	for producer: Variant in active_snapshot.get("ownProduction", []):
+		if producer is Dictionary and int(producer.get("producerId", 0)) == producer_id:
+			return producer.duplicate(true)
+	return {}
+
+
+func get_own_resources() -> Dictionary:
+	return active_snapshot.get("ownResources", {}).duplicate(true)
+
+
+## Verificación local de una colocación, en el orden de EvaluateSite (contrato 03 §3) y
+## después la madera. Sirve para la vista previa: el resultado oficial lo decide el servidor.
+func validate_placement(building_type: String, anchor_column: int, anchor_row: int) -> Dictionary:
+	if not BUILDABLE_TYPES.has(building_type):
+		return {"ok": false, "error": "NotBuildable", "detail": "%s no se puede construir." % building_type}
+	var footprint := placement_footprint(building_type, anchor_column, anchor_row)
+	if footprint.size == Vector2i.ZERO:
+		return {"ok": false, "error": "NotBuildable", "detail": "El catálogo no define la huella de %s." % building_type}
+	var map_data: Dictionary = active_snapshot.get("map", {})
+	if (
+		footprint.position.x < 0
+		or footprint.position.y < 0
+		or footprint.end.x > int(map_data.get("columns", 0))
+		or footprint.end.y > int(map_data.get("rows", 0))
+	):
+		return {"ok": false, "error": "OutOfBounds", "detail": "La huella sale del mapa."}
+	for building: Variant in active_snapshot.get("buildings", []):
+		var other: Dictionary = building.get("footprint", {})
+		var other_rect := Rect2i(int(other.get("column", 0)), int(other.get("row", 0)), int(other.get("width", 0)), int(other.get("height", 0)))
+		if footprint.intersects(other_rect):
+			return {"ok": false, "error": "CellOccupied", "detail": "La huella pisa otro edificio."}
+	for tree: Variant in active_snapshot.get("trees", []):
+		if footprint.has_point(Vector2i(int(tree.get("column", -1)), int(tree.get("row", -1)))):
+			return {"ok": false, "error": "TreeReserved", "detail": "La huella pisa la celda de un árbol."}
+	var cell_size := float(map_data.get("cellSize", 1.0))
+	for entity_id: Variant in entities_by_id:
+		var node: Node3D = entities_by_id[entity_id]
+		if node.get_meta("entity_kind", "") != "unit":
+			continue
+		var position_value: Variant = node.get_meta("official_position", null)
+		if typeof(position_value) != TYPE_VECTOR2:
+			continue
+		var unit_position: Vector2 = position_value
+		var cell := Vector2i(floori(unit_position.x / cell_size), floori(unit_position.y / cell_size))
+		if footprint.has_point(cell):
+			return {"ok": false, "error": "UnitInFootprint", "detail": "Hay una unidad en la huella."}
+	var wood_cost := int(_catalog_by_type("buildings", "buildingType").get(building_type, {}).get("cost", {}).get("wood", 0))
+	if int(active_snapshot.get("ownResources", {}).get("wood", 0)) < wood_cost:
+		return {"ok": false, "error": "InsufficientWood", "detail": "No alcanza la madera."}
+	return {"ok": true, "footprint": footprint, "woodCost": wood_cost}
+
+
+## Huella en celdas con ancla en la celda de columna y fila mínimas (D-006), sin rotación.
+func placement_footprint(building_type: String, anchor_column: int, anchor_row: int) -> Rect2i:
+	var entry: Dictionary = _catalog_by_type("buildings", "buildingType").get(building_type, {})
+	return Rect2i(
+		anchor_column,
+		anchor_row,
+		int(entry.get("footprintWidth", 0)),
+		int(entry.get("footprintHeight", 0))
+	)
+
+
+## Build en su forma "colocar" (D-032): tipo + celda ancla, con una ruta por trabajador hasta el
+## rango de la huella. `allow_pending` deja mandar varias vallas seguidas con los mismos
+## trabajadores (D-033): cada nueva orden válida reemplaza a la anterior en el servidor.
+func issue_build_place_command(
+	building_type: String,
+	anchor_column: int,
+	anchor_row: int,
+	unit_ids: Array[int] = [],
+	allow_pending := false
+) -> Dictionary:
+	var precondition := _gameplay_precondition()
+	if not precondition.is_empty():
+		return precondition
+	var placement := validate_placement(building_type, anchor_column, anchor_row)
+	if not bool(placement.get("ok", false)):
+		return placement
+	return await _issue_routed_command(
+		"Build",
+		unit_ids,
+		func(ids: Array[int]) -> Dictionary:
+			return await calculate_build_place_routes(building_type, anchor_column, anchor_row, ids),
+		allow_pending
+	)
+
+
+func calculate_build_place_routes(
+	building_type: String,
+	anchor_column: int,
+	anchor_row: int,
+	unit_ids: Array[int]
+) -> Dictionary:
+	if active_world == null:
+		return {"ok": false, "error": "WorldNotReady", "detail": "No hay un mundo activo para calcular rutas."}
+	var world_instance := active_world
+	var compatible_ids := _compatible_unit_ids("Build", unit_ids)
+	if compatible_ids.is_empty():
+		return {"ok": false, "error": "NoCompatibleUnits", "detail": "Solo los trabajadores pueden construir."}
+	var footprint := placement_footprint(building_type, anchor_column, anchor_row)
+	var cell_size := float(active_snapshot.get("map", {}).get("cellSize", 1.0))
+	var target := {"rect": Rect2(Vector2(footprint.position) * cell_size, Vector2(footprint.size) * cell_size)}
+	# La ruta termina al entrar en el rango de la huella, así que no la atraviesa aunque la
+	# navegación local todavía no la tenga como obstáculo (el servidor valida contra el mapa
+	# con la huella bloqueada, 03 §3).
+	var routes_result: Dictionary = await _calculate_routes_to_target(
+		compatible_ids,
+		target,
+		_interaction_range("Build"),
+		0
+	)
+	if active_world != world_instance:
+		return {"ok": false, "error": "WorldChanged", "detail": "El mundo cambió durante el cálculo de rutas."}
+	if not bool(routes_result.get("ok", false)):
+		return routes_result
+	return {
+		"ok": true,
+		"payload": {
+			"buildingType": building_type,
+			"anchorColumn": anchor_column,
+			"anchorRow": anchor_row,
+			"routeMapRevision": routes_result["revision"],
+			"routes": routes_result["routes"],
+		},
+	}
+
+
+## Arma el payload de una orden de tarea: objetivo, revisión de mapa y una ruta por unidad
+## que termina dentro del rango de interacción (contrato 04 §3).
+func calculate_task_routes(command_type: String, target_id: int, unit_ids: Array[int] = []) -> Dictionary:
+	if active_world == null:
+		return {"ok": false, "error": "WorldNotReady", "detail": "No hay un mundo activo para calcular rutas."}
+	var world_instance := active_world
+	var target_check := _validate_task_target(command_type, target_id)
+	if not bool(target_check.get("ok", false)):
+		return target_check
+	var interaction_range := _interaction_range(command_type)
+	if interaction_range <= 0.0:
+		return {"ok": false, "error": "RangeUnavailable", "detail": "El catálogo no define el rango de %s." % command_type}
+	var compatible_ids := _compatible_unit_ids(command_type, unit_ids)
+	if compatible_ids.is_empty():
+		return {"ok": false, "error": "NoCompatibleUnits", "detail": "Ninguna unidad elegida puede ejecutar %s." % command_type}
+	var routes_result: Dictionary = await _calculate_routes_to_target(
+		compatible_ids,
+		target_check["geometry"],
+		interaction_range,
+		target_id
+	)
+	if active_world != world_instance:
+		return {"ok": false, "error": "WorldChanged", "detail": "El mundo cambió durante el cálculo de rutas."}
+	if not bool(routes_result.get("ok", false)):
+		return routes_result
+	var payload := {
+		TASK_TARGET_KEYS[command_type]: target_id,
+		"routeMapRevision": routes_result["revision"],
+		"routes": routes_result["routes"],
+	}
+	return {"ok": true, "payload": payload}
+
+
+## Una ruta por unidad hasta quedar en rango del objetivo (punto o huella). Si `target_id`
+## es 0, el objetivo es una huella hipotética (Build colocar) y no una entidad existente.
+func _calculate_routes_to_target(
+	unit_ids: Array[int],
+	target_geometry: Dictionary,
+	interaction_range: float,
+	target_id: int
+) -> Dictionary:
+	var world_instance := active_world
+	var navigation: Node = _get_active_navigation()
+	if navigation == null:
+		return {"ok": false, "error": "NavigationUnavailable", "detail": "El mundo no contiene ClientNavigation."}
+	var route_revision := -1
+	var routes: Array[Dictionary] = []
+	for unit_id: int in unit_ids:
+		var unit: Node3D = entities_by_id.get(unit_id)
+		var official_position: Variant = unit.get_meta("official_position", null)
+		if typeof(official_position) != TYPE_VECTOR2:
+			return {"ok": false, "error": "OfficialPositionUnavailable", "detail": "La unidad %d no tiene posición oficial." % unit_id}
+		var origin: Vector2 = official_position
+		var route_result: Dictionary = await _calculate_candidate_route_stable(
+			navigation,
+			origin,
+			Vector2.ZERO,
+			map_revision,
+			target_geometry,
+			interaction_range
+		)
+		if active_world != world_instance:
+			return {"ok": false, "error": "WorldChanged", "detail": "El mundo cambió durante el cálculo de rutas."}
+		if entities_by_id.get(unit_id) != unit:
+			return {"ok": false, "error": "UnitMissing", "detail": "La unidad %d desapareció durante el cálculo." % unit_id}
+		if target_id > 0 and not entities_by_id.has(target_id):
+			return {"ok": false, "error": "TargetMissing", "detail": "El objetivo %d desapareció durante el cálculo." % target_id}
+		var latest_position: Variant = unit.get_meta("official_position", null)
+		if typeof(latest_position) != TYPE_VECTOR2 or not origin.is_equal_approx(latest_position):
+			return {"ok": false, "error": "OfficialPositionChanged", "detail": "La posición oficial de la unidad cambió durante el cálculo."}
+		if not bool(route_result.get("ok", false)):
+			return route_result
+		var current_route_revision := int(route_result["revision"])
+		if route_revision >= 0 and current_route_revision != route_revision:
+			return {"ok": false, "error": "MapRevisionChanged", "detail": "El mapa cambió mientras se calculaban las rutas del grupo."}
+		route_revision = current_route_revision
+		routes.append({"unitId": unit_id, "waypoints": route_result["waypoints"]})
+	return {"ok": true, "routes": routes, "revision": route_revision}
+
+
+func _issue_task_command(command_type: String, target_id: int, unit_ids: Array[int]) -> Dictionary:
+	var precondition := _gameplay_precondition()
+	if not precondition.is_empty():
+		return precondition
+	# Un objetivo inválido se informa antes que el bloqueo por comandos pendientes.
+	var target_check := _validate_task_target(command_type, target_id)
+	if not bool(target_check.get("ok", false)):
+		return target_check
+	return await _issue_routed_command(
+		command_type,
+		unit_ids,
+		func(ids: Array[int]) -> Dictionary: return await calculate_task_routes(command_type, target_id, ids)
+	)
+
+
+## Flujo común de los comandos con rutas: bloqueo por unidad mientras hay un comando
+## sin resultado, cálculo de rutas, revalidación tras el await y envío con messageId nuevo.
+func _issue_routed_command(
+	command_type: String,
+	unit_ids: Array[int],
+	route_calculator: Callable,
+	allow_pending := false
+) -> Dictionary:
+	var precondition := _gameplay_precondition()
+	if not precondition.is_empty():
+		return precondition
+	var target_ids := _distinct_sorted_array(unit_ids)
+	if target_ids.is_empty():
+		return {"ok": false, "error": "NoUnitsSelected", "detail": "No hay unidades elegidas para %s." % command_type}
+	var request_initialization_id := active_initialization_id
+	for unit_id: int in target_ids:
+		if _units_calculating_command.has(unit_id) or (not allow_pending and pending_command_by_unit.has(unit_id)):
+			return {"ok": false, "error": "CommandAlreadyPending", "detail": "La unidad %d ya tiene un comando pendiente." % unit_id}
+	for unit_id: int in target_ids:
+		_units_calculating_command[unit_id] = true
+	var route_result: Dictionary = await route_calculator.call(target_ids)
+	for unit_id: int in target_ids:
+		_units_calculating_command.erase(unit_id)
+	if not route_result["ok"]:
+		return route_result
+	if request_initialization_id != active_initialization_id:
+		return {"ok": false, "error": "WorldChanged", "detail": "El mundo cambió durante el cálculo de rutas."}
+	precondition = _gameplay_precondition()
+	if not precondition.is_empty():
+		return precondition
+	var payload: Dictionary = route_result["payload"]
+	var routed_unit_ids: Array[int] = []
+	for route: Dictionary in payload["routes"]:
+		routed_unit_ids.append(int(route["unitId"]))
+	for unit_id: int in routed_unit_ids:
+		if not allow_pending and pending_command_by_unit.has(unit_id):
+			return {"ok": false, "error": "CommandAlreadyPending", "detail": "La unidad %d recibió otro comando durante el cálculo." % unit_id}
+	return _send_tracked_command(command_type, payload, routed_unit_ids)
+
+
+func _send_tracked_command(command_type: String, payload: Dictionary, locked_unit_ids: Array[int]) -> Dictionary:
+	var message_id := _allocate_client_message_id()
+	if message_id < 0:
+		return {"ok": false, "error": "MessageIdExhausted", "detail": "Se agotó el rango de messageId permitido."}
+	if not bool(_network_client.call("send_message", command_type, payload, message_id)):
+		return {"ok": false, "error": "SendFailed", "detail": "No se pudo enviar el comando %s." % command_type}
+	var unit_ids: Array[int] = locked_unit_ids.duplicate()
+	if command_type == "Stop":
+		for unit_id_value: Variant in payload["unitIds"]:
+			unit_ids.append(int(unit_id_value))
+	pending_commands[message_id] = {
+		"type": command_type,
+		"status": "awaiting_result",
+		"payload": payload.duplicate(true),
+		"unitIds": unit_ids,
+	}
+	for unit_id: int in locked_unit_ids:
+		pending_command_by_unit[unit_id] = message_id
+	return {"ok": true, "messageId": message_id, "payload": payload}
+
+
+func _gameplay_precondition() -> Dictionary:
+	if _session_controller == null or not _session_controller.can_issue_gameplay():
+		return {"ok": false, "error": "MatchNotRunning", "detail": "La sesión no está en Running."}
+	if _network_client == null or not _network_client.has_method("send_message"):
+		return {"ok": false, "error": "NetworkUnavailable", "detail": "No hay un NetworkClient disponible."}
+	return {}
+
+
+## Tipo de una unidad propia y viva, o "" si no lo es.
+func _owned_unit_type(unit_id: int) -> String:
+	var unit: Node3D = entities_by_id.get(unit_id)
+	if unit == null or unit.get_meta("entity_kind", "") != "unit":
+		return ""
+	var state: Dictionary = unit.get_meta("entity_state", {})
+	if int(state.get("owner", 0)) != int(active_snapshot.get("playerId", 0)):
+		return ""
+	return str(state.get("unitType", ""))
+
+
+## Unidades propias de la selección que pueden ejecutar la orden (04 §2).
+func _compatible_unit_ids(command_type: String, unit_ids: Array[int]) -> Array[int]:
+	var required_type: String = TASK_UNIT_TYPES.get(command_type, "")
+	var result: Array[int] = []
+	for unit_id: int in _distinct_sorted_array(unit_ids):
+		var unit_type := _owned_unit_type(unit_id)
+		if not unit_type.is_empty() and (required_type.is_empty() or unit_type == required_type):
+			result.append(unit_id)
+	return result
+
+
+## Rango de interacción de una orden de tarea, tomado del catálogo (D-068):
+## GatherWood → gatherRange; Build y RepairFarm → buildRange; Attack → rango del soldado.
+func _interaction_range(command_type: String) -> float:
+	match command_type:
+		"GatherWood":
+			return float(active_catalog.get("gatherRange", 0.0))
+		"Build", "RepairFarm":
+			return float(active_catalog.get("buildRange", 0.0))
+		"Attack":
+			var soldier: Dictionary = _catalog_by_type("units", "unitType").get("Soldier", {})
+			return float(soldier.get("attack", {}).get("range", 0.0))
+	return 0.0
+
+
+## Verifica que el objetivo exista y corresponda a la orden, y devuelve su geometría:
+## punto para unidades y árboles, huella para edificios (D-019, D-050).
+func _validate_task_target(command_type: String, target_id: int) -> Dictionary:
+	var target: Node3D = entities_by_id.get(target_id)
+	if target == null:
+		return {"ok": false, "error": "TargetMissing", "detail": "El objetivo %d no existe en el mundo local." % target_id}
+	var kind := str(target.get_meta("entity_kind", ""))
+	var state: Dictionary = target.get_meta("entity_state", {})
+	var local_player_id := int(active_snapshot.get("playerId", 0))
+	var owner := int(state.get("owner", 0))
+	match command_type:
+		"GatherWood":
+			if kind != "tree":
+				return {"ok": false, "error": "InvalidTarget", "detail": "GatherWood requiere un árbol."}
+			if not bool(state.get("isAvailable", false)):
+				return {"ok": false, "error": "TreeDepleted", "detail": "El árbol %d está agotado." % target_id}
+		"Attack":
+			if kind != "unit" and kind != "building":
+				return {"ok": false, "error": "InvalidTarget", "detail": "Attack requiere una unidad o un edificio."}
+			if owner == local_player_id:
+				return {"ok": false, "error": "FriendlyTarget", "detail": "No se puede atacar una entidad propia."}
+		"Build":
+			if kind != "building" or owner != local_player_id:
+				return {"ok": false, "error": "InvalidTarget", "detail": "Build continuar requiere una obra propia."}
+			if bool(state.get("isCompleted", false)):
+				return {"ok": false, "error": "AlreadyCompleted", "detail": "El edificio %d ya está terminado." % target_id}
+		"RepairFarm":
+			if (
+				kind != "building"
+				or owner != local_player_id
+				or str(state.get("buildingType", "")) != "Farm"
+				or not bool(state.get("isCompleted", false))
+			):
+				return {"ok": false, "error": "NotAFarm", "detail": "RepairFarm requiere una granja propia completada."}
+			if not bool(state.get("farm", {}).get("isDepleted", false)):
+				return {"ok": false, "error": "FarmNotDepleted", "detail": "La granja %d no está agotada." % target_id}
+		_:
+			return {"ok": false, "error": "UnknownCommand", "detail": "%s no es una orden de tarea." % command_type}
+	var geometry := _target_geometry(target_id)
+	if geometry.is_empty():
+		return {"ok": false, "error": "TargetGeometryUnavailable", "detail": "No se pudo ubicar al objetivo %d." % target_id}
+	return {"ok": true, "geometry": geometry}
+
+
+func _target_geometry(target_id: int) -> Dictionary:
+	var target: Node3D = entities_by_id.get(target_id)
+	if target == null:
+		return {}
+	var state: Dictionary = target.get_meta("entity_state", {})
+	match str(target.get_meta("entity_kind", "")):
+		"unit":
+			var official_position: Variant = target.get_meta("official_position", null)
+			if typeof(official_position) == TYPE_VECTOR2:
+				return {"point": official_position}
+			return {"point": Vector2(float(state.get("x", 0.0)), float(state.get("z", 0.0)))}
+		"tree":
+			return {"point": Vector2(float(state.get("x", 0.0)), float(state.get("z", 0.0)))}
+		"building":
+			var footprint: Dictionary = state.get("footprint", {})
+			var cell_size := float(active_snapshot.get("map", {}).get("cellSize", 0.0))
+			if footprint.is_empty() or cell_size <= 0.0:
+				return {}
+			return {
+				"rect": Rect2(
+					float(footprint["column"]) * cell_size,
+					float(footprint["row"]) * cell_size,
+					float(footprint["width"]) * cell_size,
+					float(footprint["height"]) * cell_size
+				),
+			}
+	return {}
+
+
+func build_repath_response_payload(request: Dictionary) -> Dictionary:
+	if (
+		not request.has("unitId")
+		or not request.has("orderId")
+		or not _is_positive_integer(request["unitId"])
+		or not _is_positive_integer(request["orderId"])
+		or not request.has("mapRevision")
+		or not _is_non_negative_integer(request["mapRevision"])
+	):
+		return {"ok": false, "error": "InvalidRequest", "detail": "RepathRequest requiere unitId y orderId."}
+	var unit_id: int = int(request["unitId"])
+	var order_id: int = int(request["orderId"])
+	var has_target := request.has("targetId") and request["targetId"] != null
+	if has_target and not _is_positive_integer(request["targetId"]):
+		return {"ok": false, "error": "InvalidRequest", "detail": "RepathRequest.targetId debe ser un ID positivo."}
+	if not has_target and (not request.has("destination") or typeof(request["destination"]) != TYPE_DICTIONARY):
+		return {"ok": false, "error": "InvalidRequest", "detail": "RepathRequest debe contener destination para una orden Move."}
+	if not entities_by_id.has(unit_id):
+		return {"ok": false, "error": "UnitMissing", "detail": "La unidad no existe en el mundo local."}
+	var unit: Node3D = entities_by_id[unit_id]
+	var unit_state: Dictionary = unit.get_meta("entity_state", {})
+	var intent: Dictionary = accepted_order_intents.get(unit_id, {})
+	if (
+		unit.get_meta("entity_kind", "") != "unit"
+		or int(unit_state.get("owner", 0)) != int(active_snapshot.get("playerId", 0))
+		or intent.is_empty()
+		or str(unit_state.get("order", "")) != str(intent.get("kind", ""))
+		or int(unit_state.get("orderId", 0)) != order_id
+		or int(intent.get("orderId", 0)) != order_id
+		or has_target == (str(intent.get("kind", "")) == "Move")
+	):
+		return {"ok": false, "error": "StaleOrder", "detail": "RepathRequest ya no corresponde a la orden vigente."}
+	var destination := Vector2.ZERO
+	var range_target: Dictionary = {}
+	var interaction_range := 0.0
+	if has_target:
+		# Repath de una orden de tarea (04 §5): ruta nueva hasta el rango del objetivo
+		# en su posición o huella actual, con el mismo OrderId.
+		var target_id := int(request["targetId"])
+		if int(intent.get("targetId", 0)) != target_id:
+			return {"ok": false, "error": "StaleTarget", "detail": "RepathRequest no coincide con el objetivo de la orden aceptada."}
+		range_target = _target_geometry(target_id)
+		if range_target.is_empty():
+			return {"ok": false, "error": "TargetMissing", "detail": "El objetivo %d no existe en el mundo local." % target_id}
+		interaction_range = _interaction_range(str(intent["kind"]))
+		if interaction_range <= 0.0:
+			return {"ok": false, "error": "RangeUnavailable", "detail": "El catálogo no define el rango de la orden."}
+	else:
+		var destination_data: Dictionary = request["destination"]
+		if (
+			not destination_data.has("x")
+			or not destination_data.has("z")
+			or not _is_finite_number(destination_data["x"])
+			or not _is_finite_number(destination_data["z"])
+		):
+			return {"ok": false, "error": "InvalidRequest", "detail": "destination requiere coordenadas X/Z finitas."}
+		destination = Vector2(float(destination_data["x"]), float(destination_data["z"]))
+		var intended_destination: Vector2 = intent["destination"]
+		if not destination.is_equal_approx(intended_destination):
+			return {"ok": false, "error": "StaleDestination", "detail": "RepathRequest no coincide con el destino de la orden aceptada."}
+	var official_position: Variant = unit.get_meta("official_position", null)
+	if typeof(official_position) != TYPE_VECTOR2:
+		return {"ok": false, "error": "OfficialPositionUnavailable", "detail": "La unidad no tiene posición oficial."}
+	var navigation: Node = _get_active_navigation()
+	if navigation == null:
+		return {"ok": false, "error": "NavigationUnavailable", "detail": "El mundo no contiene ClientNavigation."}
+	var requested_revision := int(request["mapRevision"])
+	var origin: Vector2 = official_position
+	var request_initialization_id := active_initialization_id
+	var route_result: Dictionary = await _calculate_candidate_route_stable(
+		navigation,
+		origin,
+		destination,
+		requested_revision,
+		range_target,
+		interaction_range
+	)
+	if request_initialization_id != active_initialization_id:
+		return {"ok": false, "error": "WorldChanged", "detail": "El mundo cambió durante el cálculo del repath."}
+	if not bool(route_result.get("ok", false)):
+		return route_result
+	var latest_position: Variant = unit.get_meta("official_position", null)
+	if typeof(latest_position) != TYPE_VECTOR2:
+		return {"ok": false, "error": "OfficialPositionUnavailable", "detail": "La unidad perdió su posición oficial durante el repath."}
+	var latest_position_vector: Vector2 = latest_position
+	if not latest_position_vector.is_equal_approx(origin):
+		return {"ok": false, "error": "OfficialPositionChanged", "detail": "La posición oficial cambió durante el cálculo del repath."}
+	var current_unit: Node3D = entities_by_id.get(unit_id)
+	if (
+		current_unit == null
+		or int(current_unit.get_meta("entity_state", {}).get("orderId", 0)) != order_id
+		or int(accepted_order_intents.get(unit_id, {}).get("orderId", 0)) != order_id
+	):
+		return {"ok": false, "error": "StaleOrder", "detail": "La orden cambió durante el cálculo del repath."}
+	return {
+		"ok": true,
+		"payload": {
+			"unitId": unit_id,
+			"orderId": order_id,
+			"mapRevision": int(route_result["revision"]),
+			"waypoints": route_result["waypoints"],
+		},
+	}
+
+
+func send_repath_response(request: Dictionary, message_id: int = -1) -> Dictionary:
+	if _session_controller == null or not _session_controller.can_issue_gameplay():
+		return {"ok": false, "error": "MatchNotRunning", "detail": "La sesión no está en Running."}
+	if _network_client == null or not _network_client.has_method("send_message"):
+		return {"ok": false, "error": "NetworkUnavailable", "detail": "No hay un NetworkClient disponible."}
+	var payload_result: Dictionary = await build_repath_response_payload(request)
+	if not payload_result.get("ok", false):
+		return payload_result
+	if _session_controller == null or not _session_controller.can_issue_gameplay():
+		return {"ok": false, "error": "MatchNotRunning", "detail": "La sesión dejó de estar en Running durante el cálculo."}
+	var effective_message_id := message_id if message_id > 0 else _allocate_client_message_id()
+	if effective_message_id < 0 or effective_message_id > PROTOCOL_CODEC.MAX_SAFE_MESSAGE_ID:
+		return {"ok": false, "error": "MessageIdExhausted", "detail": "Se agotó el rango de messageId permitido."}
+	if message_id > 0:
+		if message_id < next_client_message_id:
+			return {"ok": false, "error": "MessageIdAlreadyUsed", "detail": "El messageId debe ser nuevo y creciente."}
+		next_client_message_id = message_id + 1
+	var payload: Dictionary = payload_result["payload"]
+	if not _network_client.call("send_message", "RepathResponse", payload, effective_message_id):
+		return {"ok": false, "error": "SendFailed", "detail": "No se pudo enviar RepathResponse."}
+	pending_repath_responses[effective_message_id] = {
+		"type": "RepathResponse",
+		"status": "awaiting_result",
+		"payload": payload.duplicate(true),
+		"unitId": int(payload["unitId"]),
+		"orderId": int(payload["orderId"]),
+	}
+	return {"ok": true, "messageId": effective_message_id, "payload": payload}
+
+
+func retry_rejected_command(message_id: int) -> Dictionary:
+	if _session_controller == null or not _session_controller.can_issue_gameplay():
+		return {"ok": false, "error": "MatchNotRunning", "detail": "La sesión no está en Running."}
+	var command: Dictionary = pending_commands.get(message_id, {})
+	var commands := pending_commands
+	if command.is_empty():
+		command = pending_repath_responses.get(message_id, {})
+		commands = pending_repath_responses
+	if command.is_empty() or str(command.get("status", "")) != "rejected":
+		return {"ok": false, "error": "CommandNotRetryable", "detail": "No hay un rechazo reintentable con ese messageId."}
+	if _network_client == null or not _network_client.has_method("send_message"):
+		return {"ok": false, "error": "NetworkUnavailable", "detail": "No hay un NetworkClient disponible."}
+	if not _network_client.call("send_message", str(command["type"]), command["payload"], message_id):
+		return {"ok": false, "error": "SendFailed", "detail": "No se pudo reenviar el comando original."}
+	command["status"] = "awaiting_result"
+	commands[message_id] = command
+	return {"ok": true, "messageId": message_id, "payload": command["payload"]}
+
+
+func discard_rejected_command(message_id: int) -> bool:
+	var command: Dictionary = pending_commands.get(message_id, {})
+	if not command.is_empty():
+		if str(command.get("status", "")) != "rejected":
+			return false
+		_release_pending_command(message_id, command)
+		pending_commands.erase(message_id)
+		return true
+	command = pending_repath_responses.get(message_id, {})
+	if command.is_empty() or str(command.get("status", "")) != "rejected":
+		return false
+	pending_repath_responses.erase(message_id)
+	return true
+
+
+func _distinct_sorted_array(values: Array[int]) -> Array[int]:
+	var seen: Dictionary = {}
+	var result: Array[int] = []
+	for value: Variant in values:
+		if typeof(value) != TYPE_INT:
+			continue
+		var unit_id := int(value)
+		if seen.has(unit_id):
+			continue
+		seen[unit_id] = true
+		result.append(unit_id)
+	result.sort()
+	return result
+
+
+func _get_active_navigation() -> Node:
+	if active_world == null:
+		return null
+	return active_world.get_node_or_null("ClientNavigation")
+
+
+func _invalidate_world_navigation(world: Node3D) -> void:
+	if not is_instance_valid(world):
+		return
+	var navigation: Node = world.get_node_or_null("ClientNavigation")
+	if navigation != null:
+		navigation.call("invalidate")
+
+
+func _calculate_candidate_route_stable(
+	navigation: Node,
+	origin: Vector2,
+	destination: Vector2,
+	minimum_revision: int,
+	range_target: Dictionary = {},
+	interaction_range := 0.0
+) -> Dictionary:
+	while true:
+		if not is_instance_valid(navigation):
+			return {"ok": false, "error": "NavigationUnavailable", "detail": "La navegación se cerró durante el cálculo."}
+		if bool(navigation.call("is_invalidated")):
+			return {"ok": false, "error": "NavigationUnavailable", "detail": "La navegación se cerró durante el cálculo."}
+		var last_error := str(navigation.get("last_error"))
+		if not last_error.is_empty():
+			return {"ok": false, "error": "NavigationBakeFailed", "detail": last_error}
+		while int(navigation.get("ready_revision")) < minimum_revision:
+			if bool(navigation.call("is_invalidated")):
+				return {"ok": false, "error": "NavigationUnavailable", "detail": "La navegación se cerró durante el cálculo."}
+			last_error = str(navigation.get("last_error"))
+			if not last_error.is_empty():
+				return {"ok": false, "error": "NavigationBakeFailed", "detail": last_error}
+			if int(navigation.get("required_revision")) < minimum_revision:
+				return {"ok": false, "error": "NavigationRevisionUnavailable", "detail": "No se recibió la revisión de mapa solicitada."}
+			await Signal(navigation, "navigation_state_changed")
+			if not is_instance_valid(navigation):
+				return {"ok": false, "error": "NavigationUnavailable", "detail": "La navegación se cerró durante el cálculo."}
+		var revision := int(navigation.get("ready_revision"))
+		if not bool(navigation.call("is_ready_for", revision)):
+			await Signal(navigation, "navigation_state_changed")
+			continue
+		var result: Dictionary
+		if range_target.is_empty():
+			result = await navigation.call(
+				"calculate_candidate_route",
+				origin,
+				destination,
+				revision
+			)
+		else:
+			result = await navigation.call(
+				"calculate_candidate_route_to_range",
+				origin,
+				range_target,
+				interaction_range,
+				revision
+			)
+		if not is_instance_valid(navigation):
+			return {"ok": false, "error": "NavigationUnavailable", "detail": "La navegación se cerró durante el cálculo."}
+		if bool(navigation.call("is_invalidated")):
+			return {"ok": false, "error": "NavigationUnavailable", "detail": "La navegación se cerró durante el cálculo."}
+		if (
+			int(navigation.get("ready_revision")) != revision
+			or not bool(navigation.call("is_ready_for", revision))
+		):
+			continue
+		if not bool(result.get("ok", false)):
+			return result
+		result["revision"] = revision
+		return result
+	return {"ok": false, "error": "NavigationQueryFailed", "detail": "No se pudo completar la consulta de navegación."}
+
+
+func _allocate_client_message_id() -> int:
+	if next_client_message_id < 1 or next_client_message_id > PROTOCOL_CODEC.MAX_SAFE_MESSAGE_ID:
+		return -1
+	var message_id := next_client_message_id
+	next_client_message_id += 1
+	return message_id
+
+
+func _on_map_revision_changed(revision: int) -> void:
+	navigation_required_revision = revision
+	var navigation := _get_active_navigation()
+	if navigation == null:
+		_report_sync_warning("NavigationUnavailable", "El mundo activo no contiene ClientNavigation.")
+		return
+	navigation.call(
+		"request_revision",
+		active_snapshot.get("map", {}),
+		active_snapshot.get("buildings", []),
+		revision
+	)
+
+
+func _on_navigation_bake_failed(revision: int, detail: String) -> void:
+	_report_sync_warning(
+		"NavigationBakeFailed",
+		"No se pudo preparar la navegación para la revisión %d: %s" % [revision, detail]
+	)
+
+
+func _on_repath_requested(request: Dictionary) -> void:
+	var result: Dictionary = await send_repath_response(request)
+	if not bool(result.get("ok", false)):
+		_report_sync_warning(
+			str(result.get("error", "RepathResponseFailed")),
+			str(result.get("detail", "No se pudo responder a RepathRequested."))
+		)
+		repath_response_failed.emit(
+			str(result.get("error", "RepathResponseFailed")),
+			str(result.get("detail", "No se pudo responder a RepathRequested."))
+		)
+
+
+func _on_session_state_changed(_state: int, state_name: String) -> void:
+	if ["AwaitingAssignment", "Ended", "Disconnected"].has(state_name):
+		_clear_command_tracking()
+
+
+func _on_session_reset() -> void:
+	if active_initialization_id > 0:
+		discard_initial_state(active_initialization_id)
 
 
 func _on_initial_state_preparation_requested(initialization_id: int, payload: Dictionary) -> void:
@@ -255,7 +1210,20 @@ func _handle_command_rejected(payload: Variant) -> void:
 			"CommandRejected requiere messageId seguro y error no vacío."
 		)
 		return
-	command_rejected_received.emit(int(data["messageId"]), str(data["error"]))
+	var message_id := int(data["messageId"])
+	var error_code := str(data["error"])
+	var command: Dictionary = pending_commands.get(message_id, {})
+	if not command.is_empty():
+		command["status"] = "rejected"
+		command["error"] = error_code
+		pending_commands[message_id] = command
+	else:
+		command = pending_repath_responses.get(message_id, {})
+		if not command.is_empty():
+			command["status"] = "rejected"
+			command["error"] = error_code
+			pending_repath_responses[message_id] = command
+	command_rejected_received.emit(message_id, error_code)
 
 
 func apply_state_events(payload: Variant) -> bool:
@@ -348,6 +1316,8 @@ func apply_state_events(payload: Variant) -> bool:
 		)
 
 	var notifications: Array[Dictionary] = []
+	_batch_unit_order_changes.clear()
+	_batch_placed_buildings.clear()
 	for event_index in range(events.size()):
 		var event_data: Dictionary = events[event_index]
 		var result := _apply_state_event(event_data, tick)
@@ -366,22 +1336,25 @@ func apply_state_events(payload: Variant) -> bool:
 	navigation_required_revision = simulated_revision
 	active_snapshot["map"]["revision"] = simulated_revision
 
-	for notification in notifications:
-		match notification["type"]:
+	var repath_notifications: Array[Dictionary] = []
+	for event_notification in notifications:
+		match event_notification["type"]:
 			"map_revision":
-				map_revision_changed.emit(int(notification["revision"]))
+				map_revision_changed.emit(int(event_notification["revision"]))
 			"resources":
-				resources_changed.emit(notification["value"].duplicate(true))
+				resources_changed.emit(event_notification["value"].duplicate(true))
 			"production":
 				production_changed.emit(
-					int(notification["producerId"]),
-					notification["value"].duplicate(true)
+					int(event_notification["producerId"]),
+					event_notification["value"].duplicate(true)
 				)
 			"repath":
-				repath_requested.emit(notification["value"].duplicate(true))
+				repath_notifications.append(event_notification["value"].duplicate(true))
 
 	for command_result: Dictionary in data["commandResults"]:
 		_remember_command_result(command_result)
+	for request: Dictionary in repath_notifications:
+		repath_requested.emit(request)
 
 	return true
 
@@ -408,10 +1381,10 @@ func apply_position_update(payload: Variant, received_usec: int = -1) -> bool:
 	var positions: Array = data["units"]
 	var position_ids: Dictionary = {}
 	for index in range(positions.size()):
-		var position: Variant = positions[index]
-		if typeof(position) != TYPE_DICTIONARY:
+		var position_entry: Variant = positions[index]
+		if typeof(position_entry) != TYPE_DICTIONARY:
 			return _fail_synchronization("PositionUpdate.units[%d] debe ser un objeto." % index)
-		var position_data: Dictionary = position
+		var position_data: Dictionary = position_entry
 		if (
 			not position_data.has("id")
 			or not position_data.has("x")
@@ -486,12 +1459,12 @@ func _validate_state_event(
 			):
 				return _event_validation_failure("BuildingPlaced contiene identidad o tipo inválido.", simulated_revision)
 			var building_id := int(event["buildingId"])
-			var owner := int(event["owner"])
+			var owner_id := int(event["owner"])
 			var building_type: String = event["buildingType"]
 			if (
-				not _has_player(owner)
+				not _has_player(owner_id)
 				or not BUILDING_VISUAL_PATHS.has(building_type)
-				or _building_visual_path(building_type, owner).is_empty()
+				or _building_visual_path(building_type, owner_id).is_empty()
 			):
 				return _event_validation_failure("BuildingPlaced contiene identidad o tipo inválido.", simulated_revision)
 			if simulated_entities.has(building_id) or simulated_destroyed.has(building_id):
@@ -532,6 +1505,8 @@ func _validate_state_event(
 				"buildingType": building_type,
 				"owner": owner,
 			}
+			id_field = "buildingId"
+			expected_kind = "building"
 		"UnitSpawned":
 			var required_unit := _first_missing_key(
 				event,
@@ -574,6 +1549,8 @@ func _validate_state_event(
 				"unitType": unit_type,
 				"owner": int(event["owner"]),
 			}
+			id_field = "unitId"
+			expected_kind = "unit"
 		"BuildingProgressChanged", "BuildingCompleted":
 			id_field = "buildingId"
 			expected_kind = "building"
@@ -778,7 +1755,7 @@ func _validate_command_results(command_results: Array) -> String:
 
 func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 	var event_type: String = event["type"]
-	var notification: Dictionary = {}
+	var event_notification: Dictionary = {}
 	match event_type:
 		"BuildingPlaced":
 			var building: Dictionary = {
@@ -791,7 +1768,7 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 			}
 			var footprint: Dictionary = building["footprint"]
 			var cell_size := float(active_snapshot["map"]["cellSize"])
-			var position := Vector3(
+			var building_position := Vector3(
 				(float(footprint["column"]) + float(footprint["width"]) / 2.0) * cell_size,
 				0.0,
 				(float(footprint["row"]) + float(footprint["height"]) / 2.0) * cell_size
@@ -801,7 +1778,7 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 				path,
 				"Building_%d" % building["buildingId"],
 				building,
-				position
+				building_position
 			)
 			if not bool(building_instance_result["ok"]):
 				return {"ok": false, "detail": str(building_instance_result["detail"])}
@@ -810,8 +1787,10 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 				return {"ok": false, "detail": "No existe el contenedor de edificios del mundo activo."}
 			var building_node: Node3D = building_instance_result["node"]
 			buildings_parent.add_child(building_node)
+			_clear_ruins_in(_footprint_rect(building["footprint"]))
 			entities_by_id[int(building["buildingId"])] = building_node
 			_store_entity_snapshot(int(building["buildingId"]), building)
+			_batch_placed_buildings.append(building.duplicate(true))
 		"UnitSpawned":
 			var unit: Dictionary = {
 				"unitId": int(event["unitId"]),
@@ -822,7 +1801,7 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 				"hp": int(event["hp"]),
 			}
 			var unit_instance_result := _create_entity_node(
-				UNIT_VISUAL_PATHS[unit["unitType"]],
+				unit_visual_path(str(unit["unitType"]), int(unit["owner"])),
 				"Unit_%d" % unit["unitId"],
 				unit,
 				Vector3(unit["x"], 0.0, unit["z"])
@@ -836,6 +1815,7 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 			units_parent.add_child(unit_node)
 			entities_by_id[int(unit["unitId"])] = unit_node
 			_store_entity_snapshot(int(unit["unitId"]), unit)
+			unit_spawned.emit(int(unit["unitId"]))
 			_add_position_sample(
 				int(unit["unitId"]),
 				tick,
@@ -867,17 +1847,30 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 				}
 			)
 		"MapRevisionChanged":
-			notification = {"type": "map_revision", "revision": int(event["revision"])}
+			event_notification = {"type": "map_revision", "revision": int(event["revision"])}
 		"EntityDamaged":
 			_update_entity_state(int(event["entityId"]), {"hp": int(event["hp"])})
+			entity_damaged.emit(int(event["entityId"]))
 		"EntityDestroyed":
 			var entity_id := int(event["entityId"])
 			var node: Node3D = entities_by_id[entity_id]
+			var entity_kind := str(node.get_meta("entity_kind", ""))
+			if entity_kind == "unit":
+				unit_removed.emit(entity_id)
+			elif entity_kind == "building":
+				building_removed.emit(entity_id)
 			entities_by_id.erase(entity_id)
+			if entity_kind == "unit":
+				pending_command_by_unit.erase(entity_id)
+			accepted_order_intents.erase(entity_id)
 			_position_samples.erase(entity_id)
 			destroyed_entity_ids[entity_id] = true
-			_remove_entity_snapshot(entity_id, node.get_meta("entity_kind", ""))
-			node.queue_free()
+			_remove_entity_snapshot(entity_id, entity_kind)
+			if entity_kind == "unit":
+				_play_death_and_free(node)
+			else:
+				_show_ruins(entity_id, node)
+				node.queue_free()
 		"TreeDepleted":
 			var depleted_tree_id := int(event["treeId"])
 			_update_entity_state(depleted_tree_id, {"isAvailable": false})
@@ -889,19 +1882,26 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 			var respawned_tree: Node3D = entities_by_id[respawned_tree_id]
 			respawned_tree.visible = true
 		"UnitOrderChanged":
+			var unit_id := int(event["unitId"])
 			_update_entity_state(
-				int(event["unitId"]),
+				unit_id,
 				{"orderId": int(event["orderId"]), "order": event["kind"]}
 			)
+			accepted_order_intents.erase(unit_id)
+			_batch_unit_order_changes.append({
+				"unitId": unit_id,
+				"orderId": int(event["orderId"]),
+				"kind": str(event["kind"]),
+			})
 		"RepathRequested":
-			notification = {"type": "repath", "value": event.duplicate(true)}
+			event_notification = {"type": "repath", "value": event.duplicate(true)}
 		"ProductionChanged":
 			var producer_id := int(event["producerId"])
 			var production := event.duplicate(true)
 			production.erase("type")
 			production.erase("index")
 			_replace_own_production(producer_id, production)
-			notification = {
+			event_notification = {
 				"type": "production",
 				"producerId": producer_id,
 				"value": production,
@@ -909,11 +1909,91 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 		"ResourcesChanged":
 			var resources := {"wood": int(event["wood"]), "food": int(event["food"])}
 			active_snapshot["ownResources"] = resources.duplicate(true)
-			notification = {"type": "resources", "value": resources}
+			event_notification = {"type": "resources", "value": resources}
 
-	if not notification.is_empty():
-		return {"ok": true, "notification": notification}
+	if not event_notification.is_empty():
+		return {"ok": true, "notification": event_notification}
 	return {"ok": true}
+
+
+## Una unidad destruida ya salió del mundo lógico (índice, posiciones y snapshot): solo queda
+## su modelo, que reproduce `die` y se libera poco después. No se puede seleccionar ni ordenar
+## sobre ella, y una posición tardía no la revive (09 §5). Después de caer, el cuerpo se hunde
+## bajo el suelo y recién ahí se libera.
+func _play_death_and_free(unit: Node3D) -> void:
+	unit.set_meta("dying", true)
+	unit.name = "Dying_%s" % unit.name
+	var player := unit.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	if player == null or not player.has_animation(DEATH_ANIMATION):
+		unit.queue_free()
+		return
+	player.play(DEATH_ANIMATION, 0.1)
+	var tween := unit.create_tween()
+	tween.tween_interval(player.get_animation(DEATH_ANIMATION).length + DEATH_LINGER_SECONDS)
+	tween.tween_property(unit, "position:y", unit.position.y - DEATH_SINK_DEPTH, DEATH_SINK_SECONDS) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tween.tween_callback(unit.queue_free)
+
+
+## Muestra las ruinas de un edificio destruido en su lugar, del tamaño de su huella. Quedan
+## RUINS_LINGER_SECONDS, se hunden en el suelo y se liberan. No son una entidad: no se
+## seleccionan ni ocupan lugar, y un edificio nuevo en esas celdas las quita en el acto.
+func _show_ruins(building_id: int, building: Node3D) -> void:
+	var scene := _load_visual_scene(RUINS_VISUAL_PATH)
+	var footprint: Dictionary = building.get_meta("entity_state", {}).get("footprint", {})
+	if scene == null or footprint.is_empty() or building.get_parent() == null:
+		return
+	var ruins := scene.instantiate() as Node3D
+	ruins.name = "Ruins_%d" % building_id
+	var bounds := _model_bounds(ruins)
+	var cell_size := float(active_snapshot.get("map", {}).get("cellSize", 1.0))
+	var footprint_size := maxf(float(footprint.get("width", 1)), float(footprint.get("height", 1))) * cell_size
+	var model_size := maxf(maxf(bounds.size.x, bounds.size.z), 0.01)
+	var ruins_scale := footprint_size * RUINS_FOOTPRINT_FILL / model_size
+	ruins.scale = Vector3.ONE * ruins_scale
+	ruins.position = building.position
+	building.get_parent().add_child(ruins)
+	_ruins[building_id] = {"node": ruins, "rect": _footprint_rect(footprint)}
+	var tween := ruins.create_tween()
+	tween.tween_interval(RUINS_LINGER_SECONDS)
+	tween.tween_property(ruins, "position:y", ruins.position.y - bounds.end.y * ruins_scale - 0.1, RUINS_SINK_SECONDS) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tween.tween_callback(_free_ruins.bind(building_id))
+
+
+func _clear_ruins_in(rect: Rect2i) -> void:
+	for building_id: Variant in _ruins.keys():
+		if (_ruins[building_id]["rect"] as Rect2i).intersects(rect):
+			_free_ruins(int(building_id))
+
+
+func _free_ruins(building_id: int) -> void:
+	var entry: Dictionary = _ruins.get(building_id, {})
+	_ruins.erase(building_id)
+	var ruins: Variant = entry.get("node")
+	if is_instance_valid(ruins):
+		(ruins as Node).queue_free()
+
+
+func _footprint_rect(footprint: Dictionary) -> Rect2i:
+	return Rect2i(
+		int(footprint.get("column", 0)),
+		int(footprint.get("row", 0)),
+		int(footprint.get("width", 0)),
+		int(footprint.get("height", 0))
+	)
+
+
+## Caja que ocupa la geometría de un modelo, en el espacio de su raíz.
+func _model_bounds(model: Node3D) -> AABB:
+	var bounds := AABB()
+	var found := false
+	for mesh: Node in model.find_children("*", "MeshInstance3D", true, false):
+		var instance := mesh as MeshInstance3D
+		var box: AABB = _relative_transform(model, instance) * instance.get_aabb()
+		bounds = box if not found else bounds.merge(box)
+		found = true
+	return bounds
 
 
 func _make_simulated_entity_index() -> Dictionary:
@@ -952,6 +2032,8 @@ func _update_entity_state(entity_id: int, changes: Dictionary) -> void:
 		state[key] = changes[key]
 	node.set_meta("entity_state", state)
 	_store_entity_snapshot(entity_id, state)
+	if node.get_meta("entity_kind", "") == "building":
+		_refresh_building_parts(node)
 
 
 func _update_farm_state(farm_id: int, changes: Dictionary) -> void:
@@ -963,6 +2045,22 @@ func _update_farm_state(farm_id: int, changes: Dictionary) -> void:
 	state["farm"] = farm
 	node.set_meta("entity_state", state)
 	_store_entity_snapshot(farm_id, state)
+	_refresh_building_parts(node)
+
+
+## Partes opcionales de las escenas de edificio que dependen de su estado:
+## - "Scaffolding": el andamio se ve solo mientras el edificio está en obra;
+## - "Grain" (granja): el cultivo se oculta mientras está agotada, también durante la
+##   reparación. El protocolo solo informa si la granja está agotada, no cuánta comida le
+##   queda (FarmDto, FarmDepleted).
+func _refresh_building_parts(building_node: Node3D) -> void:
+	var state: Dictionary = building_node.get_meta("entity_state", {})
+	var scaffolding := building_node.find_child("Scaffolding", true, false) as Node3D
+	if scaffolding != null:
+		scaffolding.visible = not bool(state.get("isCompleted", false))
+	var grain := building_node.find_child("Grain", true, false) as Node3D
+	if grain != null:
+		grain.visible = not bool(state.get("farm", {}).get("isDepleted", false))
 
 
 func _store_entity_snapshot(entity_id: int, state: Dictionary) -> void:
@@ -1036,10 +2134,95 @@ func _remember_command_result(result: Dictionary) -> void:
 	while _recent_command_result_ids.size() > MAX_RECENT_COMMAND_RESULTS:
 		var expired_id: int = _recent_command_result_ids.pop_front()
 		recent_command_results.erase(expired_id)
+	var pending_move: Dictionary = pending_commands.get(client_command_id, {})
+	if not pending_move.is_empty():
+		_release_pending_command(client_command_id, pending_move)
+		pending_commands.erase(client_command_id)
+		_reconcile_accepted_command(pending_move, result)
+	pending_repath_responses.erase(client_command_id)
 	command_result_received.emit(client_command_id, result.duplicate(true))
 
 
+func _release_pending_command(message_id: int, command: Dictionary) -> void:
+	for unit_id_value: Variant in command.get("unitIds", []):
+		var unit_id := int(unit_id_value)
+		if int(pending_command_by_unit.get(unit_id, -1)) == message_id:
+			pending_command_by_unit.erase(unit_id)
+
+
+func _placed_building_id(payload: Dictionary) -> int:
+	for placed: Dictionary in _batch_placed_buildings:
+		var footprint: Dictionary = placed["footprint"]
+		if (
+			int(placed["owner"]) == int(active_snapshot.get("playerId", 0))
+			and str(placed["buildingType"]) == str(payload.get("buildingType", ""))
+			and int(footprint.get("column", -1)) == int(payload.get("anchorColumn", -2))
+			and int(footprint.get("row", -1)) == int(payload.get("anchorRow", -2))
+		):
+			return int(placed["buildingId"])
+	return 0
+
+
+func _reconcile_accepted_command(command: Dictionary, result: Dictionary) -> void:
+	if not ["Accepted", "PartiallyAccepted"].has(str(result.get("outcome", ""))):
+		return
+	# La intención aceptada (destino del Move u objetivo de la tarea) permite responder
+	# RepathRequested para la misma orden. Stop no deja intención: la unidad queda Idle.
+	var order_kind := str(command.get("type", ""))
+	var payload: Dictionary = command.get("payload", {})
+	var intent_data: Dictionary = {"kind": order_kind}
+	if order_kind == "Move":
+		var destination_data: Dictionary = payload.get("destination", {})
+		if destination_data.is_empty():
+			return
+		intent_data["destination"] = Vector2(
+			float(destination_data.get("x", 0.0)),
+			float(destination_data.get("z", 0.0))
+		)
+	elif order_kind == "Build" and payload.has("anchorColumn"):
+		# Build colocar: el objetivo es la obra creada en el mismo lote (03 §3, paso 5).
+		var placed_id := _placed_building_id(payload)
+		if placed_id <= 0:
+			return
+		intent_data["targetId"] = placed_id
+	elif TASK_TARGET_KEYS.has(order_kind):
+		var target_key: String = TASK_TARGET_KEYS[order_kind]
+		if not payload.has(target_key):
+			return
+		intent_data["targetId"] = int(payload[target_key])
+	else:
+		return
+	for entity_result_value: Variant in result.get("entityResults", []):
+		if typeof(entity_result_value) != TYPE_DICTIONARY:
+			continue
+		var entity_result: Dictionary = entity_result_value
+		if entity_result.get("error", null) != null:
+			continue
+		var unit_id := int(entity_result.get("entityId", 0))
+		if not command.get("unitIds", []).has(unit_id):
+			continue
+		var matching_changes: Array[Dictionary] = []
+		for order_change: Dictionary in _batch_unit_order_changes:
+			if int(order_change["unitId"]) == unit_id and str(order_change["kind"]) == order_kind:
+				matching_changes.append(order_change)
+		if matching_changes.size() != 1:
+			continue
+		var unit: Node3D = entities_by_id.get(unit_id)
+		if unit == null:
+			continue
+		var current_state: Dictionary = unit.get_meta("entity_state", {})
+		if (
+			str(current_state.get("order", "")) != order_kind
+			or int(current_state.get("orderId", 0)) != int(matching_changes[0]["orderId"])
+		):
+			continue
+		var intent: Dictionary = intent_data.duplicate()
+		intent["orderId"] = int(matching_changes[0]["orderId"])
+		accepted_order_intents[unit_id] = intent
+
+
 func _reset_synchronization_cursors() -> void:
+	_clear_command_tracking()
 	initial_state_tick = int(active_snapshot["tick"])
 	last_state_events_tick = initial_state_tick
 	last_position_update_tick = initial_state_tick
@@ -1066,6 +2249,7 @@ func _reset_synchronization_cursors() -> void:
 
 
 func _clear_synchronization_state() -> void:
+	_clear_command_tracking()
 	initial_state_tick = -1
 	last_state_events_tick = -1
 	last_position_update_tick = -1
@@ -1080,14 +2264,25 @@ func _clear_synchronization_state() -> void:
 	_position_clock_received_usec = 0
 
 
+func _clear_command_tracking() -> void:
+	pending_commands.clear()
+	pending_repath_responses.clear()
+	pending_command_by_unit.clear()
+	accepted_order_intents.clear()
+	_units_calculating_command.clear()
+	_batch_unit_order_changes.clear()
+	_batch_placed_buildings.clear()
+	_ruins.clear()
+
+
 func _add_position_sample(
 	entity_id: int,
 	tick: int,
-	position: Vector2,
+	world_position: Vector2,
 	received_usec: int
 ) -> void:
 	var samples: Array = _position_samples.get(entity_id, [])
-	var sample := {"tick": tick, "position": position, "received_usec": received_usec}
+	var sample := {"tick": tick, "position": world_position, "received_usec": received_usec}
 	if not samples.is_empty() and int(samples[-1]["tick"]) == tick:
 		samples[-1] = sample
 	else:
@@ -1098,10 +2293,10 @@ func _add_position_sample(
 
 	var node: Node3D = entities_by_id[entity_id]
 	var state: Dictionary = node.get_meta("entity_state", {}).duplicate(true)
-	state["x"] = position.x
-	state["z"] = position.y
+	state["x"] = world_position.x
+	state["z"] = world_position.y
 	node.set_meta("entity_state", state)
-	node.set_meta("official_position", position)
+	node.set_meta("official_position", world_position)
 	_store_entity_snapshot(entity_id, state)
 
 
@@ -1716,7 +2911,7 @@ func _build_staged_world(state: Dictionary, initialization_id: int) -> Dictionar
 		entity_nodes[int(building["buildingId"])] = node
 
 	for unit: Dictionary in state["units"]:
-		var path: String = UNIT_VISUAL_PATHS[unit["unitType"]]
+		var path := unit_visual_path(str(unit["unitType"]), int(unit["owner"]))
 		var instance_result := _create_entity_node(
 			path,
 			"Unit_%d" % int(unit["unitId"]),
@@ -1732,7 +2927,7 @@ func _build_staged_world(state: Dictionary, initialization_id: int) -> Dictionar
 
 	for tree: Dictionary in state["trees"]:
 		var instance_result := _create_entity_node(
-			TREE_VISUAL_PATH,
+			tree_visual_path(int(tree["treeId"])),
 			"Tree_%d" % int(tree["treeId"]),
 			tree,
 			Vector3(float(tree["x"]), 0.0, float(tree["z"]))
@@ -1743,6 +2938,19 @@ func _build_staged_world(state: Dictionary, initialization_id: int) -> Dictionar
 		var node: Node3D = instance_result["node"]
 		trees_container.add_child(node)
 		entity_nodes[int(tree["treeId"])] = node
+
+	var navigation := CLIENT_NAVIGATION_SCRIPT.new() as Node3D
+	if navigation == null:
+		staged_world.free()
+		return {"ok": false, "detail": "No se pudo crear ClientNavigation."}
+	navigation.name = "ClientNavigation"
+	navigation.call("configure", map, state["buildings"], int(map.get("revision", 0)))
+	var bake_failed_callable := Callable(self, "_on_navigation_bake_failed")
+	var signal_error: Error = navigation.connect("navigation_bake_failed", bake_failed_callable)
+	if signal_error != OK:
+		staged_world.free()
+		return {"ok": false, "detail": "No se pudo enlazar navigation_bake_failed."}
+	staged_world.add_child(navigation)
 
 	return {"ok": true, "world": staged_world, "entities": entity_nodes}
 
@@ -1859,13 +3067,124 @@ func _create_entity_node(
 	entity_node.set_meta("entity_state", entity_state.duplicate(true))
 	entity_node.set_meta("owner", int(entity_state.get("owner", 0)))
 	entity_node.add_child(visual)
+	if entity_state.has("buildingType"):
+		# Un modelo de color que falta falla la preparación, igual que el modelo principal.
+		var team_error := _apply_team_models(visual, int(entity_state.get("owner", 0)))
+		if not team_error.is_empty():
+			entity_node.free()
+			return {"ok": false, "detail": "%s: %s" % [node_name, team_error]}
+		_refresh_building_parts(entity_node)
+	if str(entity_state.get("buildingType", "")) == "Fence":
+		# El modelo de valla es neutral (igual para los dos) y corre a lo largo de Z: se gira
+		# para que corra en X (de frente a la cámara por defecto), se asegura que quede
+		# centrado en la celda y lleva un banderín del color del jugador.
+		(visual as Node3D).rotation.y = PI / 2.0
+		_center_visual(visual as Node3D)
+		entity_node.add_child(_make_team_banner(int(entity_state.get("owner", 0))))
 	if entity_state.has("isAvailable"):
 		entity_node.visible = bool(entity_state["isAvailable"])
 	return {"ok": true, "node": entity_node}
 
 
+## Escenas de edificio con un nodo "Colored": sus modelos vienen en azul (P1) y para P2 se
+## reemplazan por la versión roja del mismo modelo, conservando nombre y transformación.
+func _apply_team_models(visual: Node, owner_id: int) -> String:
+	var colored := visual.get_node_or_null("Colored")
+	if colored == null or owner_id != 2:
+		return ""
+	for model: Node in colored.get_children():
+		var path := model.scene_file_path
+		if not path.contains("/blue/"):
+			continue
+		var red_path := path.replace("/blue/", "/red/").replace("_blue.", "_red.")
+		var red_scene := _load_visual_scene(red_path)
+		if red_scene == null:
+			return "no se pudo cargar la versión roja %s." % red_path
+		var red_model := red_scene.instantiate() as Node3D
+		red_model.name = model.name
+		red_model.transform = (model as Node3D).transform
+		colored.add_child(red_model)
+		colored.move_child(red_model, model.get_index())
+		colored.remove_child(model)
+		model.free()
+	return ""
+
+
+## Desplaza el modelo para que su geometría quede centrada en X/Z sobre el origen del nodo
+## padre (respetando la rotación que ya tenga).
+func _center_visual(visual: Node3D) -> void:
+	var bounds := AABB()
+	var found := false
+	for mesh: Node in visual.find_children("*", "MeshInstance3D", true, false):
+		var instance := mesh as MeshInstance3D
+		var box: AABB = (visual.transform * _relative_transform(visual, instance)) * instance.get_aabb()
+		bounds = box if not found else bounds.merge(box)
+		found = true
+	if found:
+		var center := bounds.get_center()
+		visual.position -= Vector3(center.x, 0.0, center.z)
+
+
+func _relative_transform(ancestor: Node3D, node: Node3D) -> Transform3D:
+	var result := Transform3D.IDENTITY
+	var current: Node = node
+	while current != null and current != ancestor:
+		if current is Node3D:
+			result = (current as Node3D).transform * result
+		current = current.get_parent()
+	return result
+
+
+## Banderín del color del jugador sobre una valla: un mástil y una bandera.
+func _make_team_banner(owner_id: int) -> Node3D:
+	var banner := Node3D.new()
+	banner.name = "TeamBanner"
+	var pole := MeshInstance3D.new()
+	pole.name = "Pole"
+	var pole_mesh := CylinderMesh.new()
+	pole_mesh.top_radius = 0.025
+	pole_mesh.bottom_radius = 0.025
+	pole_mesh.height = BANNER_POLE_HEIGHT
+	pole.mesh = pole_mesh
+	pole.position = Vector3(BANNER_OFFSET_X, BANNER_BASE_HEIGHT + BANNER_POLE_HEIGHT / 2.0, 0.0)
+	pole.material_override = _flat_material(Color(0.36, 0.24, 0.14))
+	banner.add_child(pole)
+	var flag := MeshInstance3D.new()
+	flag.name = "Flag"
+	var flag_mesh := BoxMesh.new()
+	# La bandera queda de frente a la cámara por defecto (plano X/Y) y flamea hacia el centro.
+	flag_mesh.size = Vector3(BANNER_FLAG_WIDTH, BANNER_FLAG_HEIGHT, 0.03)
+	flag.mesh = flag_mesh
+	flag.position = Vector3(
+		BANNER_OFFSET_X - BANNER_FLAG_WIDTH / 2.0 - 0.02,
+		BANNER_BASE_HEIGHT + BANNER_POLE_HEIGHT - BANNER_FLAG_HEIGHT / 2.0,
+		0.0
+	)
+	flag.material_override = _flat_material(TEAM_COLORS.get(owner_id, Color.WHITE))
+	banner.add_child(flag)
+	return banner
+
+
+func _flat_material(color: Color) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.8
+	return material
+
+
 func _load_visual_scene(path: String) -> PackedScene:
 	return ResourceLoader.load(path) as PackedScene
+
+
+static func unit_visual_path(unit_type: String, owner_id: int) -> String:
+	var paths: Dictionary = UNIT_VISUAL_PATHS.get(unit_type, {})
+	return str(paths.get(owner_id, ""))
+
+
+## Modelo de un árbol: se mezcla el treeId para que árboles con ids seguidos no repitan
+## siempre la misma secuencia de variantes.
+static func tree_visual_path(tree_id: int) -> String:
+	return str(TREE_VISUAL_PATHS[posmod(hash(tree_id), TREE_VISUAL_PATHS.size())])
 
 
 func _building_visual_path(building_type: String, owner_id: int) -> String:

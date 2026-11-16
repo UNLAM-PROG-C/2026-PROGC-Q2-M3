@@ -2,6 +2,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Rts.Networking\Rts.Networking.csproj" />
+    <!-- Solo para las pruebas de integración con la cola global real (AGENTS §7, work-plan §4: Flor + Luca). -->
+    <ProjectReference Include="..\..\src\Rts.Simulation\Rts.Simulation.csproj" />
+    <!-- Para la prueba de integración «Cliente lento» con el publicador real de State Sync (work-plan §4). -->
+    <ProjectReference Include="..\..\src\Rts.StateSync\Rts.StateSync.csproj" />
   </ItemGroup>
 
 </Project>

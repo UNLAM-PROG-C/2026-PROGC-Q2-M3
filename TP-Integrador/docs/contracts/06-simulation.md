@@ -1,6 +1,6 @@
 # Contrato 06 — Simulation (`Rts.Simulation`)
 
-> **Estado:** modelo del mundo, interfaces, configuración, mapa y métricas implementados (`server/src/Rts.Simulation`) y probados (`server/tests/Rts.Simulation.Tests`). **El motor de ticks, el loop y la cola de comandos todavía no están implementados.**
+> **Estado:** Fases 1 y 2 implementadas y probadas (`server/src/Rts.Simulation`, `server/tests/Rts.Simulation.Tests`) contra fakes de los módulos de dominio: modelo del mundo, configuración, cargador de mapa, cola de comandos, motor con las **9 fases** del tick (§4), un handler por cada uno de los 8 tipos de comando (D-094), loop de 20 Hz con supervisión y fábrica pública (`SimulationFactory`). Las pruebas de §11 están escritas, incluido el determinismo paralelo frente a secuencial. **Fase 3 (§10) completa:** el loop entrega métricas y fallas críticas con motivo a `ISimulationDiagnostics` (D-095, D-097, D-099), con resúmenes por ventana (D-098); el Server las escribe en el log (D-100), y `server/tools/Rts.Measurement` mide paralelo frente a secuencial (D-101). **Integración:** `server/tests/Rts.Integration.Tests` corre el motor con Economy, Combat, Movement (incluidas las órdenes de tarea, 04 §5) y Construction reales; solo Production sigue con un stub hasta que exista. **Pendiente:** reemplazar ese stub, ver §12.
 > **Etiquetas:** **DECIDIDO** = aprobado (módulo [06-simulation](../modules/06-simulation.md) o [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Depende de:** [Contrato 00](00-shared-kernel.md) y de los contratos de dominio [01](01-economy.md), [02](02-combat.md), [03](03-construction.md), [04](04-units-movement.md) y [05](05-production.md). Ningún módulo de dominio depende de Simulation.
 
@@ -13,8 +13,11 @@
 | `TickOutcome` | `Rts.Simulation` | Publicación, resultado de gameplay o falla, y métricas |
 | `WorldState`, `UnitEntity`, `BuildingEntity`, `TreeEntity`, `PlayerState`, `IdempotencyLedger` | `Rts.Simulation.State` | Mundo autoritativo **inmutable** (D-044) |
 | `MapDefinition`, `PlayerStartDefinition`, `InitialUnitDefinition` | `Rts.Simulation.Map` | Mapa fijo cargado desde archivo (D-046) |
+| `MapLoader`, `MapLoadException` | `Rts.Simulation.Map` | Lee y valida el archivo de mapa (formato D-052, §8) |
 | `SimulationConfig`, `DiagnosticsLevel` | `Rts.Simulation.Configuration` | Parámetros |
 | `SimulationPhase`, `PhaseTiming`, `TickMetrics`, `SimulationFailure` | `Rts.Simulation.Diagnostics` | Métricas y fallas |
+| `SimulationFactory` (`CreateEngine`, `CreateLoop`), `DomainModules`, `EconomyParameters` | `Rts.Simulation.Composition` | Única forma pública de armar el motor y el loop (D-090) |
+| `CommandQueue` | `Rts.Simulation.Commands` | Cola global: implementa `ICommandSink` e `ICommandSource` (§7) |
 
 Tipos de integración en `Rts.Shared`, que usan módulos que no pueden referenciar Simulation (D-002, D-049):
 
@@ -61,7 +64,7 @@ Sea `S` el último `WorldState` confirmado y `W` el estado de trabajo, inicialme
 | **6. Barrera + commit** | Espera **ambos** resultados con `BarrierTimeout`. Valida coherencia: mismo tick y referencias existentes en `snapshot`. Aplica **primero Economy y después Combat**, y luego la cascada de destrucciones | 01 §5, 02 §5, 03 §6, 05 §5 |
 | **7. Victory Rules** | Si en la fase 6 cayó un solo Centro Principal ⇒ `BaseDestroyed` y gana el otro; si cayeron ambos ⇒ `Draw`. Fija `GameplayResult` | 02 §5, 06 §3 |
 | **8. Production** | Solo si no hay resultado. Arma `ProductionTickInput` (comida tras la fase 6), llama a `CalculateTick` y confirma inicios y apariciones en orden | 05 §4-5 |
-| **9. Publicación** | Agrega `ResourcesChanged` de cada jugador cuyo saldo cambió respecto de `S`. Arma `TickPublication` con los eventos, los `CommandResult` y las posiciones. **Reemplaza `Current = W`** y después llama a `ITickPublisher.Publish` | 06 §9 |
+| **9. Publicación** | Agrega `ResourcesChanged` de cada jugador cuyo saldo cambió respecto de `S`. Arma `TickPublication` con los eventos, los `CommandResult` y las posiciones. **Reemplaza `Current = W`** y devuelve la publicación en `TickOutcome`; el loop la entrega a `ITickPublisher.Publish` (D-087) | 06 §9 |
 
 **Atomicidad del tick (consecuencia de D-044):**
 
@@ -96,9 +99,10 @@ Sea `S` el último `WorldState` confirmado y `W` el estado de trabajo, inicialme
 ## 6. Loop (`ISimulationLoop`)
 
 - Un hilo dedicado llama a `AdvanceTick` cada `TickRate.TickInterval` (50 ms), con reloj monotónico. Nunca hay dos ticks a la vez.
-- **Sobrecarga (DECIDIDO D-047):** si un tick se pasa del intervalo, se registra `IsOverrun`, el próximo arranca de inmediato y el reloj se **re-ancla**. No hay ráfagas de recuperación.
-- **Supervisión (06 §7):** si un tick queda bloqueado más allá de un plazo de seguridad, se informa una falla crítica desde fuera del hilo del tick.
-- `StartTicks` se llama al pasar a Running. `StopTicksAsync` termina el tick en curso, si lo hay, y detiene el loop; es idempotente. Devuelve el último tick confirmado (`TickId.Zero` si no corrió ninguno), que GameSession usa como `FinalTick` de un resultado por desconexión (RECOMENDADO D-061).
+- **Sobrecarga (DECIDIDO D-047):** si un tick se pasa del intervalo, se registra `IsOverrun`, el próximo arranca de inmediato y el reloj se **re-ancla**. No hay ráfagas de recuperación. "Se pasa" se mide sobre la vuelta completa del loop (despertar, cálculo y publicación), y lo decide la agenda del loop, no el motor (DECIDIDO D-097).
+- **Agenda sin deriva (DECIDIDO D-088):** cada tick se agenda en `anterior + intervalo`, no en `ahora + intervalo`, así un despertar tardío del hilo no se acumula. La espera entre ticks es interrumpible por un pedido de detención. La decisión de arrancar otro tick y el pedido de detención comparten un lock: un Stop llega antes del tick (que no arranca) o durante él (que se termina y se entrega).
+- **Supervisión (DECIDIDO D-089):** si un tick queda bloqueado más allá de `TickStallTimeout`, se informa una falla crítica desde fuera del hilo del tick. La revisa un temporizador una vez por intervalo, no un hilo propio. Al vencer: avisa `CriticalError` con el último tick confirmado, completa `StopTicksAsync` y abandona el tick, cuyo resultado se descarta si termina más tarde. El fin de partida se avisa una sola vez, lo detecte el loop o el supervisor.
+- `StartTicks` se llama al pasar a Running. Si no puede arrancar (falta `InitializeMatch`, o no pudo crear el supervisor o el hilo), lanza sin haber corrido ningún tick y el `StopTicksAsync` que sigue devuelve enseguida; GameSession lo informa como `CriticalError` (DECIDIDO D-086). `StopTicksAsync` termina el tick en curso, si lo hay, y detiene el loop; es idempotente. Devuelve el último tick confirmado (`TickId.Zero` si no corrió ninguno), que GameSession usa como `FinalTick` de un resultado por desconexión (RECOMENDADO D-061).
 - Ante `GameplayResult` o `Failure`, el loop llama a `IMatchResultSink.OnSimulationResult` y deja de ejecutar ticks.
 - **Orden exigido por D-055:** si el tick en curso al pedir la detención produce un resultado, el loop publica ese tick y llama al sink **antes** de completar `StopTicksAsync`. Así el resultado del mundo llega a GameSession antes que el aviso de detención ([contrato 07 §6](07-game-session.md#6-desconexiones-en-running-lote-y-precedencia)).
 - En los estados WaitingForPlayers y Starting no corren ticks (06 §2).
@@ -123,7 +127,7 @@ DECIDIDO (D-046): el mapa sale de un **archivo del servidor**, que es la única 
 
 Devuelve `WorldView`. Puede repetirse en una nueva preparación de Starting (07 §4).
 
-Formato del archivo (RECOMENDADO D-052; el cargador se implementará con el motor):
+Formato del archivo (RECOMENDADO D-052; lo lee `MapLoader.Load`, que rechaza campos desconocidos, nulos, enteros en lugar de enums y mapas que no pasan `GetValidationErrors`):
 
 ```json
 {
@@ -147,11 +151,13 @@ Formato del archivo (RECOMENDADO D-052; el cargador se implementará con el moto
 | Parámetro | Validación | Valor |
 |---|---|---|
 | `TickRate` | > 0 | **20 Hz** (DECIDIDO) |
-| `MaxCommandsPerTick` | > 0 | PENDIENTE |
-| `CommandQueueCapacity` | ≥ `MaxCommandsPerTick` | PENDIENTE |
-| `BarrierTimeout` | > intervalo de tick (holgado) | PENDIENTE |
+| `MaxCommandsPerTick` | > 0 | **32** (DECIDIDO D-092) |
+| `CommandQueueCapacity` | ≥ `MaxCommandsPerTick` | **256** (DECIDIDO D-092) |
+| `BarrierTimeout` | > intervalo de tick (holgado) | **1 s** (DECIDIDO D-092) |
+| `TickStallTimeout` | > `BarrierTimeout` | **2 s** = 2 × `BarrierTimeout` (DECIDIDO D-092; plazo del supervisor del loop, §6, D-089) |
 | `RunDomainPhaseInParallel` | — | `true` (D-051: `false` solo para medir) |
 | `Diagnostics` | `Summary` / `Debug` | `Summary` |
+| `SummaryIntervalTicks` | > 0 | **200** = 10 s a 20 Hz (DECIDIDO D-098; ticks por ventana de resumen, §10) |
 
 Validación cruzada en la composición del servidor: `MovementConfig.AttackRange == CombatConfig.Soldier.Range` (D-030).
 
@@ -166,6 +172,32 @@ Validación cruzada en la composición del servidor: `MovementConfig.AttackRange
 - si hubo sobrecarga.
 
 En `Summary` se registran resúmenes y errores; en `Debug`, el detalle por tick. Comparar `RunDomainPhaseInParallel` en `true` y en `false` sirve para la defensa del TP.
+
+**Cómo salen (DECIDIDO D-095):** Simulation no loguea. El loop entrega los datos a `ISimulationDiagnostics` (`Rts.Simulation.Diagnostics`): las `TickMetrics` de cada tick, incluidos los descartados, y cada falla crítica con su motivo. El Server lo implementa y lo traduce a `ILogger` (contrato 10). Como lo llaman el hilo del tick y el supervisor, la implementación tiene que tolerar llamadas concurrentes y no bloquear.
+
+**Entrega (DECIDIDO D-097):** `OnTickCompleted(TickMetrics)` llega una vez por tick, en orden, para todo tick que el motor terminó (confirmado o descartado por una falla de fase), incluido el último de la partida; no para un tick abandonado por el supervisor, y nunca después de completar `StopTicksAsync`. `IsOverrun` viene decidido por la agenda del loop. Si el observador lanza, se ignora y la partida sigue. Es obligatorio al armar el loop (`NullSimulationDiagnostics.Instance` si no se quiere diagnóstico).
+
+**Fallas críticas (DECIDIDO D-099):** `OnCriticalFailure(CriticalFailureReport)` informa la falla que terminó la partida, **una sola vez** y **antes** de avisarle el `CriticalError` a GameSession, así el motivo queda en el log antes del cierre. El reporte trae `Kind`, el tick en que se detectó, el último confirmado (el `FinalTick` del `CriticalError`), la fase si corresponde, el motivo y la excepción original:
+
+| `Kind` | Cuándo | Lo detecta |
+|---|---|---|
+| `PhaseFailed` | una fase lanzó (también la barrera vencida o un resultado incoherente de un módulo); el tick se descartó | el hilo del loop, con la `SimulationFailure` del motor, que ahora conserva la excepción en `Cause` |
+| `UnexpectedException` | el motor lanzó fuera de sus fases | el hilo del loop |
+| `PublisherFailed` | State Sync lanzó al publicar un tick confirmado | el hilo del loop |
+| `TickStalled` | un tick superó `TickStallTimeout` | el supervisor, en otro hilo |
+
+Si la falla fue en una fase, las métricas de ese tick llegan por `OnTickCompleted` justo después del reporte.
+
+**Niveles (DECIDIDO D-098)**, que aplica quien implementa el observador (el adaptador del Server, `LoggingSimulationDiagnostics`, D-100):
+
+| Nivel | Qué se registra |
+|---|---|
+| `Summary` (por defecto) | Un `TickMetricsSummary` cada `SummaryIntervalTicks` ticks y uno final al terminar la partida con lo que quede de la última ventana. La **primera** sobrecarga de cada ventana se avisa enseguida (tick y `Total`); las siguientes solo se cuentan en el resumen. Las fallas críticas, siempre. |
+| `Debug` | Todo lo de `Summary`, más una línea con el detalle de cada tick. |
+
+Los resúmenes los arma `TickMetricsAccumulator` (`Rts.Simulation.Diagnostics`), que es lógica pura (sin niveles, períodos ni texto) y también lo usa la medición de paralelo frente a secuencial: promedio y máximo del tick, promedio de cada fase (sobre los ticks en que corrió), promedio y máximo de la espera en la barrera, cantidad de sobrecargas y totales de comandos y eventos.
+
+**Medición para la defensa (DECIDIDO D-101):** `server/tools/Rts.Measurement` (`dotnet run -c Release`) compara `RunDomainPhaseInParallel` en `true` y en `false` con un barrido de carga real, sin servidor ni red, y deja el resultado en [`docs/measurements/parallel-vs-sequential.md`](../measurements/parallel-vs-sequential.md).
 
 ## 11. Pruebas para la etapa de implementación
 
@@ -190,6 +222,10 @@ Estas pruebas de 06 §10 se escriben al implementar:
 
 ## 12. Pendientes
 
-- Implementación del motor, el loop, la cola y el cargador de mapa.
-- Valores (§9) y diseño del mapa simétrico real.
+- ~~Implementación del motor, el loop, la cola y el cargador de mapa.~~ Hecho en la Fase 1 (ver Estado).
+- ~~Fase 2: fases 3 a 8 del tick y los handlers que faltan.~~ Hecho (ver Estado; D-093, D-094).
+- ~~Fase 3: registro de métricas, sobrecargas y fallas críticas (§10).~~ Hecho (D-095 a D-101).
+- ~~Integración con Construction y con Movement para órdenes de tarea (04 §5, pasos 5 a 7).~~ Hecho: módulos reales en `Rts.Integration.Tests` y `Rts.Measurement`.
+- Integración con el módulo real que falta: Production (hoy un stub en `Rts.Integration.Tests` y `Rts.Measurement`).
+- ~~Valores (§9)~~ elegidos en D-092. Queda el diseño del mapa simétrico real. `server/config/maps/default.json` es un mapa **temporal** de 48×48 para pruebas.
 - ~~Precedencia fina entre el resultado de Simulation y desconexiones casi simultáneas.~~ Resuelta por D-055 (ver [contrato 07 §6](07-game-session.md#6-desconexiones-en-running-lote-y-precedencia)).

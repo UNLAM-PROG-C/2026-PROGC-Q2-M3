@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://c08emboww1kjg"
+path="res://.godot/imported/hammer-hammering-a-nail.mp3-03661c6584213f4714644166d2d51d7e.mp3str"
+
+[deps]
+
+source_file="res://assets/audio/buildings audio/hammer-hammering-a-nail.mp3"
+dest_files=["res://.godot/imported/hammer-hammering-a-nail.mp3-03661c6584213f4714644166d2d51d7e.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

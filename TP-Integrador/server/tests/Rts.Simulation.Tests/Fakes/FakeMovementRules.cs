@@ -1,0 +1,83 @@
+using Rts.Movement;
+using Rts.Movement.Contracts;
+using Rts.Movement.Model;
+using Rts.Shared.Collections;
+using Rts.Shared.Entities;
+using Rts.Shared.Errors;
+using Rts.Shared.Geometry;
+using Rts.Shared.Ids;
+
+namespace Rts.Simulation.Tests.Fakes;
+
+/// <summary>
+/// Fake determinista de las reglas de Movement (el módulo real es de Ivan). <see cref="EvaluateUnitOrder"/> acepta
+/// siempre la ruta tal como llega, salvo para las unidades cargadas en <see cref="Rejections"/>. Guarda los pedidos para
+/// poder revisar qué le pasó Simulation. Los demás métodos todavía no los usa ninguna prueba.
+/// </summary>
+internal sealed class FakeMovementRules : IMovementRules
+{
+  private readonly List<UnitOrderRequest> _requests = [];
+
+  /// <summary>Unidades que el fake rechaza, con el error que devuelve para cada una.</summary>
+  public Dictionary<EntityId, ErrorCode> Rejections { get; } = [];
+
+  public IReadOnlyList<UnitOrderRequest> Requests => _requests;
+
+  public UnitOrderEvaluation EvaluateUnitOrder(UnitOrderRequest request)
+  {
+    _requests.Add(request);
+    EntityId unitId = request.Unit.UnitId;
+    return Rejections.TryGetValue(unitId, out ErrorCode error)
+        ? UnitOrderEvaluation.Rejected(unitId, error)
+        : UnitOrderEvaluation.Accepted(unitId, request.Waypoints);
+  }
+
+  /// <summary>Rango de interacción de prueba, igual para toda tarea (valor de prueba, no de balance).</summary>
+  public const double TestInteractionRange = 1.5;
+
+  public double GetDistancePerTick(UnitType unitType) => throw NotYet();
+
+  public double GetInteractionRange(UnitOrderKind taskKind) => TestInteractionRange;
+
+  public RouteValidation ValidateRoute(NavigationGrid map, PositionXZ start, EquatableArray<PositionXZ> waypoints) => throw NotYet();
+
+  /// <summary>Distancia recta hasta un punto (árbol o unidad) o hasta el borde más cercano de una huella (edificio, D-019).</summary>
+  public bool IsWithinInteractionRange(GridSpec grid, PositionXZ position, MovementTarget target, double range) =>
+      target.Footprint is { } footprint
+          ? grid.ToWorldRect(footprint).IsWithinRange(position, range)
+          : target.Point!.Value.DistanceSquaredTo(position) <= range * range;
+
+  public bool CheckReachability(NavigationGrid map, PositionXZ start, MovementTarget target, double range) => throw NotYet();
+
+  private readonly List<RepathResponseCall> _repathRequests = [];
+
+  public IReadOnlyList<RepathResponseCall> RepathRequests => _repathRequests;
+
+  /// <summary>
+  /// Rechaza con <c>Movement.StaleOrder</c> si <paramref name="orderId"/> no es la orden vigente (04 §3); si no, aplica
+  /// <see cref="Rejections"/> o acepta la ruta tal como llega.
+  /// </summary>
+  public UnitOrderEvaluation EvaluateRepathResponse(
+      UnitMovementState unit,
+      OrderId orderId,
+      MovementTarget? target,
+      EquatableArray<PositionXZ> waypoints,
+      NavigationGrid map)
+  {
+    _repathRequests.Add(new RepathResponseCall(unit, orderId, target, waypoints, map));
+    if (orderId != unit.Order.OrderId)
+    {
+      return UnitOrderEvaluation.Rejected(unit.UnitId, MovementErrors.StaleOrder);
+    }
+
+    return Rejections.TryGetValue(unit.UnitId, out ErrorCode error)
+        ? UnitOrderEvaluation.Rejected(unit.UnitId, error)
+        : UnitOrderEvaluation.Accepted(unit.UnitId, waypoints);
+  }
+
+  private static NotSupportedException NotYet() => new("Todavía no lo usa ninguna prueba de Simulation.");
+}
+
+/// <summary>Un pedido que Simulation le hizo a <see cref="FakeMovementRules.EvaluateRepathResponse"/>.</summary>
+internal sealed record RepathResponseCall(
+    UnitMovementState Unit, OrderId OrderId, MovementTarget? Target, EquatableArray<PositionXZ> Waypoints, NavigationGrid Map);

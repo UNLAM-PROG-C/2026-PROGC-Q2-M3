@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Pruebas de integración (work-plan §4): Simulation con los módulos de dominio reales; fakes solo para lo no implementado. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Rts.Server\Rts.Server.csproj" />
+    <!-- Para correr la herramienta de medición con poca carga y que no se rompa sin que nadie lo note (D-101). -->
+    <ProjectReference Include="..\..\tools\Rts.Measurement\Rts.Measurement.csproj" />
+  </ItemGroup>
+
+  <!-- La misma configuración y el mismo mapa que usa el servidor. -->
+  <ItemGroup>
+    <None Include="..\..\config\server.example.json" Link="server.example.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\config\maps\default.json" Link="maps\default.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

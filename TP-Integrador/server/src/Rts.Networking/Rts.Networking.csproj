@@ -15,6 +15,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Solo las interfaces de logging (ILogger<T>): el único que escribe sigue siendo Rts.Server (D-096). -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="Rts.Networking.Tests" />
   </ItemGroup>
 

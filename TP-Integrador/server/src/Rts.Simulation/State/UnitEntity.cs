@@ -96,4 +96,65 @@ public sealed record UnitEntity
   public int GatherTicksAccumulated { get; }
 
   public TickId ReadyAtTick { get; }
+
+  /// <summary>
+  /// Copia de la unidad sin orden (Idle): sin ruta, sin repath pendiente y con el contador de recolección descartado (01 §5).
+  /// Conserva posición, HP y cooldown: cancelar una orden no revierte progreso ni recursos (04 §3).
+  /// </summary>
+  internal UnitEntity AsIdle() => new(
+      Id, Owner, Type, Position, Hp, MovementOrder.Idle, route: EquatableArray<PositionXZ>.Empty, RouteMapRevision,
+      repathPendingSinceTick: null, lastPursuitRepathTick: null, gatherTicksAccumulated: 0, ReadyAtTick);
+
+  /// <summary>
+  /// Copia de la unidad con una orden nueva y su ruta validada contra <paramref name="routeMapRevision"/> (04 §3).
+  /// La orden anterior se descarta entera: sin repath pendiente, sin marca de persecución y sin contador de recolección.
+  /// </summary>
+  internal UnitEntity WithNewOrder(MovementOrder order, EquatableArray<PositionXZ> route, MapRevision routeMapRevision) => new(
+      Id, Owner, Type, Position, Hp, order, route, routeMapRevision,
+      repathPendingSinceTick: null, lastPursuitRepathTick: null, gatherTicksAccumulated: 0, ReadyAtTick);
+
+  /// <summary>
+  /// Copia de la unidad con la ruta nueva de un <c>RepathResponse</c> aceptado (04 §3, D-028). <b>Conserva la orden</b> (mismo
+  /// <c>OrderId</c>), la marca de persecución y el contador de recolección; solo cambia la ruta y limpia el repath pendiente.
+  /// </summary>
+  internal UnitEntity WithRepathedRoute(EquatableArray<PositionXZ> route, MapRevision routeMapRevision) => new(
+      Id, Owner, Type, Position, Hp, Order, route, routeMapRevision,
+      repathPendingSinceTick: null, LastPursuitRepathTick, GatherTicksAccumulated, ReadyAtTick);
+
+  /// <summary>
+  /// Copia de la unidad con la parte de Movement reemplazada por la que propuso la fase 2 (posición, orden, ruta, repath).
+  /// HP y cooldown no cambian. El contador de recolección solo se conserva si la orden sigue siendo la misma (mismo OrderId).
+  /// </summary>
+  /// <exception cref="InvalidOperationException">Si la propuesta es de otra unidad o le cambia el dueño o el tipo.</exception>
+  internal UnitEntity WithMovement(UnitMovementState movement)
+  {
+    if (movement.UnitId != Id || movement.Owner != Owner || movement.Type != Type)
+    {
+      throw new InvalidOperationException($"Movement propuso un estado incoherente para la unidad {Id}.");
+    }
+
+    int gatherTicks = movement.Order.OrderId == Order.OrderId ? GatherTicksAccumulated : 0;
+    return new UnitEntity(
+        Id, Owner, Type, movement.Position, Hp, movement.Order, movement.RemainingWaypoints, movement.RouteMapRevision,
+        movement.RepathPendingSinceTick, movement.LastPursuitRepathTick, gatherTicks, ReadyAtTick);
+  }
+
+  /// <summary>Copia con el contador de recolección que calculó Economy. Solo vale con una orden GatherWood (lo verifica el constructor).</summary>
+  internal UnitEntity WithGatherTicks(int gatherTicks) => new(
+      Id, Owner, Type, Position, Hp, Order, Route, RouteMapRevision,
+      RepathPendingSinceTick, LastPursuitRepathTick, gatherTicks, ReadyAtTick);
+
+  /// <summary>Copia con el HP que dejó el daño de Combat (si llega a 0, la unidad se quita, no se copia).</summary>
+  internal UnitEntity WithHp(int hp) => new(
+      Id, Owner, Type, Position, hp, Order, Route, RouteMapRevision,
+      RepathPendingSinceTick, LastPursuitRepathTick, GatherTicksAccumulated, ReadyAtTick);
+
+  /// <summary>Copia con el nuevo cooldown que calculó Combat para este atacante.</summary>
+  internal UnitEntity WithReadyAt(TickId readyAtTick) => new(
+      Id, Owner, Type, Position, Hp, Order, Route, RouteMapRevision,
+      RepathPendingSinceTick, LastPursuitRepathTick, GatherTicksAccumulated, readyAtTick);
+
+  /// <summary>La parte de la unidad que ve Movement.</summary>
+  internal UnitMovementState ToMovementState() => new(
+      Id, Owner, Type, Position, Order, Route, RouteMapRevision, RepathPendingSinceTick, LastPursuitRepathTick);
 }

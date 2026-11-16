@@ -44,6 +44,12 @@ public interface IOutboundQueue
 
   /// <summary>Deja de aceptar mensajes; los ya encolados se siguen entregando hasta vaciar la cola.</summary>
   void Complete();
+
+  /// <summary>
+  /// Cierre por saturación (08 §7): descarta los pendientes que el consumidor todavía no tomó, encola solo <paramref name="farewell"/>
+  /// (el <c>Disconnecting</c>) aunque la cola esté llena, y deja de aceptar mensajes. Un mensaje que el consumidor ya tomó no se toca.
+  /// </summary>
+  void DiscardPendingAndComplete(OutboundMessage farewell);
 }
 
 /// <summary>Convierte un mensaje de sesión (contrato 07) en su DTO. Todos son <see cref="DeliveryClass.Essential"/>.</summary>

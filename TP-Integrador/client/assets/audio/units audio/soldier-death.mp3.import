@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://dn5kvo1ctkqm7"
+path="res://.godot/imported/soldier-death.mp3-6be7b20a969af991d4292e9302390ff8.mp3str"
+
+[deps]
+
+source_file="res://assets/audio/units audio/soldier-death.mp3"
+dest_files=["res://.godot/imported/soldier-death.mp3-6be7b20a969af991d4292e9302390ff8.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4
