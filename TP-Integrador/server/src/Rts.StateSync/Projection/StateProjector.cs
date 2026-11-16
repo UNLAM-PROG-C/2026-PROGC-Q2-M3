@@ -17,11 +17,14 @@ namespace Rts.StateSync.Projection;
 public sealed class StateProjector : IStateProjector
 {
   private readonly IEventAudiencePolicy _audience = new EventAudiencePolicy();
+  private readonly int _positionIntervalTicks;
+  private readonly int _positionDecimals;
 
   public StateProjector(StateSyncConfig config, TickRate tickRate)
   {
     ArgumentNullException.ThrowIfNull(config);
-    config.Validate(tickRate);
+    _positionIntervalTicks = config.GetPositionIntervalTicks(tickRate);
+    _positionDecimals = config.PositionDecimals;
   }
 
   public InitialStateDto BuildInitialState(InitialStateRequest request)
@@ -48,22 +51,44 @@ public sealed class StateProjector : IStateProjector
   public TickProjection ProjectTick(TickPublication publication)
   {
     ArgumentNullException.ThrowIfNull(publication);
-    return new TickProjection(publication.Tick, ForRecipient(publication, PlayerId.One), ForRecipient(publication, PlayerId.Two));
+    OutboundMessage? positions = PositionUpdateFor(publication);
+    return new TickProjection(publication.Tick,
+        ForRecipient(publication, PlayerId.One, positions), ForRecipient(publication, PlayerId.Two, positions));
   }
 
-  private RecipientMessages ForRecipient(TickPublication publication, PlayerId recipient)
+  private RecipientMessages ForRecipient(TickPublication publication, PlayerId recipient, OutboundMessage? positions)
   {
     StateEventDto[] events = [.. publication.Events.Where(e => _audience.GetAudience(e.Payload).Includes(recipient)).Select(ToDto)];
     CommandResultDto[] results = [.. publication.CommandResults.Where(r => r.Key.Player == recipient).Select(ToDto)];
 
-    if (events.Length == 0 && results.Length == 0)
+    var messages = new List<OutboundMessage>();
+    if (events.Length > 0 || results.Length > 0)
     {
-      return new RecipientMessages(recipient, []);
+      var batch = new StateEventsDto(publication.Tick.Value, publication.MapRevision.Value, events, results);
+      messages.Add(new OutboundMessage(ProtocolMessageTypes.StateEvents, batch, DeliveryClass.Essential));
     }
 
-    var batch = new StateEventsDto(publication.Tick.Value, publication.MapRevision.Value, events, results);
-    return new RecipientMessages(recipient, [new OutboundMessage(ProtocolMessageTypes.StateEvents, batch, DeliveryClass.Essential)]);
+    if (positions is not null)
+    {
+      messages.Add(positions);
+    }
+
+    return new RecipientMessages(recipient, [.. messages]);
   }
+
+  private OutboundMessage? PositionUpdateFor(TickPublication publication)
+  {
+    if (publication.Tick.Value % _positionIntervalTicks != 0)
+    {
+      return null;
+    }
+
+    var update = new PositionUpdateDto(publication.Tick.Value,
+        [.. publication.Positions.Select(p => new UnitPositionDto(p.UnitId.Value, Round(p.Position.X), Round(p.Position.Z)))]);
+    return new OutboundMessage(ProtocolMessageTypes.PositionUpdate, update, DeliveryClass.Supersedable);
+  }
+
+  private double Round(double value) => Math.Round(value, _positionDecimals);
 
   private static EntityId MainCenterOf(WorldView world, PlayerId player) =>
       world.Buildings.Single(b => b.Owner == player && b.BuildingType == BuildingType.MainCenter).BuildingId;
