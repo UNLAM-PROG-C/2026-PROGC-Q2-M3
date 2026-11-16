@@ -24,8 +24,8 @@ public class ConnectionTests
   private readonly LiveReadStream _incoming = new();
   private readonly RecordingStream _outgoing = new();
 
-  private Connection Create(NetworkingConfig? config = null) =>
-      new(Id, new CompositeStream(_incoming, _outgoing), config ?? ContractsTests.ValidConfig(), _session, _gate, _commands, TimeProvider.System, NullLogger<Connection>.Instance);
+  private Connection Create(NetworkingConfig? config = null, TimeProvider? time = null) =>
+      new(Id, new CompositeStream(_incoming, _outgoing), config ?? ContractsTests.ValidConfig(), _session, _gate, _commands, time ?? TimeProvider.System, NullLogger<Connection>.Instance);
 
   private static OutboundMessage Pong(long pingId) => new(ProtocolMessageTypes.Pong, new PongDto(pingId), DeliveryClass.Essential);
 
@@ -309,5 +309,55 @@ public class ConnectionTests
     await run.WaitAsync(Patience);
 
     Assert.Equal(ConnectionPhase.Closed, connection.Phase);
+  }
+
+  // ───────────── Plazos (08 §3, §8) ─────────────
+
+  private static readonly TimeSpan Instant = TimeSpan.FromMilliseconds(1);
+
+  private static readonly TimeSpan HandshakeTimeout = ContractsTests.ValidConfig().HandshakeTimeout;
+
+  [Fact]
+  public void CheckTimeouts_BeforeTheHandshakeTimeout_KeepsWaitingForHello()
+  {
+    var time = new ManualTimeProvider();
+    var connection = Create(time: time);
+
+    time.Advance(HandshakeTimeout - Instant);
+    connection.CheckTimeouts();
+
+    Assert.Equal(ConnectionPhase.AwaitingHello, connection.Phase);
+  }
+
+  [Fact]
+  public async Task CheckTimeouts_WithoutHelloWhenTheHandshakeTimeoutPasses_ClosesWithHandshakeTimeout()
+  {
+    var time = new ManualTimeProvider();
+    var connection = Create(time: time);
+    var run = connection.RunAsync();
+
+    time.Advance(HandshakeTimeout);
+    connection.CheckTimeouts();
+    await run.WaitAsync(Patience);
+
+    Assert.Equal([DisconnectingLine(NetworkErrors.HandshakeTimeout)], Written);
+    Assert.Equal([Id], _session.Closed);
+  }
+
+  [Fact]
+  public async Task CheckTimeouts_AfterHello_NoLongerAppliesTheHandshakeTimeout()
+  {
+    var time = new ManualTimeProvider();
+    var connection = Create(time: time);
+    var run = connection.RunAsync();
+    _incoming.Feed("{\"protocolVersion\":1,\"type\":\"Hello\"}\n");
+    await WaitUntil(() => connection.Phase == ConnectionPhase.HelloAccepted);
+
+    time.Advance(HandshakeTimeout);
+    connection.CheckTimeouts();
+
+    Assert.Equal(ConnectionPhase.HelloAccepted, connection.Phase);
+    _incoming.Complete();
+    await run.WaitAsync(Patience);
   }
 }

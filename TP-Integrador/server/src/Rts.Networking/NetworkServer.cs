@@ -22,6 +22,7 @@ namespace Rts.Networking;
 /// <item><see cref="Send"/> y <see cref="Enqueue"/> solo encolan, y descartan el mensaje si la conexión ya no existe (09 D-069).</item>
 /// <item>Si ya hay <c>MaxPendingConnections</c> conexiones esperando su <c>Hello</c>, la nueva se acepta solo para cerrarla con
 /// <c>Disconnecting(TooManyConnections)</c> (08 §3). Como toda conexión aceptada, se informa cerrada a GameSession.</item>
+/// <item>Mientras corre <see cref="RunAsync"/>, un <see cref="ConnectionMonitor"/> revisa los plazos de todas las conexiones.</item>
 /// <item>Al cancelar <see cref="RunAsync"/> deja de aceptar; cerrar las conexiones existentes es <see cref="DrainAndCloseAllAsync"/>.</item>
 /// </list>
 /// PENDIENTE (fase 3): <see cref="DrainAndCloseAllAsync"/> y <see cref="GetMetrics"/>.
@@ -35,6 +36,7 @@ public sealed class NetworkServer : INetworkServer
   private readonly TimeProvider _time;
   private readonly ILogger<NetworkServer> _logger;
   private readonly ILogger<Connection> _connectionLogger;
+  private readonly ConnectionMonitor _monitor;
   private readonly SessionMessageEncoder _encoder = new();
   private readonly ConcurrentDictionary<ConnectionId, Connection> _connections = new();
   private readonly TaskCompletionSource<int> _listening = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -55,6 +57,7 @@ public sealed class NetworkServer : INetworkServer
     _time = time;
     _logger = loggers.CreateLogger<NetworkServer>();
     _connectionLogger = loggers.CreateLogger<Connection>();
+    _monitor = new ConnectionMonitor(() => _connections.Values, time, loggers.CreateLogger<ConnectionMonitor>());
   }
 
   /// <summary>Puerto en el que escucha, disponible cuando <see cref="RunAsync"/> ya empezó a escuchar (útil con el puerto 0 en pruebas).</summary>
@@ -67,6 +70,7 @@ public sealed class NetworkServer : INetworkServer
     int port = ((IPEndPoint)listener.LocalEndpoint).Port;
     _listening.TrySetResult(port);
     _logger.LogInformation("Networking escuchando en {Address}:{Port}", _config.ListenAddress, port);
+    Task monitor = _monitor.RunAsync(cancellationToken);
 
     try
     {
@@ -83,6 +87,7 @@ public sealed class NetworkServer : INetworkServer
     finally
     {
       listener.Stop();
+      await monitor.ConfigureAwait(false);
     }
   }
 

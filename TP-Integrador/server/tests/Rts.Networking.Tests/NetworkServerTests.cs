@@ -349,4 +349,36 @@ public class NetworkServerTests
 
     Assert.Empty(harness.Session.Closed);
   }
+
+  // ───────────── Monitor: timeout de handshake (08 §3, §8) ─────────────
+
+  private static readonly TimeSpan ShortHandshake = TimeSpan.FromMilliseconds(200);
+
+  [Fact]
+  public async Task AClientThatNeverSendsHello_IsClosedWithHandshakeTimeout()
+  {
+    await using var harness = new NetworkServerHarness(config => config with { HandshakeTimeout = ShortHandshake });
+    await harness.StartAsync();
+
+    TestClient client = await harness.ConnectAsync();
+
+    Assert.Equal(
+        "{\"protocolVersion\":1,\"type\":\"Disconnecting\",\"payload\":{\"reason\":\"Network.HandshakeTimeout\"}}",
+        await client.ReadLineAsync());
+    Assert.Null(await client.ReadLineAsync());
+    await WaitUntil(() => harness.Session.Closed.Count == 1);
+  }
+
+  [Fact]
+  public async Task AClientThatSentHello_OutlivesTheHandshakeTimeout()
+  {
+    await using var harness = new NetworkServerHarness(config => config with { HandshakeTimeout = ShortHandshake });
+    await harness.StartAsync();
+    var (client, _) = await ConnectWithHelloAsync(harness);
+
+    await Task.Delay(ShortHandshake * 2);
+
+    await client.SendLineAsync(PingLine(4));
+    Assert.Equal(PongLine(4), await client.ReadLineAsync());
+  }
 }

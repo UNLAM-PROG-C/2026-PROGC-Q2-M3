@@ -36,6 +36,8 @@ internal sealed class Connection : IConnectionOutput
   private readonly TimeProvider _time;
   private readonly ILogger<Connection> _logger;
   private readonly TimeSpan _closeLinger;
+  private readonly TimeSpan _handshakeTimeout;
+  private readonly long _acceptedAt;
   private readonly Stream _stream;
   private readonly OutboundQueue _queue;
   private readonly SendLoop _sendLoop;
@@ -62,6 +64,8 @@ internal sealed class Connection : IConnectionOutput
     _time = time;
     _logger = logger;
     _closeLinger = config.CloseLinger;
+    _handshakeTimeout = config.HandshakeTimeout;
+    _acceptedAt = time.GetTimestamp();
 
     _queue = new OutboundQueue(config.OutboundQueueCapacity);
     _sendLoop = new SendLoop(_queue, stream, config.ProtocolVersion);
@@ -117,6 +121,19 @@ internal sealed class Connection : IConnectionOutput
       _logger.LogInformation("Conexión {ConnectionId} cerrada ({Cause})", _id, IsClosing ? "por el servidor" : "el cliente se fue");
       Volatile.Write(ref _closed, 1);
       _session.PostConnectionClosed(_id);
+    }
+  }
+
+  /// <summary>
+  /// Revisa los plazos de la conexión con el reloj actual; lo llama el <see cref="ConnectionMonitor"/> en cada vuelta. Sin
+  /// <c>Hello</c> dentro de <c>HandshakeTimeout</c> desde que se aceptó: <c>Disconnecting(HandshakeTimeout)</c> (08 §3).
+  /// </summary>
+  public void CheckTimeouts()
+  {
+    long now = _time.GetTimestamp();
+    if (Phase == ConnectionPhase.AwaitingHello && _time.GetElapsedTime(_acceptedAt, now) >= _handshakeTimeout)
+    {
+      Close(NetworkErrors.HandshakeTimeout);
     }
   }
 
