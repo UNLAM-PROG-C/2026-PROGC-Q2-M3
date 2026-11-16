@@ -3,6 +3,7 @@ using Rts.Networking.Parsing;
 using Rts.Shared.Collections;
 using Rts.Shared.Commands;
 using Rts.Shared.Errors;
+using Rts.Shared.Geometry;
 using Rts.Shared.Ids;
 
 namespace Rts.Networking.Tests.Admission;
@@ -150,6 +151,36 @@ public class CommandAdmitterTests
     _sink.Result = CommandAdmission.Admitted(new CommandSequence(5));
 
     Assert.True(admitter.Admit(Message).IsAdmitted);
+  }
+
+  // D-028: RepathResponse es un comando de gameplay más. Pasa por la cola global con su Sequence y gasta una ficha.
+  private static readonly GameplayMessage RepathResponse = new(
+      new ClientCommandId(10),
+      new RepathResponseCommand(new EntityId(3), new OrderId(2), new MapRevision(1), EquatableArray<PositionXZ>.Empty));
+
+  [Fact]
+  public void Admit_RepathResponse_GoesThroughTheQueueAndSpendsAToken()
+  {
+    _sink.Result = CommandAdmission.Admitted(new CommandSequence(43));
+
+    var decision = CreateAdmitter().Admit(RepathResponse);
+
+    Assert.Equal(new CommandSequence(43), decision.Sequence);
+    Assert.Equal(1, _rateLimiter.Calls);
+    var call = Assert.Single(_sink.Calls);
+    Assert.Equal((PlayerOfTheConnection, RepathResponse.ClientCommandId), (call.Player, call.ClientCommandId));
+    Assert.Same(RepathResponse.Command, call.Command);
+  }
+
+  [Fact]
+  public void Admit_RepathResponseWithoutTokens_IsRateLimitedLikeAnyOtherCommand()
+  {
+    _rateLimiter.HasTokens = false;
+
+    var decision = CreateAdmitter().Admit(RepathResponse);
+
+    AssertRejected(decision, NetworkErrors.RateLimited, isViolation: true);
+    Assert.Empty(_sink.Calls);
   }
 
   [Fact]

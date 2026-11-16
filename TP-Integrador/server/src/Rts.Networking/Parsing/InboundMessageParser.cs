@@ -111,6 +111,7 @@ internal sealed class InboundMessageParser : IInboundMessageParser
       // Un tipo de unidad desconocido no llega al constructor: el deserializador ya lo rechaza (enums solo como texto).
       ProtocolMessageTypes.TrainUnit => ParseGameplay<TrainUnitCommandDto>(type, payload, messageId,
           dto => new TrainUnitCommand(new EntityId(dto.ProducerId), dto.UnitType)),
+      ProtocolMessageTypes.RepathResponse => ParseGameplay<RepathResponseCommandDto>(type, payload, messageId, BuildRepathResponse),
 
       // Llegan acá los comandos de gameplay de la fase 2: se reconocen pero todavía no se convierten (decisión provisoria).
       _ => ParseResult.Violation(NetworkErrors.UnknownType, messageId, $"El tipo '{type}' todavía no está soportado."),
@@ -252,6 +253,22 @@ internal sealed class InboundMessageParser : IInboundMessageParser
     }
 
     throw new ArgumentException("Build lleva buildingType, anchorColumn y anchorRow para colocar, o solo buildingId para continuar.");
+  }
+
+  /// <summary>
+  /// DTO → <see cref="RepathResponseCommand"/>. Es gameplay como cualquier otro: entra por la cola global con su <c>Sequence</c>,
+  /// es idempotente por <c>messageId</c> y cuenta para el límite por segundo (D-028). El constructor rechaza la unidad o la orden
+  /// inválidas y los waypoints no finitos.
+  /// </summary>
+  private static RepathResponseCommand BuildRepathResponse(RepathResponseCommandDto dto)
+  {
+    if (dto.Waypoints is null || dto.Waypoints.Any(point => point is null))
+    {
+      throw new ArgumentException("RepathResponse necesita waypoints, sin elementos nulos.");
+    }
+
+    return new RepathResponseCommand(new EntityId(dto.UnitId), new OrderId(dto.OrderId), new MapRevision(dto.MapRevision),
+        dto.Waypoints.Select(point => new PositionXZ(point.X, point.Z)).ToEquatableArray());
   }
 
   /// <summary>DTO → <see cref="StopCommand"/>. El constructor rechaza la lista vacía y las unidades inválidas o repetidas.</summary>

@@ -118,17 +118,6 @@ public class InboundMessageParserTests
     AssertViolation(result, NetworkErrors.UnknownType);
   }
 
-  // Decisión provisoria de Flor (opción A): los comandos de la fase 2 todavía no se convierten.
-  [Theory]
-  [InlineData("RepathResponse")]
-  public void Parse_GameplayTypeNotYetSupported_ReturnsUnknownTypeViolation(string type)
-  {
-    var result = ParseLine($$"""{"protocolVersion":1,"type":"{{type}}","payload":{},"messageId":3}""");
-
-    AssertViolation(result, NetworkErrors.UnknownType);
-    Assert.Contains("todavía no", result.Detail);
-  }
-
   // El messageId se devuelve en el error cuando se pudo leer, para que el cliente correlacione.
   [Fact]
   public void Parse_ViolationAfterEnvelope_EchoesTheMessageId()
@@ -497,6 +486,43 @@ public class InboundMessageParserTests
     var result = ParseLine(BuildLine("\"buildingId\":11", routes));
 
     AssertInvalidCommand(result, 9);
+  }
+
+  // RepathResponse: la ruta nueva para una orden que pidió repath (D-028).
+  [Fact]
+  public void Parse_ValidRepathResponse_ReturnsGameplayMessageWithRepathResponseCommand()
+  {
+    var result = ParseLine(
+        """{"protocolVersion":1,"type":"RepathResponse","messageId":13,"payload":{"unitId":4,"orderId":2,"mapRevision":1,"waypoints":[{"x":7.5,"z":6.5},{"x":11.5,"z":6.5}]}}""");
+
+    Assert.Equal(ParseOutcome.Parsed, result.Outcome);
+    Assert.Equal(
+        new GameplayMessage(new ClientCommandId(13), new RepathResponseCommand(new EntityId(4), new OrderId(2), new MapRevision(1),
+            EquatableArray.Create<PositionXZ>([new PositionXZ(7.5, 6.5), new PositionXZ(11.5, 6.5)]))),
+        result.Message);
+  }
+
+  [Fact]
+  public void Parse_RepathResponseWithoutMessageId_ReturnsInvalidMessageIdViolation()
+  {
+    var result = ParseLine("""{"protocolVersion":1,"type":"RepathResponse","payload":{"unitId":4,"orderId":2,"mapRevision":1,"waypoints":[]}}""");
+
+    AssertViolation(result, NetworkErrors.InvalidMessageId);
+  }
+
+  // Unidad u orden 0, waypoints ausentes, con nulos o no finitos, y sin payload.
+  [Theory]
+  [InlineData("""{"unitId":0,"orderId":2,"mapRevision":1,"waypoints":[]}""")]
+  [InlineData("""{"unitId":4,"orderId":0,"mapRevision":1,"waypoints":[]}""")]
+  [InlineData("""{"unitId":4,"orderId":2,"mapRevision":1}""")]
+  [InlineData("""{"unitId":4,"orderId":2,"mapRevision":1,"waypoints":[null]}""")]
+  [InlineData("""{"unitId":4,"orderId":2,"mapRevision":1,"waypoints":[{"x":1e999,"z":1}]}""")]
+  [InlineData("null")]
+  public void Parse_RepathResponseWithBadPayload_ReturnsInvalidCommand(string payload)
+  {
+    var result = ParseLine("""{"protocolVersion":1,"type":"RepathResponse","messageId":13,"payload":""" + payload + "}");
+
+    AssertInvalidCommand(result, 13);
   }
 
   // El playerId nunca viene del cliente: si lo manda, se ignora.
