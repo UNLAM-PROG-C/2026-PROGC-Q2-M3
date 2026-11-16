@@ -42,6 +42,7 @@ Si dos documentos entran en conflicto, **detener el cambio afectado y reportar l
 | `docs/work-plan.md` | Reparto entre los seis integrantes, sección del cliente Godot, fases, pruebas de integración por responsable y forma de trabajo |
 | `docs/protocol/examples/` | Un JSON por cada mensaje del protocolo, generado desde los DTOs reales y verificado por `dotnet test` (para el cliente Godot) |
 | `docs/decisions.md` | Registro de decisiones técnicas (`D-xxx`) y asuntos abiertos (`O-xxx`) |
+| `docs/measurements/` | Resultados de mediciones generados por herramientas (por ahora, paralelo frente a secuencial, D-101) |
 | `docs/contracts/00-shared-kernel.md` | Núcleo compartido `Rts.Shared`: estructura de la solución, IDs, geometría/grilla, comandos, eventos, errores |
 | `docs/contracts/01-economy.md` | Economy: entrada/resultado del tick, reglas de cálculo, propiedad de datos, costos, responsabilidades de commit |
 | `docs/contracts/02-combat.md` | Combat: entrada/resultado del tick, rangos y cooldowns, daño agregado, validación de `Attack`, responsabilidades de commit |
@@ -54,7 +55,7 @@ Si dos documentos entran en conflicto, **detener el cambio afectado y reportar l
 | `docs/contracts/09-state-sync.md` | State Sync: proyección sincrónica, visibilidad por evento, InitialState con catálogo, lotes por tick, posiciones cada N ticks y reemplazables, DTOs en `Rts.Protocol` y convenciones JSON |
 | `docs/contracts/10-server.md` | Server (no es módulo): composición manual, orden de construcción "buzones primero", configuración y validación cruzada, catálogo, apagado ordenado y códigos de salida |
 
-El código del servidor vive en `server/` (solución `server/Rts.slnx`; `dotnet test server/Rts.slnx`).
+El código del servidor vive en `server/` (solución `server/Rts.slnx`; `dotnet test server/Rts.slnx`). Las herramientas que no son parte del servidor viven en `server/tools/` (por ahora `Rts.Measurement`, que se corre con `dotnet run -c Release`).
 
 ## 3. Invariantes arquitectónicos obligatorios
 
@@ -130,6 +131,8 @@ El código del servidor vive en `server/` (solución `server/Rts.slnx`; `dotnet 
 | Server (composición, no es módulo) | 10 | D-081 a D-085 |
 
 Todos los asuntos abiertos detectados en `docs/modules/` (O-001 a O-010) están resueltos. En `Rts.Server` ya funcionan la carga y validación de la configuración, el catálogo y el apagado ordenado (`rts-server --validate-only`).
+
+**Implementado:** Simulation completó sus Fases 1 y 2 contra fakes de los módulos de dominio (cola de comandos, cargador de mapa, motor con las 9 fases del tick, los 8 handlers de comandos, loop de 20 Hz con supervisión y `SimulationFactory`; decisiones D-087 a D-094) y su Fase 3 de diagnóstico (métricas, resúmenes, fallas críticas con motivo, el adaptador de log del Server y la medición de paralelo frente a secuencial; D-095 a D-101). Las pruebas de integración (`server/tests/Rts.Integration.Tests`) ya corren el motor con Economy, Combat y Movement reales. Ver el estado del contrato 06.
 
 **PENDIENTE:**
 

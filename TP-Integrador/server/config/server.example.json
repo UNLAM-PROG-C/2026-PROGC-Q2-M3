@@ -4,13 +4,16 @@
 {
   "mapFile": "maps/default.json",
 
+  // Simulation: estos valores ya están elegidos (D-092 y D-098), no son temporales.
   "simulation": {
     "tickRate": { "ticksPerSecond": 20 },
-    "maxCommandsPerTick": 64,
-    "commandQueueCapacity": 1024,
-    "barrierTimeout": "00:00:02",
+    "maxCommandsPerTick": 32,
+    "commandQueueCapacity": 256,
+    "barrierTimeout": "00:00:01",
+    "tickStallTimeout": "00:00:02",
     "runDomainPhaseInParallel": true,
-    "diagnostics": "Summary"
+    "diagnostics": "Summary",
+    "summaryIntervalTicks": 200
   },
 
   "economy": {

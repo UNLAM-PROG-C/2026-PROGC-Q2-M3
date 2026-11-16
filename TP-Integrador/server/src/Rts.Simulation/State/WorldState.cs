@@ -108,4 +108,31 @@ public sealed record WorldState
   public MatchResult? GameplayResult { get; }
 
   public bool IsGameplayOver => GameplayResult is not null;
+
+  /// <summary>
+  /// Copia con las partes indicadas reemplazadas; las omitidas se conservan. Pasa por el constructor, así que la copia
+  /// vuelve a verificar todas las invariantes. Es la única forma de "modificar" el mundo: el original nunca cambia (D-044).
+  /// </summary>
+  internal WorldState With(
+      TickId? tick = null,
+      MapRevision? mapRevision = null,
+      ImmutableSortedDictionary<PlayerId, PlayerState>? players = null,
+      ImmutableSortedDictionary<EntityId, UnitEntity>? units = null,
+      ImmutableSortedDictionary<EntityId, BuildingEntity>? buildings = null,
+      ImmutableSortedDictionary<EntityId, TreeEntity>? trees = null,
+      EntityId? lastEntityId = null,
+      OrderId? lastOrderId = null,
+      IdempotencyLedger? idempotency = null,
+      MatchResult? gameplayResult = null) => new(
+          tick ?? Tick,
+          Grid,
+          mapRevision ?? MapRevision,
+          players ?? Players,
+          units ?? Units,
+          buildings ?? Buildings,
+          trees ?? Trees,
+          lastEntityId ?? LastEntityId,
+          lastOrderId ?? LastOrderId,
+          idempotency ?? Idempotency,
+          gameplayResult ?? GameplayResult);
 }

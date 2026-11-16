@@ -41,9 +41,13 @@ internal static class ServerComposition
     //
     // 5. Simulation: el mapa, el motor con los cinco módulos de dominio y el loop de 20 Hz. Publica en State Sync y avisa su
     //    resultado al buzón.
-    //      MapDefinition map = MapLoader.Load(config.MapFile);
-    //      var engine = new SimulationEngine(config.Simulation, map, commands, <calculadores y reglas de dominio>);
-    //      var simulation = new SimulationLoop(engine, stateSync, inbox, TimeProvider.System, loggers);
+    //      MapDefinition map = MapLoader.Load(config.MapFile, <tamaño del Centro Principal según Construction>);
+    //      var modules = new DomainModules(<reglas y calculadores de los cinco módulos de dominio>);
+    //      ISimulationEngine engine = SimulationFactory.CreateEngine(
+    //          config.Simulation, map, EconomyParameters.FromConfig(config.Economy), commands, modules, TimeProvider.System);
+    //      var diagnostics = new LoggingSimulationDiagnostics(loggers, config.Simulation);   // D-095, D-098, D-100
+    //      ISimulationLoop simulation = SimulationFactory.CreateLoop(
+    //          engine, config.Simulation, stateSync, inbox, diagnostics, TimeProvider.System);
     //
     // 6. Consumidor de sesión (GameSession): el único que necesita a casi todos, por eso va al final.
     //      var effects = new SessionEffectsAdapter(network, stateSync);
@@ -53,6 +57,7 @@ internal static class ServerComposition
     // Arranque y fin (contrato 10 §5):
     //      Task listening = network.RunAsync(shutdown);       // aceptación en segundo plano
     //      MatchResult result = await session.RunAsync(shutdown); // hasta Ended: ya detuvo ticks y drenó conexiones
+    //      diagnostics.WriteFinalSummary();                    // los ticks ya están detenidos: no llegan más (D-097)
     //      await listening;                                    // termina al completar el drenaje
     //      return result;
     throw new NotImplementedException(

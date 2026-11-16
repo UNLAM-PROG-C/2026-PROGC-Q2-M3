@@ -6,6 +6,7 @@
 
   <ItemGroup>
     <None Include="..\..\config\server.example.json" Link="server.example.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\config\maps\default.json" Link="maps\default.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -30,12 +30,28 @@ public sealed record SimulationConfig
   public required TimeSpan BarrierTimeout { get; init; }
 
   /// <summary>
+  /// Plazo de seguridad de un tick completo para el supervisor del loop (06 §6): si un tick sigue en curso pasado este plazo, se
+  /// considera bloqueado y es una falla crítica. Debe superar a <see cref="BarrierTimeout"/>, para que una barrera vencida se informe
+  /// primero como falla del propio tick, con su fase.
+  /// </summary>
+  public required TimeSpan TickStallTimeout { get; init; }
+
+  /// <summary>
   /// Ejecuta Economy y Combat en paralelo (verdadero, lo aprobado) o en secuencia (falso, solo para medir y comparar en la
   /// defensa). El resultado tiene que ser idéntico en ambos modos (RECOMENDADO D-051).
   /// </summary>
   public bool RunDomainPhaseInParallel { get; init; } = true;
 
   public DiagnosticsLevel Diagnostics { get; init; } = DiagnosticsLevel.Summary;
+
+  /// <summary>
+  /// Ticks por ventana de resumen en nivel <see cref="DiagnosticsLevel.Summary"/> (06 §10): 200 = 10 s de juego a 20 Hz, unas 6
+  /// líneas por minuto (DECIDIDO D-098). Al terminar la partida se emite además un resumen con lo que quede de la última ventana.
+  /// </summary>
+  public int SummaryIntervalTicks { get; init; } = DefaultSummaryIntervalTicks;
+
+  /// <summary>Valor elegido para <see cref="SummaryIntervalTicks"/> (D-098).</summary>
+  public const int DefaultSummaryIntervalTicks = 200;
 
   /// <summary>Devuelve la lista de problemas de configuración; vacía si es válida.</summary>
   public IReadOnlyList<string> GetValidationErrors()
@@ -62,9 +78,19 @@ public sealed record SimulationConfig
       errors.Add($"{nameof(BarrierTimeout)} debe ser positivo y mayor que el intervalo de tick ({BarrierTimeout}).");
     }
 
+    if (TickStallTimeout <= BarrierTimeout)
+    {
+      errors.Add($"{nameof(TickStallTimeout)} ({TickStallTimeout}) debe ser mayor que {nameof(BarrierTimeout)} ({BarrierTimeout}).");
+    }
+
     if (!Enum.IsDefined(Diagnostics))
     {
       errors.Add($"{nameof(Diagnostics)} inválido ({Diagnostics}).");
+    }
+
+    if (SummaryIntervalTicks <= 0)
+    {
+      errors.Add($"{nameof(SummaryIntervalTicks)} debe ser positivo ({SummaryIntervalTicks}).");
     }
 
     return errors;
