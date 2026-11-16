@@ -110,9 +110,3 @@ catch (SocketException ex)
   log.LogError("No se pudo escuchar en {Address}:{Port}: {Error}", config.Networking.ListenAddress, config.Networking.Port, ex.Message);
   return ExitCodes.NetworkUnavailable;
 }
-catch (NotImplementedException ex)
-{
-  // TEMPORAL hasta la vertical slice (contrato 10 §6).
-  log.LogError("{Error}", ex.Message);
-  return ExitCodes.NotYetComposed;
-}

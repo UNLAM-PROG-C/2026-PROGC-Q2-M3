@@ -50,7 +50,7 @@ Se ejecuta **una vez** por proceso:
 | 1 | `CriticalError` (D-058) |
 | 2 | Configuración ilegible o inválida: no arrancó |
 | 3 | Argumentos inválidos |
-| 4 | **Temporal:** composición todavía sin implementaciones (§6) |
+| 4 | **Retirado** (era «composición pendiente», temporal). No se reutiliza |
 | 5 | La red no pudo escuchar (por ejemplo, el puerto está ocupado): no arrancó |
 
 ## 3. Configuración
@@ -125,7 +125,7 @@ Cada paso usa solo lo creado en los anteriores (D-082):
 
 ## 6. Estado actual y pendientes
 
-- `ServerComposition.RunMatchAsync` documenta en código el orden de §4 y por ahora lanza `NotImplementedException`; el programa sale con el código 4.
+- `ServerComposition.RunMatchAsync` crea las seis piezas en el orden de §4 y corre la partida (2026-11-16). Production es provisorio (`UnavailableProduction`, ver «Comportamientos provisorios» en [decisiones](../decisions.md)). El resto de esta sección se actualiza al cerrar la composición.
 - `rts-server --validate-only` ya funciona: carga, valida, arma el catálogo y muestra el resumen.
 - **Listo del lado de Simulation:** la cola de comandos (`CommandQueue`), el cargador de mapa (`MapLoader`) y la fábrica `SimulationFactory` (`CreateEngine`, `CreateLoop`), que reciben los cinco módulos de dominio agrupados en `DomainModules` (D-090) y el observador de diagnóstico (D-095).
 - **Listo del lado del Server:** `LoggingSimulationDiagnostics`, que la composición pasa a `CreateLoop` y al que le pide `WriteFinalSummary()` al terminar (D-100).

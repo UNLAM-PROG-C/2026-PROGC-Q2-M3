@@ -17,8 +17,8 @@ public static class ExitCodes
   /// <summary>Argumentos de línea de comandos inválidos.</summary>
   public const int InvalidArguments = 3;
 
-  /// <summary>TEMPORAL: la composición todavía no tiene implementaciones que instanciar (contrato 10 §5).</summary>
-  public const int NotYetComposed = 4;
+  // El 4 ("composición pendiente") está retirado: era temporal y ya no puede darse. No se reutiliza, para que cada código
+  // conserve su significado (D-085).
 
   /// <summary>La red no pudo escuchar (por ejemplo, el puerto está ocupado): el servidor no arrancó.</summary>
   public const int NetworkUnavailable = 5;
