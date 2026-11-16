@@ -110,6 +110,31 @@ public class StateEventsProjectionTests
     }
   }
 
+  [Fact]
+  public void ProjectTick_FarmEventsGoToBoth()
+  {
+    var farm = new EntityId(11);
+    const int WorkDone = 30;
+    const int WorkRequired = 100;
+
+    DomainEvent depleted = Event(0, new FarmDepleted(farm));
+    DomainEvent repairStarted = Event(1, new FarmRepairStarted(farm));
+    DomainEvent repairProgress = Event(2, new FarmRepairProgressChanged(farm, WorkDone, WorkRequired));
+    DomainEvent repairCompleted = Event(3, new FarmRepairCompleted(farm));
+
+    TickProjection projection = _projector.ProjectTick(Publication(events: [depleted, repairStarted, repairProgress, repairCompleted]));
+
+    foreach (RecipientMessages recipient in new[] { projection.Player1, projection.Player2 })
+    {
+      Assert.Equal(
+          [new FarmDepletedDto(depleted.Stamp.IndexInTick, farm.Value),
+           new FarmRepairStartedDto(repairStarted.Stamp.IndexInTick, farm.Value),
+           new FarmRepairProgressChangedDto(repairProgress.Stamp.IndexInTick, farm.Value, WorkDone, WorkRequired),
+           new FarmRepairCompletedDto(repairCompleted.Stamp.IndexInTick, farm.Value)],
+          SingleBatch(recipient).Events);
+    }
+  }
+
   private static DomainEvent Event(int index, IDomainEventPayload payload) => new(new EventStamp(Tick, index), payload);
 
   private static DomainEvent OrderChanged(int index, int unitId, long orderId, UnitOrderKind kind) =>
