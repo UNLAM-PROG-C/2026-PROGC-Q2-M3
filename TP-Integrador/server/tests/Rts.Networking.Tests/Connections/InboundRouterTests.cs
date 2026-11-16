@@ -41,7 +41,7 @@ public class InboundRouterTests
   }
 
   private InboundRouter CreateRouter() =>
-      new(Connection, ServerVersion, _session, new CommandAdmitter(Connection, _gate, _rateLimiter, _commands), _violations, _heartbeat, _output);
+      new(Connection, ServerVersion, _session, new CommandAdmitter(Connection, _gate, _rateLimiter, _commands), _violations, _heartbeat, new ConnectionCounters(), _output);
 
   private InboundRouter CreateAcceptedRouter()
   {

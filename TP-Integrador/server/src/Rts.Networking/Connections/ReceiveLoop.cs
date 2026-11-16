@@ -21,13 +21,16 @@ internal sealed class ReceiveLoop
   private readonly IInboundMessageParser _parser;
   private readonly InboundRouter _router;
   private readonly IConnectionOutput _output;
+  private readonly ConnectionCounters _counters;
 
-  public ReceiveLoop(ILineFrameDecoder decoder, IInboundMessageParser parser, InboundRouter router, IConnectionOutput output)
+  public ReceiveLoop(
+      ILineFrameDecoder decoder, IInboundMessageParser parser, InboundRouter router, IConnectionOutput output, ConnectionCounters counters)
   {
     _decoder = decoder;
     _parser = parser;
     _router = router;
     _output = output;
+    _counters = counters;
   }
 
   public async Task RunAsync(Stream stream, CancellationToken cancellationToken)
@@ -42,6 +45,7 @@ internal sealed class ReceiveLoop
         return;
       }
 
+      _counters.AddBytesReceived(read);
       _decoder.Append(buffer.AsSpan(0, read));
 
       if (!RouteCompleteLines(cancellationToken))
@@ -68,6 +72,7 @@ internal sealed class ReceiveLoop
           _output.Close(NetworkErrors.MessageTooLarge);
           return false;
         default:
+          _counters.CountMessageReceived();
           _router.Handle(_parser.Parse(next.Frame.Span));
           break;
       }

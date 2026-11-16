@@ -34,6 +34,9 @@ internal sealed class Connection : IConnectionOutput
 {
   private readonly ConnectionId _id;
   private readonly ISessionEventSink _session;
+  private readonly ISessionGate _gate;
+  private readonly ConnectionCounters _counters = new();
+  private readonly ViolationTracker _violations;
   private readonly TimeProvider _time;
   private readonly ILogger<Connection> _logger;
   private readonly TimeSpan _closeLinger;
@@ -64,6 +67,7 @@ internal sealed class Connection : IConnectionOutput
     _id = id;
     _stream = stream;
     _session = session;
+    _gate = gate;
     _time = time;
     _logger = logger;
     _closeLinger = config.CloseLinger;
@@ -71,21 +75,37 @@ internal sealed class Connection : IConnectionOutput
     _acceptedAt = time.GetTimestamp();
 
     _queue = new OutboundQueue(config.OutboundQueueCapacity);
-    _sendLoop = new SendLoop(_queue, stream, config.ProtocolVersion);
+    _sendLoop = new SendLoop(_queue, stream, config.ProtocolVersion, _counters);
 
     var rateLimiter = new TokenBucketRateLimiter(config.CommandBurst, config.CommandsPerSecond, time);
     var admitter = new CommandAdmitter(id, gate, rateLimiter, commands);
-    var violations = new ViolationTracker(config.MaxViolations, config.ViolationWindow, time);
+    _violations = new ViolationTracker(config.MaxViolations, config.ViolationWindow, time);
     _heartbeat = new Heartbeat(config.PingIdleInterval, config.PongTimeout, time);
-    _router = new InboundRouter(id, config.ProtocolVersion, session, admitter, violations, _heartbeat, this);
+    _router = new InboundRouter(id, config.ProtocolVersion, session, admitter, _violations, _heartbeat, _counters, this);
     _receiveLoop = new ReceiveLoop(
         new LineFrameDecoder(config.MaxInboundMessageBytes),
         new InboundMessageParser(config.ProtocolVersion),
         _router,
-        this);
+        this,
+        _counters);
   }
 
   public ConnectionId Id => _id;
+
+  /// <summary>Métricas actuales de la conexión (08 §11). Se puede llamar desde cualquier hilo.</summary>
+  public ConnectionMetricsSnapshot GetMetrics() => new(
+      _id,
+      _gate.GetPlayer(_id),
+      Phase,
+      _queue.Count,
+      _counters.MessagesReceived,
+      _counters.MessagesSent,
+      _counters.BytesReceived,
+      _counters.BytesSent,
+      _counters.CommandsAdmitted,
+      _counters.CommandsRejected,
+      _counters.PositionsSuperseded,
+      _violations.RecentCount);
 
   /// <summary>Termina cuando la conexión ya se cerró y se informó a GameSession (al final de <see cref="RunAsync"/>).</summary>
   public Task Completion => _completion.Task;
@@ -172,9 +192,14 @@ internal sealed class Connection : IConnectionOutput
   /// </summary>
   public void Send(OutboundMessage message)
   {
-    if (_queue.TryEnqueue(message) == EnqueueOutcome.Saturated)
+    switch (_queue.TryEnqueue(message))
     {
-      Close(NetworkErrors.OutboundSaturated, discardPending: true);
+      case EnqueueOutcome.Superseded:
+        _counters.CountPositionSuperseded();
+        break;
+      case EnqueueOutcome.Saturated:
+        Close(NetworkErrors.OutboundSaturated, discardPending: true);
+        break;
     }
   }
 

@@ -511,4 +511,33 @@ public class NetworkServerTests
 
     Assert.Equal([id], harness.Session.Closed);
   }
+
+  // ───────────── Métricas (08 §11) ─────────────
+
+  [Fact]
+  public async Task GetMetrics_ListsEveryOpenConnection()
+  {
+    await using var harness = new NetworkServerHarness();
+    await harness.StartAsync();
+    var first = await ConnectWithHelloAsync(harness);
+    var second = await ConnectWithHelloAsync(harness);
+
+    var metrics = harness.Server.GetMetrics();
+
+    Assert.Equal([first.Id, second.Id], metrics.Select(m => m.Connection).OrderBy(id => id.Value));
+    Assert.All(metrics, m => Assert.Equal(ConnectionPhase.HelloAccepted, m.Phase));
+  }
+
+  [Fact]
+  public async Task GetMetrics_DoesNotListClosedConnections()
+  {
+    await using var harness = new NetworkServerHarness();
+    await harness.StartAsync();
+    var (client, _) = await ConnectWithHelloAsync(harness);
+
+    client.Dispose();
+    await WaitUntil(() => harness.Session.Closed.Count == 1);
+
+    await WaitUntil(() => harness.Server.GetMetrics().Count == 0);
+  }
 }

@@ -27,8 +27,8 @@ public class ReceiveLoopTests
   private ReceiveLoop CreateLoop()
   {
     var admitter = new CommandAdmitter(Connection, new FakeSessionGate(), new FakeRateLimiter(), new FakeCommandSink());
-    var router = new InboundRouter(Connection, 1, _session, admitter, new FakeViolationTracker(), new Heartbeat(Config.PingIdleInterval, Config.PongTimeout, TimeProvider.System), _output);
-    return new ReceiveLoop(new LineFrameDecoder(MaxLineBytes), new InboundMessageParser(1), router, _output);
+    var router = new InboundRouter(Connection, 1, _session, admitter, new FakeViolationTracker(), new Heartbeat(Config.PingIdleInterval, Config.PongTimeout, TimeProvider.System), new ConnectionCounters(), _output);
+    return new ReceiveLoop(new LineFrameDecoder(MaxLineBytes), new InboundMessageParser(1), router, _output, new ConnectionCounters());
   }
 
   private Task Run(CancellationToken cancellationToken = default) => CreateLoop().RunAsync(_stream, cancellationToken).WaitAsync(Patience);

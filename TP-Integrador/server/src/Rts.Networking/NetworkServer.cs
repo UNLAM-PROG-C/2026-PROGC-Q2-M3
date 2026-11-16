@@ -27,8 +27,8 @@ namespace Rts.Networking;
 /// <item><b>Drenaje (08 §7, 07 §9):</b> deja de aceptar, cierra cada conexión con <c>Disconnecting(ServerShuttingDown)</c> detrás de lo ya
 /// encolado (por ejemplo, <c>MatchEnded</c>) y espera que terminen hasta <c>DrainTimeout</c>. Si el plazo vence, corta las que quedan, así
 /// termina aunque haya sockets muertos. Una conexión que llega durante el drenaje se cierra igual.</item>
+/// <item><see cref="GetMetrics"/> devuelve las métricas de las conexiones abiertas en ese momento.</item>
 /// </list>
-/// PENDIENTE (fase 3): <see cref="GetMetrics"/>.
 /// </summary>
 public sealed class NetworkServer : INetworkServer
 {
@@ -156,7 +156,7 @@ public sealed class NetworkServer : INetworkServer
     }
   }
 
-  public IReadOnlyList<ConnectionMetricsSnapshot> GetMetrics() => throw new NotImplementedException("PENDIENTE fase 3: métricas.");
+  public IReadOnlyList<ConnectionMetricsSnapshot> GetMetrics() => [.. _connections.Values.Select(connection => connection.GetMetrics())];
 
   private void Accept(TcpClient client)
   {

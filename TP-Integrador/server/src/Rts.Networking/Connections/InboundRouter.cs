@@ -38,6 +38,7 @@ internal sealed class InboundRouter
   private readonly CommandAdmitter _admitter;
   private readonly IViolationTracker _violations;
   private readonly Heartbeat _heartbeat;
+  private readonly ConnectionCounters _counters;
   private readonly IConnectionOutput _output;
 
   public InboundRouter(
@@ -47,6 +48,7 @@ internal sealed class InboundRouter
       CommandAdmitter admitter,
       IViolationTracker violations,
       Heartbeat heartbeat,
+      ConnectionCounters counters,
       IConnectionOutput output)
   {
     _connection = connection;
@@ -55,6 +57,7 @@ internal sealed class InboundRouter
     _admitter = admitter;
     _violations = violations;
     _heartbeat = heartbeat;
+    _counters = counters;
     _output = output;
   }
 
@@ -81,6 +84,7 @@ internal sealed class InboundRouter
         break;
       case ParseOutcome.InvalidCommand:
         Send(ProtocolMessageTypes.CommandRejected, new CommandRejectedDto(result.ClientCommandId!.Value.Value, CommonErrors.InvalidCommand.Value));
+        _counters.CountCommandRejected();
         RegisterViolation(CommonErrors.InvalidCommand);
         break;
     }
@@ -151,10 +155,15 @@ internal sealed class InboundRouter
     }
 
     AdmissionDecision decision = _admitter.Admit(gameplay);
-    if (!decision.IsAdmitted)
+    if (decision.IsAdmitted)
+    {
+      _counters.CountCommandAdmitted();
+    }
+    else
     {
       ErrorCode error = decision.Error!.Value;
       Send(ProtocolMessageTypes.CommandRejected, new CommandRejectedDto(gameplay.ClientCommandId.Value, error.Value));
+      _counters.CountCommandRejected();
 
       // De los rechazos de la admisión, solo el límite por segundo es culpa del cliente (08 §6); lo decide la admisión.
       if (decision.IsViolation)

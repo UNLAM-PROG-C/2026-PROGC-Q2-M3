@@ -12,8 +12,8 @@ namespace Rts.Networking.Admission;
 /// controlan el reloj.
 /// </para>
 /// <para>
-/// Qué es una falta lo decide quien llama (el <c>InboundRouter</c>); acá solo se cuentan. No es seguro para hilos: hay uno por
-/// conexión y lo usa solo su receptor.
+/// Qué es una falta lo decide quien llama (el <c>InboundRouter</c>); acá solo se cuentan. Hay uno por conexión: registra solo su
+/// receptor, pero <see cref="RecentCount"/> lo leen las métricas desde otro hilo, por eso todo pasa por un lock breve.
 /// </para>
 /// </summary>
 internal sealed class ViolationTracker : IViolationTracker
@@ -24,6 +24,7 @@ internal sealed class ViolationTracker : IViolationTracker
 
   // Momentos de las faltas dentro de la ventana, de la más vieja a la más nueva.
   private readonly Queue<long> _timestamps = new();
+  private readonly Lock _gate = new();
 
   public ViolationTracker(int maxViolations, TimeSpan window, TimeProvider timeProvider)
   {
@@ -41,8 +42,11 @@ internal sealed class ViolationTracker : IViolationTracker
   {
     get
     {
-      ForgetExpired(_timeProvider.GetTimestamp());
-      return _timestamps.Count;
+      lock (_gate)
+      {
+        ForgetExpired(_timeProvider.GetTimestamp());
+        return _timestamps.Count;
+      }
     }
   }
 
@@ -50,11 +54,15 @@ internal sealed class ViolationTracker : IViolationTracker
   public bool Register(ErrorCode violation)
   {
     long now = _timeProvider.GetTimestamp();
-    ForgetExpired(now);
-    _timestamps.Enqueue(now);
-    return _timestamps.Count > _maxViolations;
+    lock (_gate)
+    {
+      ForgetExpired(now);
+      _timestamps.Enqueue(now);
+      return _timestamps.Count > _maxViolations;
+    }
   }
 
+  // Debe llamarse con _gate tomado.
   private void ForgetExpired(long now)
   {
     while (_timestamps.TryPeek(out long oldest) && _timeProvider.GetElapsedTime(oldest, now) >= _window)

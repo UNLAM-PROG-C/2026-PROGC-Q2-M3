@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Rts.Networking.Connections;
 using Rts.Protocol;
 using Rts.Protocol.Outbound;
 
@@ -19,19 +20,23 @@ internal sealed class SendLoop
   private readonly IOutboundQueue _queue;
   private readonly Stream _stream;
   private readonly int _protocolVersion;
+  private readonly ConnectionCounters _counters;
 
-  public SendLoop(IOutboundQueue queue, Stream stream, int protocolVersion)
+  public SendLoop(IOutboundQueue queue, Stream stream, int protocolVersion, ConnectionCounters counters)
   {
     _queue = queue;
     _stream = stream;
     _protocolVersion = protocolVersion;
+    _counters = counters;
   }
 
   public async Task RunAsync(CancellationToken cancellationToken)
   {
     while (await _queue.DequeueAsync(cancellationToken).ConfigureAwait(false) is { } message)
     {
-      await _stream.WriteAsync(ToLine(message), cancellationToken).ConfigureAwait(false);
+      byte[] line = ToLine(message);
+      await _stream.WriteAsync(line, cancellationToken).ConfigureAwait(false);
+      _counters.CountMessageSent(line.Length);
     }
   }
 

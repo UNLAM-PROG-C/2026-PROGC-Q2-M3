@@ -398,4 +398,96 @@ public class ConnectionTests
     Assert.Equal([PingLine(1), DisconnectingLine(NetworkErrors.HeartbeatTimeout)], Written);
     Assert.Equal([Id], _session.Closed);
   }
+
+  // ───────────── Métricas (08 §11) ─────────────
+
+  private const string HelloLine = "{\"protocolVersion\":1,\"type\":\"Hello\"}\n";
+
+  private static string StopLine(long messageId) =>
+      "{\"protocolVersion\":1,\"type\":\"Stop\",\"messageId\":" + messageId + ",\"payload\":{\"unitIds\":[3]}}\n";
+
+  private static int Utf8Bytes(params string[] lines) => lines.Sum(line => Encoding.UTF8.GetByteCount(line));
+
+  private sealed record PositionsPayload(int Tick) : IOutboundPayload;
+
+  private static OutboundMessage Positions(int tick) =>
+      new(ProtocolMessageTypes.PositionUpdate, new PositionsPayload(tick), DeliveryClass.Supersedable);
+
+  [Fact]
+  public async Task Metrics_CountReceivedAndSentMessagesAndBytes()
+  {
+    var connection = Create();
+    var run = connection.RunAsync();
+
+    _incoming.Feed(HelloLine + PingLine(5));
+    await WaitUntil(() => Written.Count == 1);
+    await WaitUntil(() => connection.GetMetrics().MessagesSent == 1);
+
+    ConnectionMetricsSnapshot metrics = connection.GetMetrics();
+    Assert.Equal(2, metrics.MessagesReceived);
+    Assert.Equal(Utf8Bytes(HelloLine, PingLine(5)), metrics.BytesReceived);
+    Assert.Equal(1, metrics.MessagesSent);
+    Assert.Equal(Utf8Bytes(PongLine(5)), metrics.BytesSent);
+    _incoming.Complete();
+    await run.WaitAsync(Patience);
+  }
+
+  [Fact]
+  public async Task Metrics_CountAdmittedAndRejectedCommands()
+  {
+    var connection = Create();
+    var run = connection.RunAsync();
+    _incoming.Feed(HelloLine + StopLine(1));
+    await WaitUntil(() => _commands.Calls.Count == 1);
+
+    _gate.AcceptsGameplay = false;
+    _incoming.Feed(StopLine(2));
+    await WaitUntil(() => Written.Count == 1);
+
+    ConnectionMetricsSnapshot metrics = connection.GetMetrics();
+    Assert.Equal(1, metrics.CommandsAdmitted);
+    Assert.Equal(1, metrics.CommandsRejected);
+    _incoming.Complete();
+    await run.WaitAsync(Patience);
+  }
+
+  [Fact]
+  public async Task Metrics_CountSupersededPositionsAndTheOutboundDepth()
+  {
+    var gate = new TaskCompletionSource();
+    _outgoing.Gate = gate.Task;
+    var connection = Create();
+    var run = connection.RunAsync();
+    connection.Send(Pong(1));
+    await _outgoing.WriteStarted.WaitAsync(Patience); // El SendLoop quedó trabado con el 1: lo demás espera en la cola.
+
+    connection.Send(Positions(1));
+    connection.Send(Positions(2));
+
+    ConnectionMetricsSnapshot metrics = connection.GetMetrics();
+    Assert.Equal(1, metrics.PositionsSuperseded);
+    Assert.Equal(1, metrics.OutboundDepth);
+    gate.SetResult();
+    _incoming.Complete();
+    await run.WaitAsync(Patience);
+  }
+
+  [Fact]
+  public async Task Metrics_ReportTheConnectionPlayerPhaseAndRecentViolations()
+  {
+    _gate.Player = PlayerId.Two;
+    var connection = Create();
+    var run = connection.RunAsync();
+
+    _incoming.Feed("esto no es JSON\n");
+    await WaitUntil(() => Written.Count == 1);
+
+    ConnectionMetricsSnapshot metrics = connection.GetMetrics();
+    Assert.Equal(Id, metrics.Connection);
+    Assert.Equal(PlayerId.Two, metrics.Player);
+    Assert.Equal(ConnectionPhase.AwaitingHello, metrics.Phase);
+    Assert.Equal(1, metrics.RecentViolations);
+    _incoming.Complete();
+    await run.WaitAsync(Patience);
+  }
 }
