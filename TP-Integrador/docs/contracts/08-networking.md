@@ -1,6 +1,6 @@
 # Contrato 08 — Networking
 
-> **Estado:** primera versión de contratos implementada (`server/src/Rts.Networking`, DTOs en `server/src/Rts.Protocol`) y probada (`server/tests/Rts.Networking.Tests`, `server/tests/Rts.Protocol.Tests`). Con lógica y pruebas: framing, parser (todos los mensajes que envía el cliente, incluidos los ocho comandos de gameplay), admisión, cola de salida con `SendLoop` y el servidor TCP (aceptación, receptor, ruteo y conexión con cierre único). **Todavía sin lógica:** el cierre por abuso, el heartbeat, el timeout de handshake, el tope de conexiones pendientes, el drenaje final y las métricas.
+> **Estado:** primera versión de contratos implementada (`server/src/Rts.Networking`, DTOs en `server/src/Rts.Protocol`) y probada (`server/tests/Rts.Networking.Tests`, `server/tests/Rts.Protocol.Tests`). Con lógica y pruebas: framing, parser (todos los mensajes que envía el cliente, incluidos los ocho comandos de gameplay), admisión, cola de salida con `SendLoop`, el servidor TCP (aceptación, receptor, ruteo y conexión con cierre único), el cierre por abuso, el tope de conexiones pendientes, el monitor con timeout de handshake y heartbeat, el cierre por saturación con descarte, el drenaje final y las métricas. Las elecciones que este contrato no fija están en «Comportamientos provisorios» de [decisiones](../decisions.md).
 > **Etiquetas:** **DECIDIDO** = aprobado por el equipo (ver [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Módulo:** [08 — Networking](../modules/08-networking.md). **Vecinos:** [06 Simulation](06-simulation.md), [07 GameSession](07-game-session.md), [09 State Sync](09-state-sync.md).
 
@@ -133,7 +133,7 @@ Pasos en orden, para cada comando válido:
 - **Saturación (DECIDIDO D-073):**
   - La capacidad se mide en cantidad de mensajes (`OutboundQueueCapacity`).
   - Si un mensaje **esencial** no entra, `TryEnqueue` devuelve `Saturated` y se desconecta a ese cliente con `Network.OutboundSaturated`. Nunca se descarta un esencial para hacerle lugar, y la cola no crece sin límite.
-  - Al cerrar por saturación se descartan los pendientes y se intenta enviar solo el `Disconnecting`, con `CloseLinger` como plazo.
+  - Al cerrar por saturación se descartan los pendientes y se intenta enviar solo el `Disconnecting`, con `CloseLinger` como plazo (`IOutboundQueue.DiscardPendingAndComplete`).
 - **Reemplazables (D-064):**
   - Si hay un `PositionUpdate` pendiente que el `SendLoop` todavía no tomó, se quita y el nuevo va al final (`EnqueueOutcome.Superseded`).
   - Como hay a lo sumo uno pendiente, las posiciones nunca saturan la cola.
@@ -216,3 +216,4 @@ Pasos en orden, para cada comando válido:
 - Valores de todos los configurables (§10).
 - Pruebas de ida y vuelta contra el cliente Godot real (08 §11).
 - Proyecto `Rts.Server`: composición de todos los módulos y programa principal.
+- Revisión de los comportamientos provisorios de Networking registrados en [decisiones](../decisions.md).
