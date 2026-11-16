@@ -88,6 +88,9 @@ internal sealed class NetworkServerHarness : IAsyncDisposable
     return client;
   }
 
+  /// <summary>La tarea de <see cref="NetworkServer.RunAsync"/>; termina al cancelar o al terminar el drenaje.</summary>
+  public Task Running => _run;
+
   public Task StopAsync()
   {
     _cancellation.Cancel();

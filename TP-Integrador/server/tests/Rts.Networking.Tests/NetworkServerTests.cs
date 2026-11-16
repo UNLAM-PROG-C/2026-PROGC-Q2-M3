@@ -5,6 +5,7 @@ using Rts.Protocol.Outbound;
 using Rts.Protocol.Transport;
 using Rts.Shared.Errors;
 using Rts.Shared.Ids;
+using Rts.Shared.Match;
 using Rts.Shared.Session;
 
 namespace Rts.Networking.Tests;
@@ -427,5 +428,87 @@ public class NetworkServerTests
 
     // Sigue viva: después de otro intervalo sin actividad llega el Ping siguiente, no el cierre.
     Assert.Equal(PingLine(2), await client.ReadLineAsync());
+  }
+
+  // ───────────── Drenaje final (08 §7, 07 §9) ─────────────
+
+  private const string ShuttingDownLine =
+      "{\"protocolVersion\":1,\"type\":\"Disconnecting\",\"payload\":{\"reason\":\"Network.ServerShuttingDown\"}}";
+
+  private static readonly MatchEnded EndOfMatch =
+      new(SessionId.New(), new MatchResult(MatchResultType.TechnicalEnd, null, MatchEndReason.ServerShutdown, null));
+
+  [Fact]
+  public async Task Drain_SendsShuttingDownBehindMatchEndedToEveryConnectionAndClosesThem()
+  {
+    await using var harness = new NetworkServerHarness();
+    await harness.StartAsync();
+    var first = await ConnectWithHelloAsync(harness);
+    var second = await ConnectWithHelloAsync(harness);
+    harness.Server.Send(first.Id, EndOfMatch);
+    harness.Server.Send(second.Id, EndOfMatch);
+
+    await harness.Server.DrainAndCloseAllAsync().WaitAsync(Patience);
+
+    foreach (TestClient client in new[] { first.Client, second.Client })
+    {
+      Assert.Contains("\"type\":\"MatchEnded\"", await client.ReadLineAsync());
+      Assert.Equal(ShuttingDownLine, await client.ReadLineAsync());
+      Assert.Null(await client.ReadLineAsync());
+    }
+
+    Assert.Equal(2, harness.Session.Closed.Count);
+  }
+
+  [Fact]
+  public async Task Drain_StopsAcceptingConnections()
+  {
+    await using var harness = new NetworkServerHarness();
+    int port = await harness.StartAsync();
+
+    await harness.Server.DrainAndCloseAllAsync().WaitAsync(Patience);
+
+    await harness.Running.WaitAsync(Patience);
+    await Assert.ThrowsAsync<SocketException>(() => TestClient.ConnectAsync(port));
+  }
+
+  [Fact]
+  public async Task Drain_WithoutConnections_Finishes()
+  {
+    await using var harness = new NetworkServerHarness();
+    await harness.StartAsync();
+
+    await harness.Server.DrainAndCloseAllAsync().WaitAsync(Patience);
+  }
+
+  private sealed record BulkPayload(string Data) : IOutboundPayload;
+
+  [Fact]
+  public async Task Drain_WithAClientThatStoppedReading_FinishesWhenTheDrainTimeoutPasses()
+  {
+    // Un cliente que no lee llena los buffers del socket: el SendLoop queda trabado escribiendo. CloseLinger largo, para que lo
+    // único que pueda destrabarlo sea el DrainTimeout.
+    TimeSpan drainTimeout = TimeSpan.FromMilliseconds(300);
+    TimeSpan finishBudget = TimeSpan.FromSeconds(5);
+    const int bulkMessages = 200;
+    const int bulkMessageChars = 64 * 1024;
+    await using var harness = new NetworkServerHarness(config => config with
+    {
+      DrainTimeout = drainTimeout,
+      CloseLinger = TimeSpan.FromMinutes(1),
+      OutboundQueueCapacity = bulkMessages * 2,
+    });
+    await harness.StartAsync();
+    var (_, id) = await ConnectWithHelloAsync(harness);
+    harness.Gate.ConnectionOfPlayer = id;
+    var bulk = new OutboundMessage("Bulk", new BulkPayload(new string('x', bulkMessageChars)), DeliveryClass.Essential);
+    for (int i = 0; i < bulkMessages; i++)
+    {
+      harness.Server.Enqueue(PlayerId.One, bulk);
+    }
+
+    await harness.Server.DrainAndCloseAllAsync().WaitAsync(finishBudget);
+
+    Assert.Equal([id], harness.Session.Closed);
   }
 }

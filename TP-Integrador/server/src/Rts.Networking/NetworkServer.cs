@@ -24,8 +24,11 @@ namespace Rts.Networking;
 /// <c>Disconnecting(TooManyConnections)</c> (08 §3). Como toda conexión aceptada, se informa cerrada a GameSession.</item>
 /// <item>Mientras corre <see cref="RunAsync"/>, un <see cref="ConnectionMonitor"/> revisa los plazos de todas las conexiones.</item>
 /// <item>Al cancelar <see cref="RunAsync"/> deja de aceptar; cerrar las conexiones existentes es <see cref="DrainAndCloseAllAsync"/>.</item>
+/// <item><b>Drenaje (08 §7, 07 §9):</b> deja de aceptar, cierra cada conexión con <c>Disconnecting(ServerShuttingDown)</c> detrás de lo ya
+/// encolado (por ejemplo, <c>MatchEnded</c>) y espera que terminen hasta <c>DrainTimeout</c>. Si el plazo vence, corta las que quedan, así
+/// termina aunque haya sockets muertos. Una conexión que llega durante el drenaje se cierra igual.</item>
 /// </list>
-/// PENDIENTE (fase 3): <see cref="DrainAndCloseAllAsync"/> y <see cref="GetMetrics"/>.
+/// PENDIENTE (fase 3): <see cref="GetMetrics"/>.
 /// </summary>
 public sealed class NetworkServer : INetworkServer
 {
@@ -39,8 +42,10 @@ public sealed class NetworkServer : INetworkServer
   private readonly ConnectionMonitor _monitor;
   private readonly SessionMessageEncoder _encoder = new();
   private readonly ConcurrentDictionary<ConnectionId, Connection> _connections = new();
+  private readonly CancellationTokenSource _stopAccepting = new();
   private readonly TaskCompletionSource<int> _listening = new(TaskCreationOptions.RunContinuationsAsynchronously);
   private long _lastConnectionId;
+  private int _draining;
 
   public NetworkServer(
       NetworkingConfig config,
@@ -65,6 +70,10 @@ public sealed class NetworkServer : INetworkServer
 
   public async Task RunAsync(CancellationToken cancellationToken)
   {
+    // Deja de aceptar al cancelar o al empezar el drenaje.
+    using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopAccepting.Token);
+    cancellationToken = stop.Token;
+
     var listener = new TcpListener(IPAddress.Parse(_config.ListenAddress), _config.Port);
     listener.Start();
     int port = ((IPEndPoint)listener.LocalEndpoint).Port;
@@ -117,7 +126,35 @@ public sealed class NetworkServer : INetworkServer
     }
   }
 
-  public Task DrainAndCloseAllAsync() => throw new NotImplementedException("PENDIENTE fase 3: drenaje final (contrato 08 §7).");
+  public async Task DrainAndCloseAllAsync()
+  {
+    Volatile.Write(ref _draining, 1);
+    await _stopAccepting.CancelAsync().ConfigureAwait(false);
+
+    Connection[] open = [.. _connections.Values];
+    _logger.LogInformation("Drenaje: se cierran {Count} conexiones", open.Length);
+    foreach (Connection connection in open)
+    {
+      connection.Close(NetworkErrors.ServerShuttingDown);
+    }
+
+    Task all = Task.WhenAll(open.Select(connection => connection.Completion));
+    try
+    {
+      await all.WaitAsync(_config.DrainTimeout, _time).ConfigureAwait(false);
+    }
+    catch (TimeoutException)
+    {
+      // Hay clientes que no leen: se corta sin esperar más. Cancelar la escritura destraba un socket muerto.
+      _logger.LogWarning("Drenaje: venció el plazo; se cortan las conexiones que quedan");
+      foreach (Connection connection in open)
+      {
+        connection.Abort();
+      }
+
+      await all.ConfigureAwait(false);
+    }
+  }
 
   public IReadOnlyList<ConnectionMetricsSnapshot> GetMetrics() => throw new NotImplementedException("PENDIENTE fase 3: métricas.");
 
@@ -131,7 +168,11 @@ public sealed class NetworkServer : INetworkServer
     _connections[id] = connection;
     _logger.LogInformation("Conexión {ConnectionId} aceptada", id);
 
-    if (tooManyPending)
+    if (Volatile.Read(ref _draining) == 1)
+    {
+      connection.Close(NetworkErrors.ServerShuttingDown);
+    }
+    else if (tooManyPending)
     {
       connection.Close(NetworkErrors.TooManyConnections);
     }

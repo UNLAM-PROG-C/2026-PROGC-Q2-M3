@@ -47,6 +47,7 @@ internal sealed class Connection : IConnectionOutput
   private readonly Heartbeat _heartbeat;
   private readonly CancellationTokenSource _receiveCancellation = new();
   private readonly CancellationTokenSource _sendCancellation = new();
+  private readonly TaskCompletionSource _completion = new(TaskCreationOptions.RunContinuationsAsynchronously);
   private int _closing;
   private int _closed;
 
@@ -86,6 +87,9 @@ internal sealed class Connection : IConnectionOutput
 
   public ConnectionId Id => _id;
 
+  /// <summary>Termina cuando la conexión ya se cerró y se informó a GameSession (al final de <see cref="RunAsync"/>).</summary>
+  public Task Completion => _completion.Task;
+
   /// <summary>Fase de la conexión (08 §3). Se puede leer desde cualquier hilo.</summary>
   public ConnectionPhase Phase =>
       Volatile.Read(ref _closed) == 1 ? ConnectionPhase.Closed
@@ -124,6 +128,7 @@ internal sealed class Connection : IConnectionOutput
       _logger.LogInformation("Conexión {ConnectionId} cerrada ({Cause})", _id, IsClosing ? "por el servidor" : "el cliente se fue");
       Volatile.Write(ref _closed, 1);
       _session.PostConnectionClosed(_id);
+      _completion.TrySetResult();
     }
   }
 
@@ -199,6 +204,13 @@ internal sealed class Connection : IConnectionOutput
 
     _receiveCancellation.Cancel();
     _ = CutAfterLingerAsync();
+  }
+
+  /// <summary>Corta ya: deja de leer y de escribir sin esperar lo pendiente. Lo usa el drenaje cuando vence <c>DrainTimeout</c>.</summary>
+  public void Abort()
+  {
+    _receiveCancellation.Cancel();
+    _sendCancellation.Cancel();
   }
 
   private async Task CutAfterLingerAsync()
