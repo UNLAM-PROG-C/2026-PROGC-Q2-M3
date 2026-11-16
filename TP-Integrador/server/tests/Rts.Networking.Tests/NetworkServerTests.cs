@@ -305,4 +305,48 @@ public class NetworkServerTests
     await client.SendLineAsync(PingLine(3));
     Assert.Equal(PongLine(3), await client.ReadLineAsync());
   }
+
+  // ───────────── Conexiones pendientes (08 §3) ─────────────
+
+  /// <summary>Conecta un cliente sin Hello y espera a que el servidor lo haya aceptado (responde un Ping).</summary>
+  private static async Task<TestClient> ConnectWithoutHelloAsync(NetworkServerHarness harness)
+  {
+    TestClient client = await harness.ConnectAsync();
+    await client.SendLineAsync(PingLine(1));
+    Assert.Equal(PongLine(1), await client.ReadLineAsync());
+    return client;
+  }
+
+  [Fact]
+  public async Task WithMaxPendingConnectionsWaitingForHello_TheNextOneIsClosedWithTooManyConnections()
+  {
+    const int maxPending = 2;
+    await using var harness = new NetworkServerHarness(config => config with { MaxPendingConnections = maxPending });
+    await harness.StartAsync();
+    for (int i = 0; i < maxPending; i++)
+    {
+      await ConnectWithoutHelloAsync(harness);
+    }
+
+    TestClient extra = await harness.ConnectAsync();
+
+    Assert.Equal(
+        "{\"protocolVersion\":1,\"type\":\"Disconnecting\",\"payload\":{\"reason\":\"Network.TooManyConnections\"}}",
+        await extra.ReadLineAsync());
+    Assert.Null(await extra.ReadLineAsync());
+    await WaitUntil(() => harness.Session.Closed.Count == 1);
+  }
+
+  [Fact]
+  public async Task AConnectionThatSentItsHello_NoLongerCountsAsPending()
+  {
+    await using var harness = new NetworkServerHarness(config => config with { MaxPendingConnections = 1 });
+    await harness.StartAsync();
+    await ConnectWithHelloAsync(harness);
+
+    // La primera ya mandó su Hello: hay lugar para otra pendiente.
+    await ConnectWithoutHelloAsync(harness);
+
+    Assert.Empty(harness.Session.Closed);
+  }
 }

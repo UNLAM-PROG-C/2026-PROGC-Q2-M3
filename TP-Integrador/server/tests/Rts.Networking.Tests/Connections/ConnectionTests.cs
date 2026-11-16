@@ -267,4 +267,47 @@ public class ConnectionTests
     Assert.Equal([PongLine(1), PongLine(2)], Written); // Lo ya encolado se entrega; el 3 no.
     Assert.Equal([Id], _session.Closed);
   }
+
+  // ───────────── Fase (08 §3) ─────────────
+
+  [Fact]
+  public void Phase_OfANewConnection_IsAwaitingHello()
+  {
+    Assert.Equal(ConnectionPhase.AwaitingHello, Create().Phase);
+  }
+
+  [Fact]
+  public async Task Phase_AfterAValidHello_IsHelloAccepted()
+  {
+    var connection = Create();
+    var run = connection.RunAsync();
+
+    _incoming.Feed("{\"protocolVersion\":1,\"type\":\"Hello\"}\n");
+    await WaitUntil(() => connection.Phase == ConnectionPhase.HelloAccepted);
+
+    _incoming.Complete();
+    await run.WaitAsync(Patience);
+  }
+
+  [Fact]
+  public void Phase_AfterClose_IsClosing()
+  {
+    var connection = Create();
+
+    connection.Close(NetworkErrors.ServerShuttingDown);
+
+    Assert.Equal(ConnectionPhase.Closing, connection.Phase);
+  }
+
+  [Fact]
+  public async Task Phase_WhenRunEnds_IsClosed()
+  {
+    var connection = Create();
+    var run = connection.RunAsync();
+
+    _incoming.Complete();
+    await run.WaitAsync(Patience);
+
+    Assert.Equal(ConnectionPhase.Closed, connection.Phase);
+  }
 }

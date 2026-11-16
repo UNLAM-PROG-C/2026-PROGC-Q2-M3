@@ -54,8 +54,15 @@ internal sealed class InboundRouter
     _output = output;
   }
 
+  // Lo escribe el receptor y lo lee el bucle de aceptación para contar las conexiones pendientes (08 §3).
+  private volatile bool _helloAccepted;
+
   /// <summary>Ya se informó el <c>Hello</c> a GameSession: la conexión pasó de <c>AwaitingHello</c> a <c>HelloAccepted</c>.</summary>
-  public bool HelloAccepted { get; private set; }
+  public bool HelloAccepted
+  {
+    get => _helloAccepted;
+    private set => _helloAccepted = value;
+  }
 
   public void Handle(ParseResult result)
   {

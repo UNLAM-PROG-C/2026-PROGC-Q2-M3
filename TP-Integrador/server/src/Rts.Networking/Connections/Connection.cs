@@ -40,9 +40,11 @@ internal sealed class Connection : IConnectionOutput
   private readonly OutboundQueue _queue;
   private readonly SendLoop _sendLoop;
   private readonly ReceiveLoop _receiveLoop;
+  private readonly InboundRouter _router;
   private readonly CancellationTokenSource _receiveCancellation = new();
   private readonly CancellationTokenSource _sendCancellation = new();
   private int _closing;
+  private int _closed;
 
   public Connection(
       ConnectionId id,
@@ -67,15 +69,22 @@ internal sealed class Connection : IConnectionOutput
     var rateLimiter = new TokenBucketRateLimiter(config.CommandBurst, config.CommandsPerSecond, time);
     var admitter = new CommandAdmitter(id, gate, rateLimiter, commands);
     var violations = new ViolationTracker(config.MaxViolations, config.ViolationWindow, time);
-    var router = new InboundRouter(id, config.ProtocolVersion, session, admitter, violations, this);
+    _router = new InboundRouter(id, config.ProtocolVersion, session, admitter, violations, this);
     _receiveLoop = new ReceiveLoop(
         new LineFrameDecoder(config.MaxInboundMessageBytes),
         new InboundMessageParser(config.ProtocolVersion),
-        router,
+        _router,
         this);
   }
 
   public ConnectionId Id => _id;
+
+  /// <summary>Fase de la conexión (08 §3). Se puede leer desde cualquier hilo.</summary>
+  public ConnectionPhase Phase =>
+      Volatile.Read(ref _closed) == 1 ? ConnectionPhase.Closed
+      : IsClosing ? ConnectionPhase.Closing
+      : _router.HelloAccepted ? ConnectionPhase.HelloAccepted
+      : ConnectionPhase.AwaitingHello;
 
   private bool IsClosing => Volatile.Read(ref _closing) == 1;
 
@@ -106,6 +115,7 @@ internal sealed class Connection : IConnectionOutput
       _queue.Complete();
       _sendCancellation.Cancel();
       _logger.LogInformation("Conexión {ConnectionId} cerrada ({Cause})", _id, IsClosing ? "por el servidor" : "el cliente se fue");
+      Volatile.Write(ref _closed, 1);
       _session.PostConnectionClosed(_id);
     }
   }

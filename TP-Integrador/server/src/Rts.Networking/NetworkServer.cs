@@ -20,6 +20,8 @@ namespace Rts.Networking;
 /// <item>Cada conexión recibe un <see cref="ConnectionId"/> creciente y se registra mientras vive. Cuando termina se quita del registro y se
 /// cierra su socket.</item>
 /// <item><see cref="Send"/> y <see cref="Enqueue"/> solo encolan, y descartan el mensaje si la conexión ya no existe (09 D-069).</item>
+/// <item>Si ya hay <c>MaxPendingConnections</c> conexiones esperando su <c>Hello</c>, la nueva se acepta solo para cerrarla con
+/// <c>Disconnecting(TooManyConnections)</c> (08 §3). Como toda conexión aceptada, se informa cerrada a GameSession.</item>
 /// <item>Al cancelar <see cref="RunAsync"/> deja de aceptar; cerrar las conexiones existentes es <see cref="DrainAndCloseAllAsync"/>.</item>
 /// </list>
 /// PENDIENTE (fase 3): <see cref="DrainAndCloseAllAsync"/> y <see cref="GetMetrics"/>.
@@ -118,10 +120,21 @@ public sealed class NetworkServer : INetworkServer
   {
     var id = new ConnectionId(Interlocked.Increment(ref _lastConnectionId));
     var connection = new Connection(id, client.GetStream(), _config, _sessionEvents, _gate, _commands, _time, _connectionLogger);
+
+    // Se cuenta antes de registrar la nueva. Solo este bucle agrega conexiones, así que dos aceptaciones no pueden pasar el tope a la vez.
+    bool tooManyPending = CountPending() >= _config.MaxPendingConnections;
     _connections[id] = connection;
     _logger.LogInformation("Conexión {ConnectionId} aceptada", id);
+
+    if (tooManyPending)
+    {
+      connection.Close(NetworkErrors.TooManyConnections);
+    }
+
     _ = RunConnectionAsync(connection, client);
   }
+
+  private int CountPending() => _connections.Values.Count(connection => connection.Phase == ConnectionPhase.AwaitingHello);
 
   private async Task RunConnectionAsync(Connection connection, TcpClient client)
   {
