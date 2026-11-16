@@ -7,12 +7,22 @@ extends Node
 ##   cortes desde el menú principal.
 
 
+var _session: Node
+
+
 func _ready() -> void:
-	var session := get_node_or_null("/root/SessionController")
-	if session == null or not session.has_signal("session_state_changed"):
+	_session = get_node_or_null("/root/SessionController")
+	if _session == null or not _session.has_signal("session_state_changed"):
+		_session = null
 		return
-	session.session_state_changed.connect(_on_session_state_changed)
-	_on_session_state_changed(0, str(session.call("get_state_name")))
+	_session.session_state_changed.connect(_on_session_state_changed)
+	_on_session_state_changed(0, str(_session.call("get_state_name")))
+
+
+func _exit_tree() -> void:
+	# La sesión es un autoload: al salir de la escena hay que dejar de escucharla.
+	if is_instance_valid(_session) and _session.session_state_changed.is_connected(_on_session_state_changed):
+		_session.session_state_changed.disconnect(_on_session_state_changed)
 
 
 static func music_for_state(state_name: String) -> String:

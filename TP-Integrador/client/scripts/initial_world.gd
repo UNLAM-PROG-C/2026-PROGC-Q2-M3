@@ -29,6 +29,12 @@ const DEATH_LINGER_SECONDS := 0.8
 ## La profundidad supera la altura de los modelos de unidad (~0,8 m).
 const DEATH_SINK_DEPTH := 1.2
 const DEATH_SINK_SECONDS := 1.5
+## Ruinas que deja un edificio destruido: solo visuales (el lugar ya quedó libre, 03 §6).
+const RUINS_VISUAL_PATH := "res://assets/buildings/neutral/building_destroyed.gltf"
+## Cuánto de la huella ocupan las ruinas.
+const RUINS_FOOTPRINT_FILL := 0.9
+const RUINS_LINGER_SECONDS := 4.0
+const RUINS_SINK_SECONDS := 1.5
 const UNIT_ORDER_KINDS := [
 	"Idle",
 	"Move",
@@ -60,29 +66,41 @@ const TASK_UNIT_TYPES := {
 	"Attack": "Soldier",
 }
 
+## Color de cada jugador para los detalles que no vienen en el modelo (banderines de vallas),
+## parecido al azul y rojo de los edificios.
+const TEAM_COLORS := {
+	1: Color(0.18, 0.42, 0.9),
+	2: Color(0.88, 0.2, 0.18),
+}
+const BANNER_BASE_HEIGHT := 0.45
+const BANNER_POLE_HEIGHT := 0.75
+const BANNER_OFFSET_X := 0.45
+const BANNER_FLAG_WIDTH := 0.42
+const BANNER_FLAG_HEIGHT := 0.26
+## Modelo de cada tipo de unidad según el jugador, como los edificios (azul P1, rojo P2):
+## P1 juega con trabajadores y caballeros, P2 con male-b y robots. Así los dos bandos se
+## distinguen de un vistazo y cada jugador ve el mismo mundo que el rival.
 const UNIT_VISUAL_PATHS := {
-	"Worker": "res://assets/units/mini_characters/character-worker.glb",
-	"Soldier": "res://assets/units/mini_characters/character-soldier.glb",
+	"Worker": {
+		1: "res://assets/units/mini_characters/character-worker.glb",
+		2: "res://assets/units/mini_characters/character-male-b.glb",
+	},
+	"Soldier": {
+		1: "res://assets/units/mini_characters/character-knight.glb",
+		2: "res://assets/units/mini_characters/character-robot.glb",
+	},
 }
 
+## Escena de cada tipo de edificio (scenes/buildings). Cada escena trae sus modelos azules en
+## el nodo "Colored" (P2 los cambia por los rojos, ver _apply_team_models), el andamio en
+## "Scaffolding" (visible solo en obra) y, la granja, su cultivo en "Grain". La valla no tiene
+## "Colored": su color va en un banderín. El Centro Principal no tiene andamio: nunca se construye.
 const BUILDING_VISUAL_PATHS := {
-	"MainCenter": {
-		1: "res://assets/buildings/blue/building_castle_blue.gltf",
-		2: "res://assets/buildings/red/building_castle_red.gltf",
-	},
-	"Farm": {
-		1: "res://assets/buildings/blue/building_home_A_blue.gltf",
-		2: "res://assets/buildings/red/building_home_A_red.gltf",
-	},
-	"Barracks": {
-		1: "res://assets/buildings/blue/building_barracks_blue.gltf",
-		2: "res://assets/buildings/red/building_barracks_red.gltf",
-	},
-	"Tower": {
-		1: "res://assets/buildings/blue/building_tower_B_blue.gltf",
-		2: "res://assets/buildings/red/building_tower_B_red.gltf",
-	},
-	"Fence": "res://assets/buildings/neutral/fence_wood_straight.gltf",
+	"MainCenter": "res://scenes/buildings/main_center.tscn",
+	"Farm": "res://scenes/buildings/farm.tscn",
+	"Barracks": "res://scenes/buildings/barracks.tscn",
+	"Tower": "res://scenes/buildings/tower.tscn",
+	"Fence": "res://scenes/buildings/fence.tscn",
 }
 
 const INITIAL_STATE_KEYS := [
@@ -128,6 +146,8 @@ var accepted_order_intents: Dictionary = {}
 var _units_calculating_command: Dictionary = {}
 var _batch_unit_order_changes: Array[Dictionary] = []
 var _batch_placed_buildings: Array[Dictionary] = []
+## Ruinas visibles: building_id → {"node": Node3D, "rect": Rect2i}.
+var _ruins: Dictionary = {}
 
 
 func _ready() -> void:
@@ -1757,6 +1777,7 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 				return {"ok": false, "detail": "No existe el contenedor de edificios del mundo activo."}
 			var building_node: Node3D = building_instance_result["node"]
 			buildings_parent.add_child(building_node)
+			_clear_ruins_in(_footprint_rect(building["footprint"]))
 			entities_by_id[int(building["buildingId"])] = building_node
 			_store_entity_snapshot(int(building["buildingId"]), building)
 			_batch_placed_buildings.append(building.duplicate(true))
@@ -1770,7 +1791,7 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 				"hp": int(event["hp"]),
 			}
 			var unit_instance_result := _create_entity_node(
-				UNIT_VISUAL_PATHS[unit["unitType"]],
+				unit_visual_path(str(unit["unitType"]), int(unit["owner"])),
 				"Unit_%d" % unit["unitId"],
 				unit,
 				Vector3(unit["x"], 0.0, unit["z"])
@@ -1836,6 +1857,7 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 			if entity_kind == "unit":
 				_play_death_and_free(node)
 			else:
+				_show_ruins(entity_id, node)
 				node.queue_free()
 		"TreeDepleted":
 			var depleted_tree_id := int(event["treeId"])
@@ -1901,6 +1923,67 @@ func _play_death_and_free(unit: Node3D) -> void:
 	tween.tween_callback(unit.queue_free)
 
 
+## Muestra las ruinas de un edificio destruido en su lugar, del tamaño de su huella. Quedan
+## RUINS_LINGER_SECONDS, se hunden en el suelo y se liberan. No son una entidad: no se
+## seleccionan ni ocupan lugar, y un edificio nuevo en esas celdas las quita en el acto.
+func _show_ruins(building_id: int, building: Node3D) -> void:
+	var scene := _load_visual_scene(RUINS_VISUAL_PATH)
+	var footprint: Dictionary = building.get_meta("entity_state", {}).get("footprint", {})
+	if scene == null or footprint.is_empty() or building.get_parent() == null:
+		return
+	var ruins := scene.instantiate() as Node3D
+	ruins.name = "Ruins_%d" % building_id
+	var bounds := _model_bounds(ruins)
+	var cell_size := float(active_snapshot.get("map", {}).get("cellSize", 1.0))
+	var footprint_size := maxf(float(footprint.get("width", 1)), float(footprint.get("height", 1))) * cell_size
+	var model_size := maxf(maxf(bounds.size.x, bounds.size.z), 0.01)
+	var ruins_scale := footprint_size * RUINS_FOOTPRINT_FILL / model_size
+	ruins.scale = Vector3.ONE * ruins_scale
+	ruins.position = building.position
+	building.get_parent().add_child(ruins)
+	_ruins[building_id] = {"node": ruins, "rect": _footprint_rect(footprint)}
+	var tween := ruins.create_tween()
+	tween.tween_interval(RUINS_LINGER_SECONDS)
+	tween.tween_property(ruins, "position:y", ruins.position.y - bounds.end.y * ruins_scale - 0.1, RUINS_SINK_SECONDS) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN)
+	tween.tween_callback(_free_ruins.bind(building_id))
+
+
+func _clear_ruins_in(rect: Rect2i) -> void:
+	for building_id: Variant in _ruins.keys():
+		if (_ruins[building_id]["rect"] as Rect2i).intersects(rect):
+			_free_ruins(int(building_id))
+
+
+func _free_ruins(building_id: int) -> void:
+	var entry: Dictionary = _ruins.get(building_id, {})
+	_ruins.erase(building_id)
+	var ruins: Variant = entry.get("node")
+	if is_instance_valid(ruins):
+		(ruins as Node).queue_free()
+
+
+func _footprint_rect(footprint: Dictionary) -> Rect2i:
+	return Rect2i(
+		int(footprint.get("column", 0)),
+		int(footprint.get("row", 0)),
+		int(footprint.get("width", 0)),
+		int(footprint.get("height", 0))
+	)
+
+
+## Caja que ocupa la geometría de un modelo, en el espacio de su raíz.
+func _model_bounds(model: Node3D) -> AABB:
+	var bounds := AABB()
+	var found := false
+	for mesh: Node in model.find_children("*", "MeshInstance3D", true, false):
+		var instance := mesh as MeshInstance3D
+		var box: AABB = _relative_transform(model, instance) * instance.get_aabb()
+		bounds = box if not found else bounds.merge(box)
+		found = true
+	return bounds
+
+
 func _make_simulated_entity_index() -> Dictionary:
 	var result: Dictionary = {}
 	for entity_id in entities_by_id:
@@ -1937,6 +2020,8 @@ func _update_entity_state(entity_id: int, changes: Dictionary) -> void:
 		state[key] = changes[key]
 	node.set_meta("entity_state", state)
 	_store_entity_snapshot(entity_id, state)
+	if node.get_meta("entity_kind", "") == "building":
+		_refresh_building_parts(node)
 
 
 func _update_farm_state(farm_id: int, changes: Dictionary) -> void:
@@ -1948,6 +2033,22 @@ func _update_farm_state(farm_id: int, changes: Dictionary) -> void:
 	state["farm"] = farm
 	node.set_meta("entity_state", state)
 	_store_entity_snapshot(farm_id, state)
+	_refresh_building_parts(node)
+
+
+## Partes opcionales de las escenas de edificio que dependen de su estado:
+## - "Scaffolding": el andamio se ve solo mientras el edificio está en obra;
+## - "Grain" (granja): el cultivo se oculta mientras está agotada, también durante la
+##   reparación. El protocolo solo informa si la granja está agotada, no cuánta comida le
+##   queda (FarmDto, FarmDepleted).
+func _refresh_building_parts(building_node: Node3D) -> void:
+	var state: Dictionary = building_node.get_meta("entity_state", {})
+	var scaffolding := building_node.find_child("Scaffolding", true, false) as Node3D
+	if scaffolding != null:
+		scaffolding.visible = not bool(state.get("isCompleted", false))
+	var grain := building_node.find_child("Grain", true, false) as Node3D
+	if grain != null:
+		grain.visible = not bool(state.get("farm", {}).get("isDepleted", false))
 
 
 func _store_entity_snapshot(entity_id: int, state: Dictionary) -> void:
@@ -2159,6 +2260,7 @@ func _clear_command_tracking() -> void:
 	_units_calculating_command.clear()
 	_batch_unit_order_changes.clear()
 	_batch_placed_buildings.clear()
+	_ruins.clear()
 
 
 func _add_position_sample(
@@ -2797,7 +2899,7 @@ func _build_staged_world(state: Dictionary, initialization_id: int) -> Dictionar
 		entity_nodes[int(building["buildingId"])] = node
 
 	for unit: Dictionary in state["units"]:
-		var path: String = UNIT_VISUAL_PATHS[unit["unitType"]]
+		var path := unit_visual_path(str(unit["unitType"]), int(unit["owner"]))
 		var instance_result := _create_entity_node(
 			path,
 			"Unit_%d" % int(unit["unitId"]),
@@ -2953,13 +3055,118 @@ func _create_entity_node(
 	entity_node.set_meta("entity_state", entity_state.duplicate(true))
 	entity_node.set_meta("owner", int(entity_state.get("owner", 0)))
 	entity_node.add_child(visual)
+	if entity_state.has("buildingType"):
+		# Un modelo de color que falta falla la preparación, igual que el modelo principal.
+		var team_error := _apply_team_models(visual, int(entity_state.get("owner", 0)))
+		if not team_error.is_empty():
+			entity_node.free()
+			return {"ok": false, "detail": "%s: %s" % [node_name, team_error]}
+		_refresh_building_parts(entity_node)
+	if str(entity_state.get("buildingType", "")) == "Fence":
+		# El modelo de valla es neutral (igual para los dos) y corre a lo largo de Z: se gira
+		# para que corra en X (de frente a la cámara por defecto), se asegura que quede
+		# centrado en la celda y lleva un banderín del color del jugador.
+		(visual as Node3D).rotation.y = PI / 2.0
+		_center_visual(visual as Node3D)
+		entity_node.add_child(_make_team_banner(int(entity_state.get("owner", 0))))
 	if entity_state.has("isAvailable"):
 		entity_node.visible = bool(entity_state["isAvailable"])
 	return {"ok": true, "node": entity_node}
 
 
+## Escenas de edificio con un nodo "Colored": sus modelos vienen en azul (P1) y para P2 se
+## reemplazan por la versión roja del mismo modelo, conservando nombre y transformación.
+func _apply_team_models(visual: Node, owner_id: int) -> String:
+	var colored := visual.get_node_or_null("Colored")
+	if colored == null or owner_id != 2:
+		return ""
+	for model: Node in colored.get_children():
+		var path := model.scene_file_path
+		if not path.contains("/blue/"):
+			continue
+		var red_path := path.replace("/blue/", "/red/").replace("_blue.", "_red.")
+		var red_scene := _load_visual_scene(red_path)
+		if red_scene == null:
+			return "no se pudo cargar la versión roja %s." % red_path
+		var red_model := red_scene.instantiate() as Node3D
+		red_model.name = model.name
+		red_model.transform = (model as Node3D).transform
+		colored.add_child(red_model)
+		colored.move_child(red_model, model.get_index())
+		colored.remove_child(model)
+		model.free()
+	return ""
+
+
+## Desplaza el modelo para que su geometría quede centrada en X/Z sobre el origen del nodo
+## padre (respetando la rotación que ya tenga).
+func _center_visual(visual: Node3D) -> void:
+	var bounds := AABB()
+	var found := false
+	for mesh: Node in visual.find_children("*", "MeshInstance3D", true, false):
+		var instance := mesh as MeshInstance3D
+		var box: AABB = (visual.transform * _relative_transform(visual, instance)) * instance.get_aabb()
+		bounds = box if not found else bounds.merge(box)
+		found = true
+	if found:
+		var center := bounds.get_center()
+		visual.position -= Vector3(center.x, 0.0, center.z)
+
+
+func _relative_transform(ancestor: Node3D, node: Node3D) -> Transform3D:
+	var result := Transform3D.IDENTITY
+	var current: Node = node
+	while current != null and current != ancestor:
+		if current is Node3D:
+			result = (current as Node3D).transform * result
+		current = current.get_parent()
+	return result
+
+
+## Banderín del color del jugador sobre una valla: un mástil y una bandera.
+func _make_team_banner(owner_id: int) -> Node3D:
+	var banner := Node3D.new()
+	banner.name = "TeamBanner"
+	var pole := MeshInstance3D.new()
+	pole.name = "Pole"
+	var pole_mesh := CylinderMesh.new()
+	pole_mesh.top_radius = 0.025
+	pole_mesh.bottom_radius = 0.025
+	pole_mesh.height = BANNER_POLE_HEIGHT
+	pole.mesh = pole_mesh
+	pole.position = Vector3(BANNER_OFFSET_X, BANNER_BASE_HEIGHT + BANNER_POLE_HEIGHT / 2.0, 0.0)
+	pole.material_override = _flat_material(Color(0.36, 0.24, 0.14))
+	banner.add_child(pole)
+	var flag := MeshInstance3D.new()
+	flag.name = "Flag"
+	var flag_mesh := BoxMesh.new()
+	# La bandera queda de frente a la cámara por defecto (plano X/Y) y flamea hacia el centro.
+	flag_mesh.size = Vector3(BANNER_FLAG_WIDTH, BANNER_FLAG_HEIGHT, 0.03)
+	flag.mesh = flag_mesh
+	flag.position = Vector3(
+		BANNER_OFFSET_X - BANNER_FLAG_WIDTH / 2.0 - 0.02,
+		BANNER_BASE_HEIGHT + BANNER_POLE_HEIGHT - BANNER_FLAG_HEIGHT / 2.0,
+		0.0
+	)
+	flag.material_override = _flat_material(TEAM_COLORS.get(owner_id, Color.WHITE))
+	banner.add_child(flag)
+	return banner
+
+
+func _flat_material(color: Color) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.roughness = 0.8
+	return material
+
+
 func _load_visual_scene(path: String) -> PackedScene:
 	return ResourceLoader.load(path) as PackedScene
+
+
+static func unit_visual_path(unit_type: String, owner_id: int) -> String:
+	var paths: Dictionary = UNIT_VISUAL_PATHS.get(unit_type, {})
+	return str(paths.get(owner_id, ""))
 
 
 func _building_visual_path(building_type: String, owner_id: int) -> String:

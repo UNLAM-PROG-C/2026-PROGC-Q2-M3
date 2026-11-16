@@ -33,6 +33,28 @@ const GAMEPLAY_EXAMPLES := [
 ]
 
 
+## Entidades que la vista previa suma al mundo de 02-initial-state para ver todos los modelos:
+## un edificio de cada tipo y dos soldados por jugador. Usan IDs desde 101 y celdas libres
+## cerca de cada base, para no chocar con los lotes de ejemplo 05 a 20 (IDs 1 a 12, la obra
+## del 07 en (8, 10) y la unidad del 12 en (6.5, 2.5)).
+const PREVIEW_BUILDINGS := [
+	{"buildingId": 101, "owner": 1, "buildingType": "Farm", "footprint": {"column": 2, "row": 8, "width": 2, "height": 2}, "hp": 200, "isCompleted": true, "farm": {"isDepleted": false, "isRepairing": false}},
+	{"buildingId": 102, "owner": 1, "buildingType": "Barracks", "footprint": {"column": 2, "row": 11, "width": 3, "height": 3}, "hp": 400, "isCompleted": true},
+	{"buildingId": 103, "owner": 1, "buildingType": "Tower", "footprint": {"column": 5, "row": 15, "width": 2, "height": 2}, "hp": 300, "isCompleted": true},
+	{"buildingId": 104, "owner": 1, "buildingType": "Fence", "footprint": {"column": 10, "row": 4, "width": 1, "height": 1}, "hp": 100, "isCompleted": true},
+	{"buildingId": 111, "owner": 2, "buildingType": "Farm", "footprint": {"column": 36, "row": 30, "width": 2, "height": 2}, "hp": 200, "isCompleted": true, "farm": {"isDepleted": false, "isRepairing": false}},
+	{"buildingId": 112, "owner": 2, "buildingType": "Barracks", "footprint": {"column": 35, "row": 26, "width": 3, "height": 3}, "hp": 400, "isCompleted": true},
+	{"buildingId": 113, "owner": 2, "buildingType": "Tower", "footprint": {"column": 33, "row": 23, "width": 2, "height": 2}, "hp": 300, "isCompleted": true},
+	{"buildingId": 114, "owner": 2, "buildingType": "Fence", "footprint": {"column": 29, "row": 35, "width": 1, "height": 1}, "hp": 100, "isCompleted": true},
+]
+const PREVIEW_UNITS := [
+	{"unitId": 121, "owner": 1, "unitType": "Soldier", "x": 9.5, "z": 6.5, "hp": 80, "order": "Idle"},
+	{"unitId": 122, "owner": 1, "unitType": "Soldier", "x": 10.5, "z": 6.5, "hp": 80, "order": "Idle"},
+	{"unitId": 131, "owner": 2, "unitType": "Soldier", "x": 30.5, "z": 33.5, "hp": 80, "order": "Idle"},
+	{"unitId": 132, "owner": 2, "unitType": "Soldier", "x": 30.5, "z": 32.5, "hp": 80, "order": "Idle"},
+]
+
+
 ## Red simulada con la misma interfaz que NetworkClient para SessionController,
 ## InitialWorld y SessionScreens. Registra lo que envía el cliente.
 class PreviewNetwork:
@@ -142,6 +164,8 @@ func deliver_example(filename: String) -> void:
 		return
 	var message_type := str(envelope["type"])
 	var payload: Variant = envelope.get("payload", null)
+	if message_type == "InitialState" and payload is Dictionary:
+		payload = with_preview_entities(payload)
 	if payload is Dictionary:
 		payload = _adjust_tick(message_type, payload)
 	network.deliver(message_type, payload)
@@ -241,6 +265,19 @@ func load_example(filename: String) -> Dictionary:
 
 
 # --- Ayudas ---------------------------------------------------------------------------
+
+## InitialState con los edificios y soldados de la vista previa. Los datos privados (la cola
+## del Cuartel) se suman solo para el destinatario, como haría el servidor (09 §3).
+func with_preview_entities(initial_state: Dictionary) -> Dictionary:
+	var state := initial_state.duplicate(true)
+	var player_id := int(state.get("playerId", 0))
+	state["buildings"].append_array(PREVIEW_BUILDINGS.duplicate(true))
+	state["units"].append_array(PREVIEW_UNITS.duplicate(true))
+	for building: Dictionary in PREVIEW_BUILDINGS:
+		if building["buildingType"] == "Barracks" and int(building["owner"]) == player_id:
+			state["ownProduction"].append({"producerId": building["buildingId"], "status": "Idle", "pending": []})
+	return state
+
 
 func _adjust_tick(message_type: String, payload: Dictionary) -> Dictionary:
 	var adjusted := payload.duplicate(true)

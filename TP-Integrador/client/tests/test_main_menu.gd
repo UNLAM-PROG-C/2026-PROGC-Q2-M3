@@ -29,6 +29,10 @@ func _run() -> void:
 	_check(menu != null and menu.scene_file_path == MAIN_MENU_PATH, "The main menu should be the current scene.")
 	if menu != null:
 		_check(menu.find_child("TestUnits*", true, false) == null, "The debug TestUnits must be gone.")
+		var scaffoldings := menu.find_children("Scaffolding", "Node3D", true, false)
+		_check(not scaffoldings.is_empty(), "The menu buildings come with their scaffolding node.")
+		for scaffolding: Node in scaffoldings:
+			_check(not (scaffolding as Node3D).visible, "No scaffolding is visible in the main menu (%s)." % scaffolding.get_parent().name)
 		_check_idle_character(menu, "Knight", KNIGHT_PATH)
 		_check_idle_character(menu, "MaleB", MALE_B_PATH)
 		var play_button := menu.find_child("PlayButton", true, false) as Button

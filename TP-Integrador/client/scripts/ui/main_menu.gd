@@ -15,6 +15,18 @@ func _ready() -> void:
 	var music := get_node_or_null("/root/MusicManager")
 	if music != null:
 		music.play_menu_theme()
+	_hide_scaffolding()
+
+
+## Los edificios del decorado usan las mismas escenas que la partida, que traen el andamio
+## visible (en la partida lo maneja el mundo según si está en obra). En el menú son edificios
+## terminados, así que se ocultan todos los andamios de esta escena.
+func _hide_scaffolding() -> void:
+	var menu_scene: Node = owner if owner != null else get_tree().current_scene
+	if menu_scene == null:
+		return
+	for scaffolding: Node in menu_scene.find_children("Scaffolding", "Node3D", true, false):
+		(scaffolding as Node3D).visible = false
 
 
 func start_game() -> void:
