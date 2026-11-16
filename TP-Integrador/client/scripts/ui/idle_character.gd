@@ -4,6 +4,7 @@ extends Node3D
 ## Las animaciones importadas de los modelos no tienen loop, así que se reproduce una copia
 ## con loop para no modificar el recurso compartido por las unidades del juego.
 
+const AnimationLoops = preload("res://scripts/animation_loops.gd")
 const LIBRARY_NAME := "decor"
 
 @export var animation_name := "idle"
@@ -14,14 +15,7 @@ func _ready() -> void:
 	if player == null:
 		push_warning("%s no tiene AnimationPlayer." % name)
 		return
-	if not player.has_animation(animation_name):
+	if AnimationLoops.ensure_looped_library(player, LIBRARY_NAME, [animation_name]).is_empty():
 		push_warning("%s no tiene la animación %s." % [name, animation_name])
 		return
-	var looped: Animation = player.get_animation(animation_name).duplicate()
-	looped.loop_mode = Animation.LOOP_LINEAR
-	var library := AnimationLibrary.new()
-	library.add_animation(animation_name, looped)
-	if player.has_animation_library(LIBRARY_NAME):
-		player.remove_animation_library(LIBRARY_NAME)
-	player.add_animation_library(LIBRARY_NAME, library)
 	player.play("%s/%s" % [LIBRARY_NAME, animation_name])

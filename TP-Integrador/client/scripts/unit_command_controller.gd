@@ -4,8 +4,24 @@ signal selection_changed(unit_ids: Array[int])
 ## Edificio propio seleccionado (0 = ninguno). Es excluyente con la selección de unidades.
 signal building_selection_changed(building_id: int)
 signal command_failed(error_code: String, detail: String)
+## Marcador visual inmediato de una orden de clic derecho (work-plan §2): tipo de orden y lugar.
+signal command_marker_shown(command_type: String, world_position: Vector3)
 
 const SELECTION_PICK_RADIUS_PIXELS := 32.0
+## Distancia en píxeles a partir de la cual un clic izquierdo se vuelve rectángulo de selección.
+const DRAG_THRESHOLD_PIXELS := 6.0
+## Un clic repetido a menos de esta distancia del anterior cicla entre unidades superpuestas.
+const CYCLE_DISTANCE_PIXELS := 8.0
+const MARKER_SECONDS := 0.6
+## Cuánto más ancho que el modelo del objetivo es el anillo de una orden sin huella.
+const MARKER_MODEL_MARGIN := 1.3
+const MARKER_COLORS := {
+	"Move": Color(0.35, 0.95, 0.45),
+	"Attack": Color(1.0, 0.3, 0.25),
+	"GatherWood": Color(1.0, 0.85, 0.3),
+	"Build": Color(1.0, 0.85, 0.3),
+	"RepairFarm": Color(1.0, 0.85, 0.3),
+}
 const TASK_UNIT_TYPES := {
 	"GatherWood": "Worker",
 	"Build": "Worker",
@@ -18,6 +34,13 @@ var selected_building_id := 0
 
 var _world: Node
 var _session_controller: Node
+var _press_position := Vector2.ZERO
+var _is_left_pressed := false
+var _is_box_selecting := false
+var _last_click_position := Vector2(-1.0e9, -1.0e9)
+var _last_click_candidates: Array[int] = []
+var _last_click_index := -1
+var _selection_box: Panel
 
 
 func _ready() -> void:
@@ -88,22 +111,33 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			_report_if_failed(_world.call("issue_stop_command", selected_unit_ids.duplicate()), "Stop")
 		return
-	var mouse_event := event as InputEventMouseButton
-	if mouse_event == null or not mouse_event.pressed or mouse_event.canceled:
+	var motion := event as InputEventMouseMotion
+	if motion != null:
+		if _is_left_pressed and (_is_box_selecting or motion.position.distance_to(_press_position) > DRAG_THRESHOLD_PIXELS):
+			_is_box_selecting = true
+			_update_selection_box(Rect2(_press_position, motion.position - _press_position).abs())
 		return
-	if mouse_event.is_action_pressed("select_unit"):
-		var unit_id := _pick_local_unit(mouse_event.position)
-		var building_id := 0
-		if unit_id <= 0:
-			building_id = _pick_own_building(_mouse_to_map_position(mouse_event.position))
-		if unit_id > 0:
-			set_selected_units([unit_id])
-		elif building_id > 0:
-			set_selected_building(building_id)
-		else:
-			clear_selection()
+	var mouse_event := event as InputEventMouseButton
+	if mouse_event == null or mouse_event.canceled:
+		return
+	if mouse_event.is_action("select_unit"):
 		get_viewport().set_input_as_handled()
-	elif mouse_event.is_action_pressed("move_selected_units") and not selected_unit_ids.is_empty():
+		if mouse_event.pressed:
+			_is_left_pressed = true
+			_is_box_selecting = false
+			_press_position = mouse_event.position
+		elif _is_left_pressed:
+			_is_left_pressed = false
+			if _is_box_selecting:
+				_is_box_selecting = false
+				_update_selection_box(Rect2())
+				select_in_screen_rect(Rect2(_press_position, mouse_event.position - _press_position).abs())
+			else:
+				select_at_screen_position(mouse_event.position)
+		return
+	if not mouse_event.pressed:
+		return
+	if mouse_event.is_action_pressed("move_selected_units") and not selected_unit_ids.is_empty():
 		var destination_value: Variant = _mouse_to_map_position(mouse_event.position)
 		var target_id := _pick_entity(mouse_event.position, destination_value)
 		var command := resolve_contextual_command(target_id)
@@ -112,7 +146,93 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		if str(command["type"]) == "Move" and typeof(destination_value) != TYPE_VECTOR2:
 			return
+		show_command_marker(command, destination_value)
 		await issue_contextual_command(command, destination_value)
+
+
+## Clic izquierdo: selecciona la unidad propia bajo el cursor. Repetir el clic en el mismo lugar
+## cicla entre las unidades superpuestas (04 §3). Sin unidades, selecciona un edificio propio.
+func select_at_screen_position(screen_position: Vector2) -> void:
+	var candidates := _local_units_at(screen_position)
+	var index := 0
+	if (
+		not candidates.is_empty()
+		and screen_position.distance_to(_last_click_position) <= CYCLE_DISTANCE_PIXELS
+		and candidates == _last_click_candidates
+	):
+		index = (_last_click_index + 1) % candidates.size()
+	_last_click_position = screen_position
+	_last_click_candidates = candidates
+	_last_click_index = index
+	if not candidates.is_empty():
+		var picked: Array[int] = [candidates[index]]
+		set_selected_units(picked)
+		return
+	var building_id := _pick_own_building(_mouse_to_map_position(screen_position))
+	if building_id > 0:
+		set_selected_building(building_id)
+	else:
+		clear_selection()
+		_clear_building_selection()
+
+
+## Rectángulo de selección: todas las unidades propias visibles dentro del rectángulo en pantalla.
+func select_in_screen_rect(screen_rect: Rect2) -> void:
+	_last_click_candidates.clear()
+	var camera := get_viewport().get_camera_3d()
+	var picked: Array[int] = []
+	if camera != null:
+		for unit_id: int in _visible_local_unit_ids():
+			var unit: Node3D = _get_entities()[unit_id]
+			var world_position := unit.global_position + Vector3.UP * 0.4
+			if not camera.is_position_behind(world_position) and screen_rect.has_point(camera.unproject_position(world_position)):
+				picked.append(unit_id)
+	if picked.is_empty():
+		clear_selection()
+		_clear_building_selection()
+	else:
+		set_selected_units(picked)
+
+
+func is_box_selecting() -> bool:
+	return _is_box_selecting
+
+
+## Anillo que aparece y se desvanece donde se dio la orden: el destino de un Move o el
+## objetivo de una tarea, del tamaño de su huella si es un edificio. Es solo visual: se
+## muestra al hacer clic, antes y aparte del resultado oficial.
+func show_command_marker(command: Dictionary, destination: Variant = null) -> MeshInstance3D:
+	var command_type := str(command.get("type", ""))
+	var marker_position := Vector3.ZERO
+	var marker_size := 1.0
+	var target: Node3D = _get_entities().get(int(command.get("targetId", 0)))
+	if target != null:
+		marker_position = target.global_position
+		var footprint: Dictionary = target.get_meta("entity_state", {}).get("footprint", {})
+		if not footprint.is_empty():
+			var cell_size := float(_get_active_snapshot().get("map", {}).get("cellSize", 1.0))
+			marker_size = maxf(float(footprint.get("width", 1)), float(footprint.get("height", 1))) * cell_size
+		else:
+			# Árboles y unidades: el anillo rodea el modelo (por ejemplo, la copa del árbol)
+			# para que no quede escondido adentro.
+			marker_size = maxf(_horizontal_extent(target) * MARKER_MODEL_MARGIN, 1.0)
+	elif typeof(destination) == TYPE_VECTOR2:
+		marker_position = Vector3(destination.x, 0.0, destination.y)
+	else:
+		return null
+	var marker := _create_ring(MARKER_COLORS.get(command_type, Color.WHITE), 0.5)
+	marker.name = "CommandMarker"
+	marker.position = marker_position + Vector3.UP * 0.06
+	marker.scale = Vector3.ONE * marker_size * 0.6
+	_world.add_child(marker)
+	var material := marker.material_override as StandardMaterial3D
+	var tween := marker.create_tween()
+	tween.set_parallel(true)
+	tween.tween_property(marker, "scale", Vector3.ONE * marker_size, MARKER_SECONDS)
+	tween.tween_property(material, "albedo_color:a", 0.0, MARKER_SECONDS)
+	tween.chain().tween_callback(marker.queue_free)
+	command_marker_shown.emit(command_type, marker_position)
+	return marker
 
 
 ## Decide la orden de un clic derecho según lo que hay bajo el cursor (plan 06 §2):
@@ -250,35 +370,68 @@ func clear_selection() -> void:
 	selection_changed.emit(no_units)
 
 
-func _pick_local_unit(mouse_position: Vector2) -> int:
+## Unidades propias visibles a menos de SELECTION_PICK_RADIUS_PIXELS del cursor, de la más
+## cercana a la más lejana (empates por ID, para que el ciclo sea estable).
+func _local_units_at(mouse_position: Vector2) -> Array[int]:
 	var camera := get_viewport().get_camera_3d()
-	if camera == null or _world.get("active_world") == null:
-		return 0
-	var best_unit_id := 0
-	var best_distance_squared := SELECTION_PICK_RADIUS_PIXELS * SELECTION_PICK_RADIUS_PIXELS
-	var local_player_id := int(_get_active_snapshot().get("playerId", 0))
-	for entity_id: Variant in _get_entities():
-		var unit_id := int(entity_id)
+	var result: Array[int] = []
+	if camera == null:
+		return result
+	var distances: Dictionary = {}
+	for unit_id: int in _visible_local_unit_ids():
 		var unit: Node3D = _get_entities()[unit_id]
-		if (
-			unit.get_meta("entity_kind", "") != "unit"
-			or int(unit.get_meta("owner", 0)) != local_player_id
-			or not unit.visible
-		):
-			continue
 		var world_position := unit.global_position + Vector3.UP * 0.8
 		if camera.is_position_behind(world_position):
 			continue
-		var screen_position := camera.unproject_position(world_position)
-		var distance_squared := mouse_position.distance_squared_to(screen_position)
-		if distance_squared < best_distance_squared:
-			best_distance_squared = distance_squared
-			best_unit_id = unit_id
-	return best_unit_id
+		var distance := mouse_position.distance_squared_to(camera.unproject_position(world_position))
+		if distance <= SELECTION_PICK_RADIUS_PIXELS * SELECTION_PICK_RADIUS_PIXELS:
+			distances[unit_id] = distance
+			result.append(unit_id)
+	result.sort_custom(
+		func(a: int, b: int) -> bool:
+			if is_equal_approx(distances[a], distances[b]):
+				return a < b
+			return distances[a] < distances[b]
+	)
+	return result
 
 
-## Entidad bajo el cursor para el clic contextual: primero el edificio cuya huella
-## contiene el punto del suelo; si no hay, la unidad o el árbol visible más cercano en pantalla.
+func _visible_local_unit_ids() -> Array[int]:
+	var result: Array[int] = []
+	if _world.get("active_world") == null:
+		return result
+	var local_player_id := int(_get_active_snapshot().get("playerId", 0))
+	for entity_id: Variant in _get_entities():
+		var unit: Node3D = _get_entities()[entity_id]
+		if (
+			unit.get_meta("entity_kind", "") == "unit"
+			and int(unit.get_meta("owner", 0)) == local_player_id
+			and unit.is_visible_in_tree()
+		):
+			result.append(int(entity_id))
+	result.sort()
+	return result
+
+
+func _update_selection_box(screen_rect: Rect2) -> void:
+	if _selection_box == null:
+		var layer := CanvasLayer.new()
+		layer.name = "SelectionBoxLayer"
+		add_child(layer)
+		_selection_box = Panel.new()
+		_selection_box.name = "SelectionBox"
+		_selection_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.15, 0.85, 1.0, 0.15)
+		style.border_color = Color(0.15, 0.85, 1.0, 0.9)
+		style.set_border_width_all(2)
+		_selection_box.add_theme_stylebox_override("panel", style)
+		layer.add_child(_selection_box)
+	_selection_box.visible = screen_rect.size != Vector2.ZERO
+	_selection_box.position = screen_rect.position
+	_selection_box.size = screen_rect.size
+
+
 func _pick_entity(mouse_position: Vector2, ground_point: Variant) -> int:
 	var entities := _get_entities()
 	if typeof(ground_point) == TYPE_VECTOR2:
@@ -403,6 +556,33 @@ func _set_unit_selected(unit: Node3D, selected: bool) -> void:
 	else:
 		return
 	marker.visible = selected
+
+
+## Ancho horizontal (X/Z) del modelo de una entidad, sin contar los marcadores de selección.
+func _horizontal_extent(entity: Node3D) -> float:
+	var extent := 0.0
+	for visual: Node in entity.find_children("*", "VisualInstance3D", true, false):
+		if visual.name == "SelectionMarker":
+			continue
+		var instance := visual as VisualInstance3D
+		var box: AABB = entity.global_transform.affine_inverse() * instance.global_transform * instance.get_aabb()
+		extent = maxf(extent, maxf(box.size.x, box.size.z))
+	return extent
+
+
+func _create_ring(color: Color, radius: float) -> MeshInstance3D:
+	var ring := MeshInstance3D.new()
+	var torus := TorusMesh.new()
+	torus.inner_radius = radius * 0.83
+	torus.outer_radius = radius
+	ring.mesh = torus
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	ring.material_override = material
+	return ring
 
 
 func _create_selection_marker(unit: Node3D) -> MeshInstance3D:
