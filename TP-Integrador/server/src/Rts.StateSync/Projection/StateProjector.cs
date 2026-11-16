@@ -4,6 +4,7 @@ using Rts.Protocol.State;
 using Rts.Shared.Commands;
 using Rts.Shared.Entities;
 using Rts.Shared.Events;
+using Rts.Shared.Geometry;
 using Rts.Shared.Ids;
 using Rts.Shared.Resources;
 using Rts.Shared.Time;
@@ -97,9 +98,10 @@ public sealed class StateProjector : IStateProjector
       new(u.UnitId.Value, u.Owner.Value, u.UnitType, u.Position.X, u.Position.Z, u.Hp, u.Order);
 
   private static BuildingDto ToDto(BuildingView b) =>
-      new(b.BuildingId.Value, b.Owner.Value, b.BuildingType,
-          new FootprintDto(b.Footprint.Anchor.Column, b.Footprint.Anchor.Row, b.Footprint.Size.Width, b.Footprint.Size.Height),
+      new(b.BuildingId.Value, b.Owner.Value, b.BuildingType, ToDto(b.Footprint),
           b.Hp, b.IsCompleted, b.Farm is { } f ? new FarmDto(f.IsDepleted, f.IsRepairing) : null);
+
+  private static FootprintDto ToDto(Footprint f) => new(f.Anchor.Column, f.Anchor.Row, f.Size.Width, f.Size.Height);
 
   private static TreeDto ToDto(TreeView t) =>
       new(t.TreeId.Value, t.Cell.Column, t.Cell.Row, t.Position.X, t.Position.Z, t.IsAvailable);
@@ -122,11 +124,19 @@ public sealed class StateProjector : IStateProjector
 
   private static ResourcesDto ToDto(ResourceAmount r) => new(r.Wood, r.Food);
 
-  private static StateEventDto ToDto(DomainEvent e) => e.Payload switch
+  private static StateEventDto ToDto(DomainEvent e)
   {
-    UnitOrderChanged p => new UnitOrderChangedDto(e.Stamp.IndexInTick, p.UnitId.Value, p.OrderId.Value, p.Kind),
-    _ => throw new NotSupportedException($"Evento sin DTO: {e.Payload.GetType().Name}."),
-  };
+    int index = e.Stamp.IndexInTick;
+    return e.Payload switch
+    {
+      BuildingPlaced p => new BuildingPlacedDto(index, p.BuildingId.Value, p.Owner.Value, p.BuildingType, ToDto(p.Footprint), p.Hp),
+      BuildingProgressChanged p => new BuildingProgressChangedDto(index, p.BuildingId.Value, p.Hp),
+      BuildingCompleted p => new BuildingCompletedDto(index, p.BuildingId.Value),
+      MapRevisionChanged p => new MapRevisionChangedDto(index, p.Revision.Value),
+      UnitOrderChanged p => new UnitOrderChangedDto(index, p.UnitId.Value, p.OrderId.Value, p.Kind),
+      _ => throw new NotSupportedException($"Evento sin DTO: {e.Payload.GetType().Name}."),
+    };
+  }
 
   private static CommandResultDto ToDto(CommandResult r) =>
       new(r.Key.ClientCommandId.Value, r.Sequence.Value, r.Tick.Value, r.Outcome, r.Error?.Value,

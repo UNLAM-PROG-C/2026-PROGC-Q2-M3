@@ -6,6 +6,7 @@ using Rts.Shared.Commands;
 using Rts.Shared.Entities;
 using Rts.Shared.Errors;
 using Rts.Shared.Events;
+using Rts.Shared.Geometry;
 using Rts.Shared.Ids;
 using Rts.Shared.Time;
 using Rts.Shared.World;
@@ -80,6 +81,36 @@ public class StateEventsProjectionTests
     Assert.Empty(projection.Player1.Messages);
     Assert.Empty(projection.Player2.Messages);
   }
+
+  [Fact]
+  public void ProjectTick_ConstructionAndMapEventsGoToBoth()
+  {
+    var building = new EntityId(20);
+    var footprint = new Footprint(new GridCell(4, 6), new FootprintSize(2, 3));
+    const int PlacedHp = 1;
+    const int ProgressHp = 40;
+    MapRevision newRevision = Revision.Next();
+
+    DomainEvent placed = Event(0, new BuildingPlaced(building, PlayerId.Two, BuildingType.Farm, footprint, PlacedHp));
+    DomainEvent revisionChanged = Event(1, new MapRevisionChanged(newRevision));
+    DomainEvent progress = Event(2, new BuildingProgressChanged(building, ProgressHp));
+    DomainEvent completed = Event(3, new BuildingCompleted(building));
+
+    TickProjection projection = _projector.ProjectTick(Publication(events: [placed, revisionChanged, progress, completed]));
+
+    var footprintDto = new FootprintDto(footprint.Anchor.Column, footprint.Anchor.Row, footprint.Size.Width, footprint.Size.Height);
+    foreach (RecipientMessages recipient in new[] { projection.Player1, projection.Player2 })
+    {
+      Assert.Equal(
+          [new BuildingPlacedDto(placed.Stamp.IndexInTick, building.Value, PlayerId.Two.Value, BuildingType.Farm, footprintDto, PlacedHp),
+           new MapRevisionChangedDto(revisionChanged.Stamp.IndexInTick, newRevision.Value),
+           new BuildingProgressChangedDto(progress.Stamp.IndexInTick, building.Value, ProgressHp),
+           new BuildingCompletedDto(completed.Stamp.IndexInTick, building.Value)],
+          SingleBatch(recipient).Events);
+    }
+  }
+
+  private static DomainEvent Event(int index, IDomainEventPayload payload) => new(new EventStamp(Tick, index), payload);
 
   private static DomainEvent OrderChanged(int index, int unitId, long orderId, UnitOrderKind kind) =>
       new(new EventStamp(Tick, index), new UnitOrderChanged(new EntityId(unitId), new OrderId(orderId), kind));
