@@ -8,6 +8,7 @@ using Rts.Shared.Errors;
 using Rts.Shared.Events;
 using Rts.Shared.Geometry;
 using Rts.Shared.Ids;
+using Rts.Shared.Match;
 using Rts.Shared.Time;
 using Rts.Shared.World;
 using Rts.StateSync.Configuration;
@@ -135,13 +136,67 @@ public class StateEventsProjectionTests
     }
   }
 
+  [Fact]
+  public void ProjectTick_CombatEventsGoToBoth()
+  {
+    var unit = new EntityId(3);
+    const int DamagedHp = 25;
+
+    DomainEvent damaged = Event(0, new EntityDamaged(unit, DamagedHp));
+    DomainEvent destroyed = Event(1, new EntityDestroyed(unit));
+
+    TickProjection projection = _projector.ProjectTick(Publication(events: [damaged, destroyed]));
+
+    foreach (RecipientMessages recipient in new[] { projection.Player1, projection.Player2 })
+    {
+      Assert.Equal(
+          [new EntityDamagedDto(damaged.Stamp.IndexInTick, unit.Value, DamagedHp),
+           new EntityDestroyedDto(destroyed.Stamp.IndexInTick, unit.Value)],
+          SingleBatch(recipient).Events);
+    }
+  }
+
+  [Fact]
+  public void ProjectTick_ProgressAndDamageOnSameSiteAreBothPublishedAndLastHpWins()
+  {
+    // D-065: el progreso es de la fase 3 y el daño de la fase 6, así que el daño va después y su HP es el final.
+    var site = new EntityId(20);
+    const int HpAfterProgress = 60;
+    const int HpAfterDamage = 52;
+
+    DomainEvent progress = Event(0, new BuildingProgressChanged(site, HpAfterProgress));
+    DomainEvent damaged = Event(1, new EntityDamaged(site, HpAfterDamage));
+
+    TickProjection projection = _projector.ProjectTick(Publication(events: [progress, damaged]));
+
+    IReadOnlyList<StateEventDto> events = SingleBatch(projection.Player1).Events;
+    Assert.Equal(
+        [new BuildingProgressChangedDto(progress.Stamp.IndexInTick, site.Value, HpAfterProgress),
+         new EntityDamagedDto(damaged.Stamp.IndexInTick, site.Value, HpAfterDamage)],
+        events);
+    Assert.Equal(HpAfterDamage, Assert.IsType<EntityDamagedDto>(events.Last()).Hp);
+  }
+
+  [Fact]
+  public void ProjectTick_GameplayResultIsNotPublished()
+  {
+    // MatchEnded lo envía GameSession por su propio camino (contrato 09 §2), no State Sync.
+    var victory = new MatchResult(MatchResultType.Victory, PlayerId.One, MatchEndReason.BaseDestroyed, Tick);
+
+    TickProjection projection = _projector.ProjectTick(Publication(result: victory));
+
+    Assert.Empty(projection.Player1.Messages);
+    Assert.Empty(projection.Player2.Messages);
+  }
+
   private static DomainEvent Event(int index, IDomainEventPayload payload) => new(new EventStamp(Tick, index), payload);
 
   private static DomainEvent OrderChanged(int index, int unitId, long orderId, UnitOrderKind kind) =>
       new(new EventStamp(Tick, index), new UnitOrderChanged(new EntityId(unitId), new OrderId(orderId), kind));
 
-  private static TickPublication Publication(EquatableArray<DomainEvent> events = default, EquatableArray<CommandResult> results = default) =>
-      new(Tick, Revision, events, results, default, null);
+  private static TickPublication Publication(
+      EquatableArray<DomainEvent> events = default, EquatableArray<CommandResult> results = default, MatchResult? result = null) =>
+      new(Tick, Revision, events, results, default, result);
 
   /// <summary>Exige un único mensaje, que sea un StateEvents esencial, y devuelve su lote.</summary>
   private static StateEventsDto SingleBatch(RecipientMessages recipient)

@@ -81,6 +81,24 @@ public class PositionUpdateProjectionTests
         projection.Player1.Messages.Select(m => m.Type));
   }
 
+  [Fact]
+  public void ProjectTick_DestroyedUnitIsNotInPositions()
+  {
+    // Simulation solo entrega unidades vivas en Positions: la destruida llega por evento y nunca como posición (09 §6).
+    var destroyedUnit = new EntityId(4);
+    DomainEvent destroyed = new(new EventStamp(PositionTick, 0), new EntityDestroyed(destroyedUnit));
+
+    TickProjection projection = Default().ProjectTick(Publication(PositionTick, events: [destroyed]));
+
+    Assert.Equal(
+        [ProtocolMessageTypes.StateEvents, ProtocolMessageTypes.PositionUpdate],
+        projection.Player1.Messages.Select(m => m.Type));
+    StateEventsDto batch = Assert.IsType<StateEventsDto>(projection.Player1.Messages.First().Payload);
+    Assert.Equal([new EntityDestroyedDto(destroyed.Stamp.IndexInTick, destroyedUnit.Value)], batch.Events);
+    PositionUpdateDto positions = Assert.IsType<PositionUpdateDto>(projection.Player1.Messages.Last().Payload);
+    Assert.DoesNotContain(positions.Units, u => u.Id == destroyedUnit.Value);
+  }
+
   private static StateProjector Default() => new(Config, TickRate.Default);
 
   private static bool IsPositionUpdate(OutboundMessage message) => message.Type == ProtocolMessageTypes.PositionUpdate;

@@ -137,6 +137,8 @@ public sealed class StateProjector : IStateProjector
       FarmRepairProgressChanged p => new FarmRepairProgressChangedDto(index, p.FarmId.Value, p.WorkDone, p.WorkRequired),
       FarmRepairCompleted p => new FarmRepairCompletedDto(index, p.FarmId.Value),
       MapRevisionChanged p => new MapRevisionChangedDto(index, p.Revision.Value),
+      EntityDamaged p => new EntityDamagedDto(index, p.EntityId.Value, p.Hp),
+      EntityDestroyed p => new EntityDestroyedDto(index, p.EntityId.Value),
       UnitOrderChanged p => new UnitOrderChangedDto(index, p.UnitId.Value, p.OrderId.Value, p.Kind),
       _ => throw new NotSupportedException($"Evento sin DTO: {e.Payload.GetType().Name}."),
     };
