@@ -1,12 +1,20 @@
 using Microsoft.Extensions.Logging;
+using Rts.Combat;
+using Rts.Construction;
+using Rts.Economy;
 using Rts.GameSession;
 using Rts.GameSession.Model;
+using Rts.Movement;
 using Rts.Networking;
 using Rts.Server.Configuration;
+using Rts.Server.Diagnostics;
 using Rts.Shared.Ids;
 using Rts.Shared.Match;
 using Rts.Shared.World;
+using Rts.Simulation;
 using Rts.Simulation.Commands;
+using Rts.Simulation.Composition;
+using Rts.Simulation.Map;
 using Rts.StateSync;
 using Rts.StateSync.Projection;
 
@@ -25,26 +33,20 @@ internal static class ServerComposition
   /// <summary>
   /// Ejecuta una partida completa y devuelve su resultado oficial. Cancelar el token pide el apagado ordenado (D-084).
   /// </summary>
-  public static Task<MatchResult> RunMatchAsync(ServerConfig config, GameCatalog catalog, ILoggerFactory loggers, CancellationToken shutdown)
+  /// <param name="map">El mapa ya cargado y validado por <c>Program</c>, junto con la configuración (contrato 10 §1).</param>
+  public static Task<MatchResult> RunMatchAsync(
+      ServerConfig config, MapDefinition map, GameCatalog catalog, ILoggerFactory loggers, CancellationToken shutdown)
   {
     ArgumentNullException.ThrowIfNull(config);
+    ArgumentNullException.ThrowIfNull(map);
     ArgumentNullException.ThrowIfNull(catalog);
     ArgumentNullException.ThrowIfNull(loggers);
 
     // Orden de construcción (contrato 10 §4). Cada paso solo usa lo creado en pasos anteriores.
-    TransportPieces transport = CreateTransport(config, catalog, loggers); // Pasos 1 a 4.
+    TransportPieces transport = CreateTransport(config, catalog, loggers);           // Pasos 1 a 4.
+    SimulationPieces simulation = CreateSimulation(config, map, transport, loggers); // Paso 5.
 
-    // PENDIENTE: lo que sigue todavía es borrador (las variables sueltas pasan a ser las de transport).
-    //
-    // 5. Simulation: el mapa, el motor con los cinco módulos de dominio y el loop de 20 Hz. Publica en State Sync y avisa su
-    //    resultado al buzón.
-    //      MapDefinition map = MapLoader.Load(config.MapFile, <tamaño del Centro Principal según Construction>);
-    //      var modules = new DomainModules(<reglas y calculadores de los cinco módulos de dominio>);
-    //      ISimulationEngine engine = SimulationFactory.CreateEngine(
-    //          config.Simulation, map, EconomyParameters.FromConfig(config.Economy), commands, modules, TimeProvider.System);
-    //      var diagnostics = new LoggingSimulationDiagnostics(loggers, config.Simulation);   // D-095, D-098, D-100
-    //      ISimulationLoop simulation = SimulationFactory.CreateLoop(
-    //          engine, config.Simulation, stateSync, inbox, diagnostics, TimeProvider.System);
+    // PENDIENTE: lo que sigue todavía es borrador (las variables sueltas pasan a ser las de transport y simulation).
     //
     // 6. Consumidor de sesión (GameSession): el único que necesita a casi todos, por eso va al final.
     //      var effects = new SessionEffectsAdapter(network, stateSync);
@@ -57,9 +59,9 @@ internal static class ServerComposition
     //      diagnostics.WriteFinalSummary();                    // los ticks ya están detenidos: no llegan más (D-097)
     //      await listening;                                    // termina al completar el drenaje
     //      return result;
-    _ = transport;
+    _ = simulation;
     throw new NotImplementedException(
-        "La composición todavía no crea Simulation (paso 5) ni el host de sesión (paso 6). Se completa en la vertical slice (AGENTS §8).");
+        "La composición todavía no crea el host de sesión (paso 6). Se completa en la vertical slice (AGENTS §8).");
   }
 
   /// <summary>
@@ -83,5 +85,48 @@ internal static class ServerComposition
     var stateSync = new StateSyncPublisher(projector, network, catalog);
 
     return new TransportPieces(commands, inbox, sessionView, network, stateSync);
+  }
+
+  /// <summary>
+  /// Paso 5 (contrato 10 §4): el motor con los cinco módulos de dominio, que lee comandos de la cola, y el loop de 20 Hz alrededor,
+  /// que publica cada tick en State Sync, avisa el fin de la partida al buzón y entrega sus métricas al log (D-095, D-100).
+  /// </summary>
+  internal static SimulationPieces CreateSimulation(
+      ServerConfig config, MapDefinition map, TransportPieces transport, ILoggerFactory loggers)
+  {
+    ISimulationEngine engine = SimulationFactory.CreateEngine(
+        config.Simulation,
+        map,
+        EconomyParameters.FromConfig(config.Economy),
+        transport.Commands,
+        CreateDomainModules(config),
+        TimeProvider.System);
+
+    var diagnostics = new LoggingSimulationDiagnostics(loggers, config.Simulation);
+    ISimulationLoop loop = SimulationFactory.CreateLoop(
+        engine, config.Simulation, transport.StateSync, transport.Inbox, diagnostics, TimeProvider.System);
+
+    return new SimulationPieces(loop, diagnostics);
+  }
+
+  /// <summary>
+  /// Las reglas y calculadores de los cinco módulos de dominio (D-090), cada uno con su propia sección de la configuración.
+  /// Production es provisorio hasta que exista el módulo real (<see cref="UnavailableProduction"/>).
+  /// </summary>
+  internal static DomainModules CreateDomainModules(ServerConfig config)
+  {
+    var movementRules = new MovementRules(config.Movement, config.Simulation.TickRate);
+    var production = new UnavailableProduction(config.Production);
+    return new DomainModules(
+        movementRules,
+        new MovementCalculator(movementRules),
+        new EconomyRules(config.Economy),
+        new EconomyCalculator(config.Economy),
+        new CombatRules(config.Combat),
+        new CombatCalculator(config.Combat),
+        new ConstructionRules(config.Construction),
+        new ConstructionCalculator(config.Construction),
+        production,
+        production);
   }
 }

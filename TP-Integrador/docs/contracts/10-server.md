@@ -9,7 +9,7 @@
 Se ejecuta **una vez** por proceso:
 
 1. lee los argumentos;
-2. lee y valida la configuración completa, incluidas las validaciones cruzadas;
+2. lee y valida la configuración completa, incluidas las validaciones cruzadas, y carga el mapa (un mapa inválido también sale con el código 2);
 3. arma el catálogo;
 4. crea las piezas en orden y las conecta;
 5. arranca la partida;
@@ -90,7 +90,7 @@ Cada paso usa solo lo creado en los anteriores (D-082):
 | 2 | Buzón y vista de sesión (GameSession) | capacidad, estado inicial | `ISessionEventSink` + `IMatchResultSink`; `ISessionGate` |
 | 3 | `NetworkServer` | 1, 2, configuración | recibe, admite, escribe |
 | 4 | `StateSyncPublisher` | 3 (como `IClientOutbox`), catálogo | proyecta y encola |
-| 5 | Mapa, `SimulationEngine` (con los 5 módulos de dominio) y `SimulationLoop` | 1, 4 (como `ITickPublisher`), buzón (como `IMatchResultSink`) | ticks |
+| 5 | `SimulationEngine` (con el mapa ya cargado y los 5 módulos de dominio) y `SimulationLoop` | 1, 4 (como `ITickPublisher`), buzón (como `IMatchResultSink`) | ticks |
 | 6 | `SessionEffectsAdapter` y `SessionHost` | 2, 3, 4, 5 (como `ISimulationControl`) | máquina de estados de la sesión |
 
 **Arranque y fin:**
