@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://bs3yfxuaastu7"
+path="res://.godot/imported/axe-5-ax-hits-on-wood.mp3-560239c56d801bbc2550c280084cfc73.mp3str"
+
+[deps]
+
+source_file="res://assets/audio/units audio/axes/axe-5-ax-hits-on-wood.mp3"
+dest_files=["res://.godot/imported/axe-5-ax-hits-on-wood.mp3-560239c56d801bbc2550c280084cfc73.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

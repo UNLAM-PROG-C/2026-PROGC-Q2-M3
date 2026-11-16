@@ -94,6 +94,17 @@ func _test_initial_state_build_and_discard() -> void:
 		tree.get_meta("entity_state")["isAvailable"] == state["trees"][0]["isAvailable"],
 		"Tree availability must be retained on the entity representation."
 	)
+	_check(
+		_model_path(tree) == world.tree_visual_path(5),
+		"The tree uses the model variant chosen for its treeId."
+	)
+	var variants := {}
+	for tree_id in range(30):
+		var variant_path: String = world.tree_visual_path(tree_id)
+		_check(variant_path.get_file().begins_with("Tree_1_"), "Trees use Tree_1 variants.")
+		_check(variant_path == world.tree_visual_path(tree_id), "The same tree always gets the same model.")
+		variants[variant_path] = true
+	_check(variants.size() == 3, "The forest mixes the three Tree_1 variants.")
 
 	world.discard_initial_state(2)
 	_check(world.active_world != null, "Discarding another initialization must not remove the world.")
@@ -824,3 +835,10 @@ func _initial_state() -> Dictionary:
 			"buildRange": 1.5,
 		},
 	}
+
+
+func _model_path(entity: Node3D) -> String:
+	for child: Node in entity.get_children():
+		if not child.scene_file_path.is_empty():
+			return child.scene_file_path
+	return ""

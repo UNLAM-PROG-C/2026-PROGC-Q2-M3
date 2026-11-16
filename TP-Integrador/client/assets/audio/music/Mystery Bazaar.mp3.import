@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://bh4hcl1ecl0tt"
+path="res://.godot/imported/Mystery Bazaar.mp3-836048845e8e12b9d816b27fe898b24b.mp3str"
+
+[deps]
+
+source_file="res://assets/audio/music/Mystery Bazaar.mp3"
+dest_files=["res://.godot/imported/Mystery Bazaar.mp3-836048845e8e12b9d816b27fe898b24b.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

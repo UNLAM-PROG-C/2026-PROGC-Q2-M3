@@ -1,0 +1,14 @@
+[gd_scene format=3 uid="uid://bteyo73wcereh"]
+
+[ext_resource type="PackedScene" uid="uid://dkbuo8u2d41fy" path="res://assets/buildings/neutral/fence_wood_straight.gltf" id="1_ktpcb"]
+[ext_resource type="PackedScene" uid="uid://bggavbt61rxgn" path="res://assets/buildings/neutral/building_scaffolding.gltf" id="2_wli6l"]
+
+[node name="Fence" type="Node3D" unique_id=1155080435]
+
+[node name="fence_wood_straight2" parent="." unique_id=1244658139 instance=ExtResource("1_ktpcb")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 1, 0, 0)
+
+[node name="Scaffolding" type="Node3D" parent="." unique_id=459755897]
+
+[node name="building_scaffolding2" parent="Scaffolding" unique_id=76127485 instance=ExtResource("2_wli6l")]
+transform = Transform3D(0.6, 0, 0, 0, 0.6, 0, 0, 0, 0.6, 0, 0, 0)
