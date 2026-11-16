@@ -1,6 +1,6 @@
 # Contrato 09 — State Sync
 
-> **Estado:** primera versión de contratos implementada (`server/src/Rts.StateSync`, DTOs en `server/src/Rts.Protocol`) y probada (`server/tests/Rts.StateSync.Tests`, `server/tests/Rts.Protocol.Tests`). El proyector y el publicador **todavía no tienen lógica**.
+> **Estado:** primera versión de contratos implementada (`server/src/Rts.StateSync`, DTOs en `server/src/Rts.Protocol`) y probada (`server/tests/Rts.StateSync.Tests`, `server/tests/Rts.Protocol.Tests`). **Fase 1 hecha:** InitialState con catálogo, `StateEvents` por destinatario, `PositionUpdate` cada N ticks y publicador. Por ahora la proyección y la política de visibilidad solo conocen `UnitOrderChanged` y los `CommandResult`; el resto de los eventos llega en la fase 2 y, mientras tanto, la política falla con ellos.
 > **Etiquetas:** **DECIDIDO** = aprobado por el equipo (ver [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Módulo:** [09 — State Sync](../modules/09-state-sync.md). **Vecinos:** [06 Simulation](06-simulation.md), [07 GameSession](07-game-session.md), [08 Networking](../modules/08-networking.md).
 
