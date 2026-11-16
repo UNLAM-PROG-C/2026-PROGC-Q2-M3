@@ -11,6 +11,10 @@ const MATCH_SCENE_PATH := "res://scenes/match_world.tscn"
 func _ready() -> void:
 	_play_button.pressed.connect(start_game)
 	_play_button.grab_focus()
+	# El tema del menú sigue sonando en la pantalla de conexión (MusicManager es un autoload).
+	var music := get_node_or_null("/root/MusicManager")
+	if music != null:
+		music.play_menu_theme()
 
 
 func start_game() -> void:
