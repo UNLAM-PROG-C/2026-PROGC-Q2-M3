@@ -9,6 +9,7 @@
 [ext_resource type="Texture2D" uid="uid://bvatsfkbxqvsi" path="res://assets/ui/buttonLong_grey.png" id="7_button_disabled"]
 [ext_resource type="Texture2D" uid="uid://cjiy5li2dtdjq" path="res://assets/ui/barBack_horizontalMid.png" id="8_bar_back"]
 [ext_resource type="Texture2D" uid="uid://cn1we3jxn8jnd" path="res://assets/ui/barGreen_horizontalMid.png" id="9_bar_fill"]
+[ext_resource type="Texture2D" uid="uid://c2dtwrssplei0" path="res://assets/ui/buttonRound_beige.png" id="10_slider_grabber"]
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_button_disabled"]
 content_margin_left = 18.0
@@ -56,6 +57,20 @@ texture_margin_left = 12.0
 texture_margin_top = 12.0
 texture_margin_right = 12.0
 texture_margin_bottom = 16.0
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_slider_fill"]
+content_margin_top = 7.0
+content_margin_bottom = 7.0
+texture = ExtResource("9_bar_fill")
+texture_margin_top = 6.0
+texture_margin_bottom = 6.0
+
+[sub_resource type="StyleBoxTexture" id="StyleBoxTexture_slider"]
+content_margin_top = 7.0
+content_margin_bottom = 7.0
+texture = ExtResource("8_bar_back")
+texture_margin_top = 6.0
+texture_margin_bottom = 6.0
 
 [sub_resource type="StyleBoxTexture" id="StyleBoxTexture_input"]
 content_margin_left = 10.0
@@ -105,6 +120,11 @@ Button/styles/hover = SubResource("StyleBoxTexture_button_hover")
 Button/styles/hover_pressed = SubResource("StyleBoxTexture_button_pressed")
 Button/styles/normal = SubResource("StyleBoxTexture_button")
 Button/styles/pressed = SubResource("StyleBoxTexture_button_pressed")
+HSlider/icons/grabber = ExtResource("10_slider_grabber")
+HSlider/icons/grabber_highlight = ExtResource("10_slider_grabber")
+HSlider/styles/grabber_area = SubResource("StyleBoxTexture_slider_fill")
+HSlider/styles/grabber_area_highlight = SubResource("StyleBoxTexture_slider_fill")
+HSlider/styles/slider = SubResource("StyleBoxTexture_slider")
 Label/colors/font_color = Color(0.96, 0.91, 0.83, 1)
 LineEdit/colors/caret_color = Color(0.23, 0.16, 0.1, 1)
 LineEdit/colors/font_color = Color(0.23, 0.16, 0.1, 1)

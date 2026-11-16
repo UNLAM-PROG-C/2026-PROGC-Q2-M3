@@ -37,6 +37,23 @@ func _run() -> void:
 		_check_idle_character(menu, "MaleB", MALE_B_PATH)
 		var play_button := menu.find_child("PlayButton", true, false) as Button
 		_check(play_button != null and play_button.text == "Jugar", "The menu should have a Jugar button.")
+		var title := menu.find_child("GameTitle", true, false) as Label
+		_check(title != null and title.text == "Age of Concurrency", "The menu shows the game title.")
+		if title != null and play_button != null:
+			_check(title.theme_type_variation == &"TitleLabel", "The title uses the title font (Magic Retro).")
+			_check(title.get_global_rect().end.y <= play_button.get_global_rect().position.y, "The title is above the buttons.")
+			var options_button := menu.find_child("OptionsButton", true, false) as Control
+			_check(
+				is_equal_approx(play_button.get_global_rect().position.x, title.get_global_rect().position.x)
+					and is_equal_approx(options_button.get_global_rect().position.x, title.get_global_rect().position.x),
+				"The buttons are aligned to the left, under the start of the title."
+			)
+		var buttons := menu.find_child("Buttons", true, false) as Control
+		if buttons != null:
+			var screen := root.get_visible_rect().size
+			var rect := buttons.get_global_rect()
+			_check(rect.end.x < screen.x / 2.0, "The menu buttons are on the left side: %s" % str(rect))
+			_check(absf(rect.get_center().y - screen.y / 2.0) < 2.0, "The menu buttons are vertically centered: %s" % str(rect))
 		if play_button != null:
 			play_button.pressed.emit()
 			await process_frame

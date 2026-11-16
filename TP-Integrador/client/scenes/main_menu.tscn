@@ -15,6 +15,7 @@
 [ext_resource type="Script" uid="uid://c8vb320cw20e2" path="res://scripts/ui/idle_character.gd" id="15_idle"]
 [ext_resource type="Theme" uid="uid://dug6jhtynlvyw" path="res://themes/rts_theme.tres" id="16_theme"]
 [ext_resource type="Script" uid="uid://mqwtkfunqyu" path="res://scripts/ui/main_menu.gd" id="17_menu"]
+[ext_resource type="Script" uid="uid://crxtij3ywnmw4" path="res://scripts/ui/options_menu.gd" id="18_options"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_rcqid"]
 panorama = ExtResource("4_tbmy8")
@@ -115,17 +116,51 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-theme_override_constants/margin_bottom = 24
+theme_override_constants/margin_left = 72
 
 [node name="Buttons" type="VBoxContainer" parent="MenuLayer/MenuUI/Margin" unique_id=1599967231]
 layout_mode = 2
+size_flags_horizontal = 0
 mouse_filter = 2
-alignment = 2
+theme_override_constants/separation = 12
+alignment = 1
+
+[node name="GameTitle" type="Label" parent="MenuLayer/MenuUI/Margin/Buttons" unique_id=902001504]
+layout_mode = 2
+theme_type_variation = &"TitleLabel"
+theme_override_constants/outline_size = 10
+theme_override_font_sizes/font_size = 52
+text = "Age of Concurrency"
+horizontal_alignment = 1
+
+[node name="TitleSpacer" type="Control" parent="MenuLayer/MenuUI/Margin/Buttons" unique_id=160993602]
+custom_minimum_size = Vector2(0, 16)
+layout_mode = 2
+mouse_filter = 2
 
 [node name="PlayButton" type="Button" parent="MenuLayer/MenuUI/Margin/Buttons" unique_id=860837530]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(260, 64)
 layout_mode = 2
-size_flags_horizontal = 4
+size_flags_horizontal = 0
 theme_override_font_sizes/font_size = 28
 text = "Jugar"
+
+[node name="OptionsButton" type="Button" parent="MenuLayer/MenuUI/Margin/Buttons" unique_id=571015783]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(260, 56)
+layout_mode = 2
+size_flags_horizontal = 0
+theme_override_font_sizes/font_size = 24
+text = "Opciones"
+
+[node name="OptionsMenu" type="Control" parent="MenuLayer/MenuUI" unique_id=513970445]
+unique_name_in_owner = true
+visible = false
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("18_options")

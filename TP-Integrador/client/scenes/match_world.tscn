@@ -14,6 +14,8 @@
 [ext_resource type="Script" path="res://scripts/match_cursor.gd" id="12_match_cursor"]
 [ext_resource type="Script" path="res://scripts/match_music.gd" id="13_match_music"]
 [ext_resource type="Script" path="res://scripts/match_sfx.gd" id="14_match_sfx"]
+[ext_resource type="Script" path="res://scripts/match_pause.gd" id="15_match_pause"]
+[ext_resource type="Script" path="res://scripts/ui/options_menu.gd" id="16_options_menu"]
 
 [sub_resource type="PanoramaSkyMaterial" id="PanoramaSkyMaterial_world"]
 panorama = ExtResource("2_sky")
@@ -38,6 +40,11 @@ script = ExtResource("4_world")
 
 [node name="UnitCommandController" type="Node" parent="." unique_id=1989907308]
 script = ExtResource("5_unit_controller")
+
+[node name="MatchPause" type="Node" parent="." node_paths=PackedStringArray("pause_menu", "placement_controller")]
+script = ExtResource("15_match_pause")
+pause_menu = NodePath("../CanvasLayer/PauseMenu")
+placement_controller = NodePath("../BuildPlacementController")
 
 [node name="BuildPlacementController" type="Node3D" parent="."]
 script = ExtResource("8_build_placement")
@@ -117,3 +124,14 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("6_session_screens")
+
+[node name="PauseMenu" type="Control" parent="CanvasLayer"]
+visible = false
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+script = ExtResource("16_options_menu")
+back_text = "Volver a la partida"
