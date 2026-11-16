@@ -99,6 +99,29 @@ public class PositionUpdateProjectionTests
     Assert.DoesNotContain(positions.Units, u => u.Id == destroyedUnit.Value);
   }
 
+  [Fact]
+  public void ProjectTick_UnitSpawnedGoesBeforeItsFirstPosition()
+  {
+    var spawnPosition = new PositionXZ(12.5, 8.25);
+    const int SpawnHp = 40;
+    DomainEvent spawned = new(new EventStamp(PositionTick, 0), new UnitSpawned(Unit, PlayerId.One, UnitType.Worker, spawnPosition, SpawnHp));
+
+    TickProjection projection = Default().ProjectTick(Publication(PositionTick, spawnPosition, events: [spawned]));
+
+    foreach (RecipientMessages recipient in new[] { projection.Player1, projection.Player2 })
+    {
+      Assert.Equal(
+          [ProtocolMessageTypes.StateEvents, ProtocolMessageTypes.PositionUpdate],
+          recipient.Messages.Select(m => m.Type));
+      StateEventsDto batch = Assert.IsType<StateEventsDto>(recipient.Messages.First().Payload);
+      Assert.Equal(
+          [new UnitSpawnedDto(spawned.Stamp.IndexInTick, Unit.Value, PlayerId.One.Value, UnitType.Worker, spawnPosition.X, spawnPosition.Z, SpawnHp)],
+          batch.Events);
+      PositionUpdateDto positions = Assert.IsType<PositionUpdateDto>(recipient.Messages.Last().Payload);
+      Assert.Contains(positions.Units, u => u.Id == Unit.Value);
+    }
+  }
+
   private static StateProjector Default() => new(Config, TickRate.Default);
 
   private static bool IsPositionUpdate(OutboundMessage message) => message.Type == ProtocolMessageTypes.PositionUpdate;

@@ -142,7 +142,12 @@ public sealed class StateProjector : IStateProjector
       TreeDepleted p => new TreeDepletedDto(index, p.TreeId.Value),
       TreeRespawned p => new TreeRespawnedDto(index, p.TreeId.Value),
       ResourcesChanged p => new ResourcesChangedDto(index, p.Balance.Wood, p.Balance.Food),
+      UnitSpawned p => new UnitSpawnedDto(index, p.UnitId.Value, p.Owner.Value, p.UnitType, p.Position.X, p.Position.Z, p.Hp),
       UnitOrderChanged p => new UnitOrderChangedDto(index, p.UnitId.Value, p.OrderId.Value, p.Kind),
+      RepathRequested p => new RepathRequestedDto(index, p.UnitId.Value, p.OrderId.Value, p.MapRevision.Value,
+          p.Destination is { } d ? new PositionDto(d.X, d.Z) : null, p.TargetId?.Value, p.IsPaused),
+      ProductionChanged p => new ProductionChangedDto(index, p.ProducerId.Value, p.Status, p.ActiveUnitType, p.RemainingTicks,
+          [.. p.PendingUnitTypes]),
       _ => throw new NotSupportedException($"Evento sin DTO: {e.Payload.GetType().Name}."),
     };
   }

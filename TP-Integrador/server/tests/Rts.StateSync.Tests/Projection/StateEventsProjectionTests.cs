@@ -223,6 +223,45 @@ public class StateEventsProjectionTests
         SingleBatch(projection.Player2).Events);
   }
 
+  [Fact]
+  public void ProjectTick_ProductionAndRepathOnlyToOwner()
+  {
+    var producer = new EntityId(10);
+    const int RemainingTicks = 12;
+    var unit = new EntityId(3);
+    var target = new EntityId(200);
+    var order = new OrderId(7);
+    var destination = new PositionXZ(12.5, 8.25);
+
+    DomainEvent production = Event(0, new ProductionChanged(producer, PlayerId.Two, ProducerStatus.Training, UnitType.Soldier, RemainingTicks, [UnitType.Worker]));
+    DomainEvent repathToPoint = Event(1, new RepathRequested(unit, PlayerId.Two, order, Revision, destination, null, isPaused: false));
+    DomainEvent repathToTarget = Event(2, new RepathRequested(unit, PlayerId.Two, order, Revision, null, target, isPaused: true));
+
+    TickProjection projection = _projector.ProjectTick(Publication(events: [production, repathToPoint, repathToTarget]));
+
+    Assert.Empty(projection.Player1.Messages);
+    Assert.Collection(
+        SingleBatch(projection.Player2).Events,
+        e =>
+        {
+          ProductionChangedDto dto = Assert.IsType<ProductionChangedDto>(e);
+          Assert.Equal(production.Stamp.IndexInTick, dto.Index);
+          Assert.Equal(producer.Value, dto.ProducerId);
+          Assert.Equal(ProducerStatus.Training, dto.Status);
+          Assert.Equal(UnitType.Soldier, dto.ActiveUnitType);
+          Assert.Equal(RemainingTicks, dto.RemainingTicks);
+          Assert.Equal([UnitType.Worker], dto.Pending);
+        },
+        e => Assert.Equal(
+            new RepathRequestedDto(repathToPoint.Stamp.IndexInTick, unit.Value, order.Value, Revision.Value,
+                new PositionDto(destination.X, destination.Z), null, IsPaused: false),
+            e),
+        e => Assert.Equal(
+            new RepathRequestedDto(repathToTarget.Stamp.IndexInTick, unit.Value, order.Value, Revision.Value,
+                null, target.Value, IsPaused: true),
+            e));
+  }
+
   private static DomainEvent Event(int index, IDomainEventPayload payload) => new(new EventStamp(Tick, index), payload);
 
   private static DomainEvent OrderChanged(int index, int unitId, long orderId, UnitOrderKind kind) =>
