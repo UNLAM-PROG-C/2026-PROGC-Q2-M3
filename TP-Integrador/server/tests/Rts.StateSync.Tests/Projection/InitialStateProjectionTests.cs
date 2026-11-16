@@ -13,6 +13,7 @@ namespace Rts.StateSync.Tests.Projection;
 public class InitialStateProjectionTests
 {
   private static readonly SessionId Session = SessionId.New();
+  private static readonly TickId WorldTick = new(5);
 
   [Fact]
   public void BuildInitialState_CopiesHeaderAndMap()
@@ -21,8 +22,8 @@ public class InitialStateProjectionTests
 
     Assert.Equal(Session.ToString(), dto.SessionId);
     Assert.Equal(InitializationId.First.Value, dto.InitializationId);
-    Assert.Equal(2, dto.PlayerId);
-    Assert.Equal(5, dto.Tick);
+    Assert.Equal(PlayerId.Two.Value, dto.PlayerId);
+    Assert.Equal(WorldTick.Value, dto.Tick);
     Assert.Equal(new MapDto(1.0, 40, 30, 3), dto.Map);
   }
 
@@ -84,9 +85,11 @@ public class InitialStateProjectionTests
   [Fact]
   public void BuildInitialState_MapsCatalog()
   {
+    GameCatalog fixture = CatalogFixture.Create();
     CatalogDto catalog = Build(PlayerId.One).Catalog;
 
-    Assert.Equal(20, catalog.TicksPerSecond);
+    Assert.Equal(fixture.TickRate.TicksPerSecond, catalog.TicksPerSecond);
+    // Listas esperadas: mismos valores que CatalogFixture (ContractsTests.cs).
     Assert.Equal(
         [new UnitCatalogDto(UnitType.Worker, 40, new ResourcesDto(0, 50), 200, 3.0, null),
          new UnitCatalogDto(UnitType.Soldier, 80, new ResourcesDto(0, 80), 300, 3.5, new AttackDto(8, 1.5, 20))],
@@ -98,10 +101,10 @@ public class InitialStateProjectionTests
          new BuildingCatalogDto(BuildingType.Tower, 300, 2, 2, new ResourcesDto(120, 0), new AttackDto(10, 6.0, 30)),
          new BuildingCatalogDto(BuildingType.Fence, 100, 1, 1, new ResourcesDto(5, 0), null)],
         catalog.Buildings);
-    Assert.Equal(new ResourcesDto(30, 0), catalog.FarmRepairCost);
-    Assert.Equal(100, catalog.FarmRepairWorkRequired);
-    Assert.Equal(1.5, catalog.GatherRange);
-    Assert.Equal(1.5, catalog.BuildRange);
+    Assert.Equal(new ResourcesDto(fixture.FarmRepairCost.Wood, fixture.FarmRepairCost.Food), catalog.FarmRepairCost);
+    Assert.Equal(fixture.FarmRepairWorkRequired, catalog.FarmRepairWorkRequired);
+    Assert.Equal(fixture.GatherRange, catalog.GatherRange);
+    Assert.Equal(fixture.BuildRange, catalog.BuildRange);
   }
 
   private static InitialStateDto Build(PlayerId recipient)
@@ -113,7 +116,7 @@ public class InitialStateProjectionTests
 
   /// <summary>Mundo chico SOLO para pruebas: dos centros, una granja de P1, una unidad por jugador, un árbol y un productor por jugador.</summary>
   private static WorldView World() => new(
-      new TickId(5),
+      WorldTick,
       new MapView(new GridSpec(1.0, 40, 30), new MapRevision(3)),
       [new PlayerView(PlayerId.One, new ResourceAmount(100, 50)), new PlayerView(PlayerId.Two, new ResourceAmount(70, 0))],
       [new UnitView(new EntityId(100), PlayerId.One, UnitType.Worker, new PositionXZ(3.5, 4.25), 40, UnitOrderKind.Move),
