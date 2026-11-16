@@ -5,9 +5,7 @@ using Rts.Protocol;
 using Rts.Protocol.Commands;
 using Rts.Protocol.Session;
 using Rts.Protocol.Transport;
-using Rts.Shared.Collections;
 using Rts.Shared.Commands;
-using Rts.Shared.Geometry;
 using Rts.Shared.Ids;
 
 namespace Rts.Networking.Parsing;
@@ -98,20 +96,14 @@ internal sealed class InboundMessageParser : IInboundMessageParser
       ProtocolMessageTypes.ClientReady => ParseClientReady(payload, messageId),
       ProtocolMessageTypes.Ping => ParsePing(payload, messageId),
       ProtocolMessageTypes.Pong => ParsePong(payload, messageId),
-      ProtocolMessageTypes.Move => ParseGameplay<MoveCommandDto>(type, payload, messageId, BuildMove),
-      ProtocolMessageTypes.Stop => ParseGameplay<StopCommandDto>(type, payload, messageId, BuildStop),
-      ProtocolMessageTypes.Attack => ParseGameplay<AttackCommandDto>(type, payload, messageId,
-          dto => new AttackCommand(new EntityId(dto.TargetId), new MapRevision(dto.RouteMapRevision), ReadRoutes(type, dto.Routes))),
-      ProtocolMessageTypes.GatherWood => ParseGameplay<GatherWoodCommandDto>(type, payload, messageId,
-          dto => new GatherWoodCommand(new EntityId(dto.TreeId), new MapRevision(dto.RouteMapRevision), ReadRoutes(type, dto.Routes))),
-      ProtocolMessageTypes.Build => ParseGameplay<BuildCommandDto>(type, payload, messageId, BuildBuild),
-      ProtocolMessageTypes.RepairFarm => ParseGameplay<RepairFarmCommandDto>(type, payload, messageId,
-          dto => new RepairFarmCommand(new EntityId(dto.FarmId), new MapRevision(dto.RouteMapRevision), ReadRoutes(type, dto.Routes))),
-
-      // Un tipo de unidad desconocido no llega al constructor: el deserializador ya lo rechaza (enums solo como texto).
-      ProtocolMessageTypes.TrainUnit => ParseGameplay<TrainUnitCommandDto>(type, payload, messageId,
-          dto => new TrainUnitCommand(new EntityId(dto.ProducerId), dto.UnitType)),
-      ProtocolMessageTypes.RepathResponse => ParseGameplay<RepathResponseCommandDto>(type, payload, messageId, BuildRepathResponse),
+      ProtocolMessageTypes.Move => ParseGameplay<MoveCommandDto>(type, payload, messageId, GameplayCommandReader.ToCommand),
+      ProtocolMessageTypes.Stop => ParseGameplay<StopCommandDto>(type, payload, messageId, GameplayCommandReader.ToCommand),
+      ProtocolMessageTypes.Attack => ParseGameplay<AttackCommandDto>(type, payload, messageId, GameplayCommandReader.ToCommand),
+      ProtocolMessageTypes.GatherWood => ParseGameplay<GatherWoodCommandDto>(type, payload, messageId, GameplayCommandReader.ToCommand),
+      ProtocolMessageTypes.Build => ParseGameplay<BuildCommandDto>(type, payload, messageId, GameplayCommandReader.ToCommand),
+      ProtocolMessageTypes.RepairFarm => ParseGameplay<RepairFarmCommandDto>(type, payload, messageId, GameplayCommandReader.ToCommand),
+      ProtocolMessageTypes.TrainUnit => ParseGameplay<TrainUnitCommandDto>(type, payload, messageId, GameplayCommandReader.ToCommand),
+      ProtocolMessageTypes.RepathResponse => ParseGameplay<RepathResponseCommandDto>(type, payload, messageId, GameplayCommandReader.ToCommand),
 
       // Solo llega acá un tipo agregado a ClientToServer sin su conversión: una prueba lo detecta antes de que pase.
       _ => ParseResult.Violation(NetworkErrors.UnknownType, messageId, $"El tipo '{type}' no tiene conversión en el parser."),
@@ -168,9 +160,9 @@ internal sealed class InboundMessageParser : IInboundMessageParser
       ParseResult.Violation(NetworkErrors.InvalidPayload, messageId, detail);
 
   /// <summary>
-  /// Los controles comunes a todo comando de gameplay. Después, <paramref name="build"/> convierte el DTO en el comando de dominio:
-  /// si un campo obligatorio vino en <c>null</c>, o el constructor de dominio rechaza los valores, lanza
-  /// <see cref="ArgumentException"/>, que acá se traduce en un comando inválido en vez de dejarla escapar.
+  /// Los controles comunes a todo comando de gameplay. Después, <paramref name="build"/> (un método de
+  /// <see cref="GameplayCommandReader"/>) convierte el DTO en el comando de dominio; si lanza <see cref="ArgumentException"/>, acá
+  /// se traduce en un comando inválido en vez de dejarla escapar.
   /// </summary>
   private static ParseResult ParseGameplay<TDto>(string type, JsonElement? payload, long? messageId, Func<TDto, IGameCommand> build)
       where TDto : class
@@ -200,86 +192,6 @@ internal sealed class InboundMessageParser : IInboundMessageParser
     {
       return ParseResult.InvalidCommand(clientCommandId, exception.Message);
     }
-  }
-
-  /// <summary>DTO → <see cref="MoveCommand"/>. El constructor rechaza coordenadas no finitas.</summary>
-  private static MoveCommand BuildMove(MoveCommandDto dto)
-  {
-    if (dto.Destination is null)
-    {
-      throw new ArgumentException("Move necesita destination.");
-    }
-
-    return new MoveCommand(
-        new PositionXZ(dto.Destination.X, dto.Destination.Z), new MapRevision(dto.RouteMapRevision), ReadRoutes(ProtocolMessageTypes.Move, dto.Routes));
-  }
-
-  /// <summary>
-  /// Las rutas candidatas de un comando de unidades (Move, Attack, GatherWood, Build, RepairFarm). Los nulos que deja el
-  /// deserializador se rechazan acá; las rutas vacías y las unidades repetidas o inválidas, en los constructores de dominio.
-  /// </summary>
-  private static EquatableArray<UnitRouteCandidate> ReadRoutes(string type, IReadOnlyList<UnitRouteDto>? routes)
-  {
-    if (routes is null || routes.Any(route => route is null || route.Waypoints is null || route.Waypoints.Any(point => point is null)))
-    {
-      throw new ArgumentException($"{type} necesita routes completas, sin elementos nulos.");
-    }
-
-    return routes
-        .Select(route => new UnitRouteCandidate(
-            new EntityId(route.UnitId),
-            route.Waypoints.Select(point => new PositionXZ(point.X, point.Z)).ToEquatableArray()))
-        .ToEquatableArray();
-  }
-
-  /// <summary>
-  /// DTO → <see cref="BuildCommand"/>, en una de sus dos formas (D-032): colocar (tipo, columna y fila) o continuar una obra
-  /// (<c>buildingId</c>). Mezclarlas, o no completar ninguna, es un comando inválido (08 §4).
-  /// </summary>
-  private static BuildCommand BuildBuild(BuildCommandDto dto)
-  {
-    bool anyPlacementField = dto.BuildingType is not null || dto.AnchorColumn is not null || dto.AnchorRow is not null;
-    EquatableArray<UnitRouteCandidate> routes = ReadRoutes(ProtocolMessageTypes.Build, dto.Routes);
-    var revision = new MapRevision(dto.RouteMapRevision);
-
-    if (dto.BuildingId is { } buildingId && !anyPlacementField)
-    {
-      return BuildCommand.Continue(new EntityId(buildingId), revision, routes);
-    }
-
-    if (dto.BuildingId is null && dto is { BuildingType: { } buildingType, AnchorColumn: { } column, AnchorRow: { } row })
-    {
-      return BuildCommand.Place(buildingType, new GridCell(column, row), revision, routes);
-    }
-
-    throw new ArgumentException("Build lleva buildingType, anchorColumn y anchorRow para colocar, o solo buildingId para continuar.");
-  }
-
-  /// <summary>
-  /// DTO → <see cref="RepathResponseCommand"/>. Es gameplay como cualquier otro: entra por la cola global con su <c>Sequence</c>,
-  /// es idempotente por <c>messageId</c> y cuenta para el límite por segundo (D-028). El constructor rechaza la unidad o la orden
-  /// inválidas y los waypoints no finitos.
-  /// </summary>
-  private static RepathResponseCommand BuildRepathResponse(RepathResponseCommandDto dto)
-  {
-    if (dto.Waypoints is null || dto.Waypoints.Any(point => point is null))
-    {
-      throw new ArgumentException("RepathResponse necesita waypoints, sin elementos nulos.");
-    }
-
-    return new RepathResponseCommand(new EntityId(dto.UnitId), new OrderId(dto.OrderId), new MapRevision(dto.MapRevision),
-        dto.Waypoints.Select(point => new PositionXZ(point.X, point.Z)).ToEquatableArray());
-  }
-
-  /// <summary>DTO → <see cref="StopCommand"/>. El constructor rechaza la lista vacía y las unidades inválidas o repetidas.</summary>
-  private static StopCommand BuildStop(StopCommandDto dto)
-  {
-    if (dto.UnitIds is null)
-    {
-      throw new ArgumentException("Stop necesita unitIds.");
-    }
-
-    return new StopCommand(dto.UnitIds.Select(id => new EntityId(id)).ToEquatableArray());
   }
 
   /// <summary><c>messageId</c> si es un entero que cabe en 64 bits; no valida el rango (eso es solo para gameplay).</summary>

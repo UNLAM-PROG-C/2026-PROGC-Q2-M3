@@ -412,4 +412,73 @@ public class OutboundQueueTests
     Assert.Equal((producers * perProducer) - essentialShare, saturated);
     Assert.Equal(essentialShare, queue.Count);
   }
+
+  // ───────────── Cierre por saturación (08 §7) ─────────────
+
+  private const int SmallCapacity = 3;
+
+  [Fact]
+  public async Task DiscardPendingAndComplete_LeavesOnlyTheFarewellAndThenEnds()
+  {
+    var queue = new OutboundQueue(SmallCapacity);
+    queue.TryEnqueue(Essential(index: 1));
+    queue.TryEnqueue(Essential(index: 2));
+    var farewell = Essential(index: 99);
+
+    queue.DiscardPendingAndComplete(farewell);
+
+    Assert.Same(farewell, await Take(queue));
+    Assert.Null(await Take(queue));
+  }
+
+  [Fact]
+  public async Task DiscardPendingAndComplete_OnAFullQueue_StillTakesTheFarewell()
+  {
+    var queue = new OutboundQueue(SmallCapacity);
+    while (queue.TryEnqueue(Essential()) != EnqueueOutcome.Saturated)
+    {
+    }
+
+    var farewell = Essential(index: 99);
+    queue.DiscardPendingAndComplete(farewell);
+
+    Assert.Equal(1, queue.Count);
+    Assert.Same(farewell, await Take(queue));
+  }
+
+  [Fact]
+  public void DiscardPendingAndComplete_ThenTryEnqueue_IsClosed()
+  {
+    var queue = new OutboundQueue(SmallCapacity);
+
+    queue.DiscardPendingAndComplete(Essential());
+
+    Assert.Equal(EnqueueOutcome.Closed, queue.TryEnqueue(Essential()));
+  }
+
+  [Fact]
+  public async Task DiscardPendingAndComplete_WakesAWaitingConsumer()
+  {
+    var queue = new OutboundQueue(SmallCapacity);
+    var waiting = queue.DequeueAsync(CancellationToken.None).AsTask();
+    var farewell = Essential(index: 99);
+
+    queue.DiscardPendingAndComplete(farewell);
+
+    Assert.Same(farewell, await waiting.WaitAsync(Patience));
+  }
+
+  [Fact]
+  public async Task DiscardPendingAndComplete_AfterComplete_KeepsWhatWasAlreadyQueued()
+  {
+    var queue = new OutboundQueue(SmallCapacity);
+    var firstFarewell = Essential(index: 1);
+    queue.TryEnqueue(firstFarewell);
+    queue.Complete();
+
+    queue.DiscardPendingAndComplete(Essential(index: 99));
+
+    Assert.Same(firstFarewell, await Take(queue));
+    Assert.Null(await Take(queue));
+  }
 }

@@ -16,6 +16,10 @@ public class InboundRouterTests
 {
   private const int ServerVersion = 1;
 
+  private static readonly TimeSpan IdleInterval = TimeSpan.FromSeconds(3);
+  private static readonly TimeSpan PongTimeout = TimeSpan.FromSeconds(5);
+  private static readonly TimeSpan Instant = TimeSpan.FromMilliseconds(1);
+
   private static readonly ConnectionId Connection = new(7);
 
   private static readonly GameplayMessage Gameplay = new(
@@ -27,9 +31,17 @@ public class InboundRouterTests
   private readonly FakeSessionGate _gate = new() { Player = PlayerId.Two };
   private readonly FakeRateLimiter _rateLimiter = new();
   private readonly FakeCommandSink _commands = new();
+  private readonly FakeViolationTracker _violations = new();
+  private readonly ManualTimeProvider _time = new();
+  private readonly Heartbeat _heartbeat;
+
+  public InboundRouterTests()
+  {
+    _heartbeat = new Heartbeat(IdleInterval, PongTimeout, _time);
+  }
 
   private InboundRouter CreateRouter() =>
-      new(Connection, ServerVersion, _session, new CommandAdmitter(Connection, _gate, _rateLimiter, _commands), _output);
+      new(Connection, ServerVersion, _session, new CommandAdmitter(Connection, _gate, _rateLimiter, _commands), _violations, _heartbeat, new ConnectionCounters(), _output);
 
   private InboundRouter CreateAcceptedRouter()
   {
@@ -275,5 +287,145 @@ public class InboundRouterTests
 
     AssertRejected(CommonErrors.InvalidCommand);
     Assert.Empty(_commands.Calls);
+  }
+
+  // ───────────── Faltas y abuso (08 §6, D-074) ─────────────
+
+  public static TheoryData<string> ViolationScenarios => ["parser", "invalidCommand", "readyBeforeHello", "gameplayBeforeHello", "duplicateHello", "rateLimited"];
+
+  public static TheoryData<string> NonViolationScenarios => ["matchNotRunning", "notRegistered", "commandQueueFull", "readySessionBusy", "unmatchedPong", "admitted"];
+
+  [Theory]
+  [MemberData(nameof(ViolationScenarios))]
+  public void Violation_IsRegisteredWithItsErrorCode(string scenario)
+  {
+    ErrorCode expected = Play(scenario);
+
+    Assert.Equal([expected], _violations.Registered);
+    Assert.Empty(_output.Closes);
+  }
+
+  [Theory]
+  [MemberData(nameof(NonViolationScenarios))]
+  public void NotTheClientsFault_IsNotRegistered(string scenario)
+  {
+    Play(scenario);
+
+    Assert.Empty(_violations.Registered);
+  }
+
+  [Theory]
+  [MemberData(nameof(ViolationScenarios))]
+  public void Violation_OverTheLimit_AnswersAndThenClosesWithAbuseDetected(string scenario)
+  {
+    _violations.LimitExceeded = true;
+
+    Play(scenario);
+
+    // El cliente recibe la respuesta a su mensaje y después el cierre, que encola el Disconnecting detrás.
+    Assert.IsType<OutboundMessage>(_output.Actions[^2]);
+    Assert.Equal(NetworkErrors.AbuseDetected, Assert.IsType<ErrorCode>(_output.Actions[^1]));
+  }
+
+  [Fact]
+  public void UnsupportedVersion_OfHello_ClosesWithUnsupportedVersionEvenOverTheLimit()
+  {
+    _violations.LimitExceeded = true;
+    var router = CreateRouter();
+
+    router.Handle(ParseResult.Violation(NetworkErrors.UnsupportedVersion, null, "Versión 2 no soportada.", ProtocolMessageTypes.Hello));
+
+    Assert.Equal([NetworkErrors.UnsupportedVersion], _output.Closes);
+  }
+
+  /// <summary>Prepara y ejecuta un caso; devuelve el código que el cliente debería ver como falta, si lo es.</summary>
+  private ErrorCode Play(string scenario)
+  {
+    switch (scenario)
+    {
+      case "parser":
+        CreateRouter().Handle(ParseResult.Violation(NetworkErrors.MalformedJson, null, "no es JSON"));
+        return NetworkErrors.MalformedJson;
+      case "invalidCommand":
+        CreateAcceptedRouter().Handle(ParseResult.InvalidCommand(Gameplay.ClientCommandId, "estructura inválida"));
+        return CommonErrors.InvalidCommand;
+      case "readyBeforeHello":
+        CreateRouter().Handle(Parsed(new ClientReadyMessage(new InitializationId(1))));
+        return NetworkErrors.HelloRequired;
+      case "gameplayBeforeHello":
+        CreateRouter().Handle(Parsed(Gameplay));
+        return NetworkErrors.HelloRequired;
+      case "duplicateHello":
+        CreateAcceptedRouter().Handle(Parsed(new HelloMessage(null)));
+        return NetworkErrors.DuplicateHello;
+      case "rateLimited":
+        _rateLimiter.HasTokens = false;
+        CreateAcceptedRouter().Handle(Parsed(Gameplay));
+        return NetworkErrors.RateLimited;
+      case "matchNotRunning":
+        _gate.AcceptsGameplay = false;
+        CreateAcceptedRouter().Handle(Parsed(Gameplay));
+        return CommonErrors.MatchNotRunning;
+      case "notRegistered":
+        _gate.Player = null;
+        CreateAcceptedRouter().Handle(Parsed(Gameplay));
+        return NetworkErrors.NotRegistered;
+      case "commandQueueFull":
+        _commands.Result = CommandAdmission.Rejected(CommonErrors.CommandQueueFull);
+        CreateAcceptedRouter().Handle(Parsed(Gameplay));
+        return CommonErrors.CommandQueueFull;
+      case "readySessionBusy":
+        _session.AcceptReady = false;
+        CreateAcceptedRouter().Handle(Parsed(new ClientReadyMessage(new InitializationId(1))));
+        return NetworkErrors.SessionBusy;
+      case "unmatchedPong":
+        CreateAcceptedRouter().Handle(Parsed(new PongMessage(1)));
+        return default;
+      case "admitted":
+        CreateAcceptedRouter().Handle(Parsed(Gameplay));
+        return default;
+      default:
+        throw new ArgumentOutOfRangeException(nameof(scenario), scenario, null);
+    }
+  }
+
+  // ───────────── Heartbeat (08 §4, §8) ─────────────
+
+  [Fact]
+  public void AValidMessage_CountsAsActivity()
+  {
+    var router = CreateRouter();
+    _time.Advance(IdleInterval - Instant);
+
+    router.Handle(Parsed(new PingMessage(1)));
+    _time.Advance(Instant);
+
+    Assert.Equal(HeartbeatStatus.Alive, _heartbeat.Check(out _));
+  }
+
+  [Fact]
+  public void AnInvalidMessage_DoesNotCountAsActivity()
+  {
+    var router = CreateRouter();
+    _time.Advance(IdleInterval - Instant);
+
+    router.Handle(ParseResult.Violation(NetworkErrors.MalformedJson, null, "no es JSON"));
+    _time.Advance(Instant);
+
+    Assert.Equal(HeartbeatStatus.PingDue, _heartbeat.Check(out _));
+  }
+
+  [Fact]
+  public void APongWithThePendingId_AnswersThePing()
+  {
+    var router = CreateAcceptedRouter();
+    _time.Advance(IdleInterval);
+    Assert.Equal(HeartbeatStatus.PingDue, _heartbeat.Check(out long pingId));
+
+    router.Handle(Parsed(new PongMessage(pingId)));
+    _time.Advance(PongTimeout);
+
+    Assert.NotEqual(HeartbeatStatus.TimedOut, _heartbeat.Check(out _));
+    Assert.Empty(_output.Actions);
   }
 }

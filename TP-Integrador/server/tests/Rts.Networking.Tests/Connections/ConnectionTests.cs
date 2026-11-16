@@ -24,8 +24,8 @@ public class ConnectionTests
   private readonly LiveReadStream _incoming = new();
   private readonly RecordingStream _outgoing = new();
 
-  private Connection Create(NetworkingConfig? config = null) =>
-      new(Id, new CompositeStream(_incoming, _outgoing), config ?? ContractsTests.ValidConfig(), _session, _gate, _commands, TimeProvider.System, NullLogger<Connection>.Instance);
+  private Connection Create(NetworkingConfig? config = null, TimeProvider? time = null) =>
+      new(Id, new CompositeStream(_incoming, _outgoing), config ?? ContractsTests.ValidConfig(), _session, _gate, _commands, time ?? TimeProvider.System, NullLogger<Connection>.Instance);
 
   private static OutboundMessage Pong(long pingId) => new(ProtocolMessageTypes.Pong, new PongDto(pingId), DeliveryClass.Essential);
 
@@ -264,7 +264,230 @@ public class ConnectionTests
     gate.SetResult();
     await run.WaitAsync(Patience);
 
-    Assert.Equal([PongLine(1), PongLine(2)], Written); // Lo ya encolado se entrega; el 3 no.
+    // El 1 ya se estaba escribiendo; el 2 se descarta y solo se intenta enviar el Disconnecting (08 §7).
+    Assert.Equal([PongLine(1), DisconnectingLine(NetworkErrors.OutboundSaturated)], Written);
     Assert.Equal([Id], _session.Closed);
+  }
+
+  // ───────────── Fase (08 §3) ─────────────
+
+  [Fact]
+  public void Phase_OfANewConnection_IsAwaitingHello()
+  {
+    Assert.Equal(ConnectionPhase.AwaitingHello, Create().Phase);
+  }
+
+  [Fact]
+  public async Task Phase_AfterAValidHello_IsHelloAccepted()
+  {
+    var connection = Create();
+    var run = connection.RunAsync();
+
+    _incoming.Feed("{\"protocolVersion\":1,\"type\":\"Hello\"}\n");
+    await WaitUntil(() => connection.Phase == ConnectionPhase.HelloAccepted);
+
+    _incoming.Complete();
+    await run.WaitAsync(Patience);
+  }
+
+  [Fact]
+  public void Phase_AfterClose_IsClosing()
+  {
+    var connection = Create();
+
+    connection.Close(NetworkErrors.ServerShuttingDown);
+
+    Assert.Equal(ConnectionPhase.Closing, connection.Phase);
+  }
+
+  [Fact]
+  public async Task Phase_WhenRunEnds_IsClosed()
+  {
+    var connection = Create();
+    var run = connection.RunAsync();
+
+    _incoming.Complete();
+    await run.WaitAsync(Patience);
+
+    Assert.Equal(ConnectionPhase.Closed, connection.Phase);
+  }
+
+  // ───────────── Plazos (08 §3, §8) ─────────────
+
+  private static readonly TimeSpan Instant = TimeSpan.FromMilliseconds(1);
+
+  private static readonly TimeSpan HandshakeTimeout = ContractsTests.ValidConfig().HandshakeTimeout;
+
+  [Fact]
+  public void CheckTimeouts_BeforeTheHandshakeTimeout_KeepsWaitingForHello()
+  {
+    var time = new ManualTimeProvider();
+    var connection = Create(time: time);
+
+    time.Advance(HandshakeTimeout - Instant);
+    connection.CheckTimeouts();
+
+    Assert.Equal(ConnectionPhase.AwaitingHello, connection.Phase);
+  }
+
+  [Fact]
+  public async Task CheckTimeouts_WithoutHelloWhenTheHandshakeTimeoutPasses_ClosesWithHandshakeTimeout()
+  {
+    var time = new ManualTimeProvider();
+    var connection = Create(time: time);
+    var run = connection.RunAsync();
+
+    time.Advance(HandshakeTimeout);
+    connection.CheckTimeouts();
+    await run.WaitAsync(Patience);
+
+    Assert.Equal([DisconnectingLine(NetworkErrors.HandshakeTimeout)], Written);
+    Assert.Equal([Id], _session.Closed);
+  }
+
+  [Fact]
+  public async Task CheckTimeouts_AfterHello_NoLongerAppliesTheHandshakeTimeout()
+  {
+    var time = new ManualTimeProvider();
+    var connection = Create(time: time);
+    var run = connection.RunAsync();
+    _incoming.Feed("{\"protocolVersion\":1,\"type\":\"Hello\"}\n");
+    await WaitUntil(() => connection.Phase == ConnectionPhase.HelloAccepted);
+
+    time.Advance(HandshakeTimeout);
+    connection.CheckTimeouts();
+
+    Assert.Equal(ConnectionPhase.HelloAccepted, connection.Phase);
+    _incoming.Complete();
+    await run.WaitAsync(Patience);
+  }
+
+  private static readonly TimeSpan PingIdleInterval = ContractsTests.ValidConfig().PingIdleInterval;
+
+  private static readonly TimeSpan PongTimeout = ContractsTests.ValidConfig().PongTimeout;
+
+  [Fact]
+  public async Task CheckTimeouts_AfterThePingIdleInterval_SendsAPingWithTheFirstId()
+  {
+    var time = new ManualTimeProvider();
+    var connection = Create(time: time);
+    var run = connection.RunAsync();
+
+    time.Advance(PingIdleInterval);
+    connection.CheckTimeouts();
+    await WaitUntil(() => Written.Count == 1);
+
+    Assert.Equal(PingLine(1), Written[0]);
+    _incoming.Complete();
+    await run.WaitAsync(Patience);
+  }
+
+  [Fact]
+  public async Task CheckTimeouts_WhenThePingIsNotAnswered_ClosesWithHeartbeatTimeout()
+  {
+    var time = new ManualTimeProvider();
+    var connection = Create(ContractsTests.ValidConfig() with { HandshakeTimeout = PingIdleInterval + PongTimeout + PongTimeout }, time);
+    var run = connection.RunAsync();
+    time.Advance(PingIdleInterval);
+    connection.CheckTimeouts();
+
+    time.Advance(PongTimeout);
+    connection.CheckTimeouts();
+    await run.WaitAsync(Patience);
+
+    Assert.Equal([PingLine(1), DisconnectingLine(NetworkErrors.HeartbeatTimeout)], Written);
+    Assert.Equal([Id], _session.Closed);
+  }
+
+  // ───────────── Métricas (08 §11) ─────────────
+
+  private const string HelloLine = "{\"protocolVersion\":1,\"type\":\"Hello\"}\n";
+
+  private static string StopLine(long messageId) =>
+      "{\"protocolVersion\":1,\"type\":\"Stop\",\"messageId\":" + messageId + ",\"payload\":{\"unitIds\":[3]}}\n";
+
+  private static int Utf8Bytes(params string[] lines) => lines.Sum(line => Encoding.UTF8.GetByteCount(line));
+
+  private sealed record PositionsPayload(int Tick) : IOutboundPayload;
+
+  private static OutboundMessage Positions(int tick) =>
+      new(ProtocolMessageTypes.PositionUpdate, new PositionsPayload(tick), DeliveryClass.Supersedable);
+
+  [Fact]
+  public async Task Metrics_CountReceivedAndSentMessagesAndBytes()
+  {
+    var connection = Create();
+    var run = connection.RunAsync();
+
+    _incoming.Feed(HelloLine + PingLine(5));
+    await WaitUntil(() => Written.Count == 1);
+    await WaitUntil(() => connection.GetMetrics().MessagesSent == 1);
+
+    ConnectionMetricsSnapshot metrics = connection.GetMetrics();
+    Assert.Equal(2, metrics.MessagesReceived);
+    Assert.Equal(Utf8Bytes(HelloLine, PingLine(5)), metrics.BytesReceived);
+    Assert.Equal(1, metrics.MessagesSent);
+    Assert.Equal(Utf8Bytes(PongLine(5)), metrics.BytesSent);
+    _incoming.Complete();
+    await run.WaitAsync(Patience);
+  }
+
+  [Fact]
+  public async Task Metrics_CountAdmittedAndRejectedCommands()
+  {
+    var connection = Create();
+    var run = connection.RunAsync();
+    _incoming.Feed(HelloLine + StopLine(1));
+    await WaitUntil(() => _commands.Calls.Count == 1);
+
+    _gate.AcceptsGameplay = false;
+    _incoming.Feed(StopLine(2));
+    await WaitUntil(() => Written.Count == 1);
+
+    ConnectionMetricsSnapshot metrics = connection.GetMetrics();
+    Assert.Equal(1, metrics.CommandsAdmitted);
+    Assert.Equal(1, metrics.CommandsRejected);
+    _incoming.Complete();
+    await run.WaitAsync(Patience);
+  }
+
+  [Fact]
+  public async Task Metrics_CountSupersededPositionsAndTheOutboundDepth()
+  {
+    var gate = new TaskCompletionSource();
+    _outgoing.Gate = gate.Task;
+    var connection = Create();
+    var run = connection.RunAsync();
+    connection.Send(Pong(1));
+    await _outgoing.WriteStarted.WaitAsync(Patience); // El SendLoop quedó trabado con el 1: lo demás espera en la cola.
+
+    connection.Send(Positions(1));
+    connection.Send(Positions(2));
+
+    ConnectionMetricsSnapshot metrics = connection.GetMetrics();
+    Assert.Equal(1, metrics.PositionsSuperseded);
+    Assert.Equal(1, metrics.OutboundDepth);
+    gate.SetResult();
+    _incoming.Complete();
+    await run.WaitAsync(Patience);
+  }
+
+  [Fact]
+  public async Task Metrics_ReportTheConnectionPlayerPhaseAndRecentViolations()
+  {
+    _gate.Player = PlayerId.Two;
+    var connection = Create();
+    var run = connection.RunAsync();
+
+    _incoming.Feed("esto no es JSON\n");
+    await WaitUntil(() => Written.Count == 1);
+
+    ConnectionMetricsSnapshot metrics = connection.GetMetrics();
+    Assert.Equal(Id, metrics.Connection);
+    Assert.Equal(PlayerId.Two, metrics.Player);
+    Assert.Equal(ConnectionPhase.AwaitingHello, metrics.Phase);
+    Assert.Equal(1, metrics.RecentViolations);
+    _incoming.Complete();
+    await run.WaitAsync(Patience);
   }
 }

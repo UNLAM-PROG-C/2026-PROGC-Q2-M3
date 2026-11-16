@@ -5,6 +5,7 @@ using Rts.Protocol.Outbound;
 using Rts.Protocol.Transport;
 using Rts.Shared.Errors;
 using Rts.Shared.Ids;
+using Rts.Shared.Match;
 using Rts.Shared.Session;
 
 namespace Rts.Networking.Tests;
@@ -258,5 +259,285 @@ public class NetworkServerTests
     await WaitUntil(() => harness.Session.Closed.Count == 1);
 
     harness.Server.Enqueue(PlayerId.One, Pong(9)); // No lanza ni se entrega a un socket muerto.
+  }
+
+  // ───────────── Abuso (08 §6, D-074) ─────────────
+
+  [Fact]
+  public async Task AClientThatKeepsSendingInvalidLines_IsClosedWithAbuseDetected()
+  {
+    const int maxViolations = 2;
+    await using var harness = new NetworkServerHarness(config => config with { MaxViolations = maxViolations });
+    await harness.StartAsync();
+    TestClient client = await harness.ConnectAsync();
+
+    for (int i = 0; i <= maxViolations; i++)
+    {
+      await client.SendLineAsync("esto no es JSON");
+    }
+
+    // Cada falta recibe su ProtocolError; la que supera el límite, además, el cierre.
+    for (int i = 0; i <= maxViolations; i++)
+    {
+      Assert.Contains("Network.MalformedJson", await client.ReadLineAsync());
+    }
+
+    Assert.Equal(
+        "{\"protocolVersion\":1,\"type\":\"Disconnecting\",\"payload\":{\"reason\":\"Network.AbuseDetected\"}}",
+        await client.ReadLineAsync());
+    Assert.Null(await client.ReadLineAsync());
+    await WaitUntil(() => harness.Session.Closed.Count == 1);
+  }
+
+  [Fact]
+  public async Task AClientWithinTheViolationLimit_KeepsItsConnection()
+  {
+    const int maxViolations = 2;
+    await using var harness = new NetworkServerHarness(config => config with { MaxViolations = maxViolations });
+    await harness.StartAsync();
+    TestClient client = await harness.ConnectAsync();
+
+    for (int i = 0; i < maxViolations; i++)
+    {
+      await client.SendLineAsync("esto no es JSON");
+      Assert.Contains("Network.MalformedJson", await client.ReadLineAsync());
+    }
+
+    await client.SendLineAsync(PingLine(3));
+    Assert.Equal(PongLine(3), await client.ReadLineAsync());
+  }
+
+  // ───────────── Conexiones pendientes (08 §3) ─────────────
+
+  /// <summary>Conecta un cliente sin Hello y espera a que el servidor lo haya aceptado (responde un Ping).</summary>
+  private static async Task<TestClient> ConnectWithoutHelloAsync(NetworkServerHarness harness)
+  {
+    TestClient client = await harness.ConnectAsync();
+    await client.SendLineAsync(PingLine(1));
+    Assert.Equal(PongLine(1), await client.ReadLineAsync());
+    return client;
+  }
+
+  [Fact]
+  public async Task WithMaxPendingConnectionsWaitingForHello_TheNextOneIsClosedWithTooManyConnections()
+  {
+    const int maxPending = 2;
+    await using var harness = new NetworkServerHarness(config => config with { MaxPendingConnections = maxPending });
+    await harness.StartAsync();
+    for (int i = 0; i < maxPending; i++)
+    {
+      await ConnectWithoutHelloAsync(harness);
+    }
+
+    TestClient extra = await harness.ConnectAsync();
+
+    Assert.Equal(
+        "{\"protocolVersion\":1,\"type\":\"Disconnecting\",\"payload\":{\"reason\":\"Network.TooManyConnections\"}}",
+        await extra.ReadLineAsync());
+    Assert.Null(await extra.ReadLineAsync());
+    await WaitUntil(() => harness.Session.Closed.Count == 1);
+  }
+
+  [Fact]
+  public async Task AConnectionThatSentItsHello_NoLongerCountsAsPending()
+  {
+    await using var harness = new NetworkServerHarness(config => config with { MaxPendingConnections = 1 });
+    await harness.StartAsync();
+    await ConnectWithHelloAsync(harness);
+
+    // La primera ya mandó su Hello: hay lugar para otra pendiente.
+    await ConnectWithoutHelloAsync(harness);
+
+    Assert.Empty(harness.Session.Closed);
+  }
+
+  // ───────────── Monitor: timeout de handshake (08 §3, §8) ─────────────
+
+  private static readonly TimeSpan ShortHandshake = TimeSpan.FromMilliseconds(200);
+
+  [Fact]
+  public async Task AClientThatNeverSendsHello_IsClosedWithHandshakeTimeout()
+  {
+    await using var harness = new NetworkServerHarness(config => config with { HandshakeTimeout = ShortHandshake });
+    await harness.StartAsync();
+
+    TestClient client = await harness.ConnectAsync();
+
+    Assert.Equal(
+        "{\"protocolVersion\":1,\"type\":\"Disconnecting\",\"payload\":{\"reason\":\"Network.HandshakeTimeout\"}}",
+        await client.ReadLineAsync());
+    Assert.Null(await client.ReadLineAsync());
+    await WaitUntil(() => harness.Session.Closed.Count == 1);
+  }
+
+  [Fact]
+  public async Task AClientThatSentHello_OutlivesTheHandshakeTimeout()
+  {
+    await using var harness = new NetworkServerHarness(config => config with { HandshakeTimeout = ShortHandshake });
+    await harness.StartAsync();
+    var (client, _) = await ConnectWithHelloAsync(harness);
+
+    await Task.Delay(ShortHandshake * 2);
+
+    await client.SendLineAsync(PingLine(4));
+    Assert.Equal(PongLine(4), await client.ReadLineAsync());
+  }
+
+  // ───────────── Monitor: heartbeat (08 §8) ─────────────
+
+  private static readonly TimeSpan ShortHeartbeat = TimeSpan.FromMilliseconds(200);
+
+  private static NetworkServerHarness HarnessWithShortHeartbeat() =>
+      new(config => config with { PingIdleInterval = ShortHeartbeat, PongTimeout = ShortHeartbeat });
+
+  [Fact]
+  public async Task AnIdleClient_ReceivesAPing()
+  {
+    await using var harness = HarnessWithShortHeartbeat();
+    await harness.StartAsync();
+    var (client, _) = await ConnectWithHelloAsync(harness);
+
+    Assert.Equal(PingLine(1), await client.ReadLineAsync());
+  }
+
+  [Fact]
+  public async Task AClientThatDoesNotAnswerThePing_IsClosedWithHeartbeatTimeoutOnce()
+  {
+    await using var harness = HarnessWithShortHeartbeat();
+    await harness.StartAsync();
+    var (client, id) = await ConnectWithHelloAsync(harness);
+
+    Assert.Equal(PingLine(1), await client.ReadLineAsync());
+    Assert.Equal(
+        "{\"protocolVersion\":1,\"type\":\"Disconnecting\",\"payload\":{\"reason\":\"Network.HeartbeatTimeout\"}}",
+        await client.ReadLineAsync());
+    Assert.Null(await client.ReadLineAsync());
+    await WaitUntil(() => harness.Session.Closed.Count == 1);
+    Assert.Equal([id], harness.Session.Closed);
+  }
+
+  [Fact]
+  public async Task AClientThatAnswersThePing_KeepsItsConnection()
+  {
+    await using var harness = HarnessWithShortHeartbeat();
+    await harness.StartAsync();
+    var (client, _) = await ConnectWithHelloAsync(harness);
+
+    Assert.Equal(PingLine(1), await client.ReadLineAsync());
+    await client.SendLineAsync(PongLine(1));
+
+    // Sigue viva: después de otro intervalo sin actividad llega el Ping siguiente, no el cierre.
+    Assert.Equal(PingLine(2), await client.ReadLineAsync());
+  }
+
+  // ───────────── Drenaje final (08 §7, 07 §9) ─────────────
+
+  private const string ShuttingDownLine =
+      "{\"protocolVersion\":1,\"type\":\"Disconnecting\",\"payload\":{\"reason\":\"Network.ServerShuttingDown\"}}";
+
+  private static readonly MatchEnded EndOfMatch =
+      new(SessionId.New(), new MatchResult(MatchResultType.TechnicalEnd, null, MatchEndReason.ServerShutdown, null));
+
+  [Fact]
+  public async Task Drain_SendsShuttingDownBehindMatchEndedToEveryConnectionAndClosesThem()
+  {
+    await using var harness = new NetworkServerHarness();
+    await harness.StartAsync();
+    var first = await ConnectWithHelloAsync(harness);
+    var second = await ConnectWithHelloAsync(harness);
+    harness.Server.Send(first.Id, EndOfMatch);
+    harness.Server.Send(second.Id, EndOfMatch);
+
+    await harness.Server.DrainAndCloseAllAsync().WaitAsync(Patience);
+
+    foreach (TestClient client in new[] { first.Client, second.Client })
+    {
+      Assert.Contains("\"type\":\"MatchEnded\"", await client.ReadLineAsync());
+      Assert.Equal(ShuttingDownLine, await client.ReadLineAsync());
+      Assert.Null(await client.ReadLineAsync());
+    }
+
+    Assert.Equal(2, harness.Session.Closed.Count);
+  }
+
+  [Fact]
+  public async Task Drain_StopsAcceptingConnections()
+  {
+    await using var harness = new NetworkServerHarness();
+    int port = await harness.StartAsync();
+
+    await harness.Server.DrainAndCloseAllAsync().WaitAsync(Patience);
+
+    await harness.Running.WaitAsync(Patience);
+    await Assert.ThrowsAsync<SocketException>(() => TestClient.ConnectAsync(port));
+  }
+
+  [Fact]
+  public async Task Drain_WithoutConnections_Finishes()
+  {
+    await using var harness = new NetworkServerHarness();
+    await harness.StartAsync();
+
+    await harness.Server.DrainAndCloseAllAsync().WaitAsync(Patience);
+  }
+
+  private sealed record BulkPayload(string Data) : IOutboundPayload;
+
+  [Fact]
+  public async Task Drain_WithAClientThatStoppedReading_FinishesWhenTheDrainTimeoutPasses()
+  {
+    // Un cliente que no lee llena los buffers del socket: el SendLoop queda trabado escribiendo. CloseLinger largo, para que lo
+    // único que pueda destrabarlo sea el DrainTimeout.
+    TimeSpan drainTimeout = TimeSpan.FromMilliseconds(300);
+    TimeSpan finishBudget = TimeSpan.FromSeconds(5);
+    const int bulkMessages = 200;
+    const int bulkMessageChars = 64 * 1024;
+    await using var harness = new NetworkServerHarness(config => config with
+    {
+      DrainTimeout = drainTimeout,
+      CloseLinger = TimeSpan.FromMinutes(1),
+      OutboundQueueCapacity = bulkMessages * 2,
+    });
+    await harness.StartAsync();
+    var (_, id) = await ConnectWithHelloAsync(harness);
+    harness.Gate.ConnectionOfPlayer = id;
+    var bulk = new OutboundMessage("Bulk", new BulkPayload(new string('x', bulkMessageChars)), DeliveryClass.Essential);
+    for (int i = 0; i < bulkMessages; i++)
+    {
+      harness.Server.Enqueue(PlayerId.One, bulk);
+    }
+
+    await harness.Server.DrainAndCloseAllAsync().WaitAsync(finishBudget);
+
+    Assert.Equal([id], harness.Session.Closed);
+  }
+
+  // ───────────── Métricas (08 §11) ─────────────
+
+  [Fact]
+  public async Task GetMetrics_ListsEveryOpenConnection()
+  {
+    await using var harness = new NetworkServerHarness();
+    await harness.StartAsync();
+    var first = await ConnectWithHelloAsync(harness);
+    var second = await ConnectWithHelloAsync(harness);
+
+    var metrics = harness.Server.GetMetrics();
+
+    Assert.Equal([first.Id, second.Id], metrics.Select(m => m.Connection).OrderBy(id => id.Value));
+    Assert.All(metrics, m => Assert.Equal(ConnectionPhase.HelloAccepted, m.Phase));
+  }
+
+  [Fact]
+  public async Task GetMetrics_DoesNotListClosedConnections()
+  {
+    await using var harness = new NetworkServerHarness();
+    await harness.StartAsync();
+    var (client, _) = await ConnectWithHelloAsync(harness);
+
+    client.Dispose();
+    await WaitUntil(() => harness.Session.Closed.Count == 1);
+
+    await WaitUntil(() => harness.Server.GetMetrics().Count == 0);
   }
 }

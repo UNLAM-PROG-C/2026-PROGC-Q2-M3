@@ -134,6 +134,31 @@ internal sealed class OutboundQueue : IOutboundQueue
     waiter?.TrySetResult();
   }
 
+  public void DiscardPendingAndComplete(OutboundMessage farewell)
+  {
+    ArgumentNullException.ThrowIfNull(farewell);
+
+    TaskCompletionSource? waiter;
+    lock (_gate)
+    {
+      // Si un cierre anterior ya completó la cola, su Disconnecting ya está encolado y no se toca.
+      if (_completed)
+      {
+        return;
+      }
+
+      // La despedida entra aunque la cola esté llena: los pendientes se van y no queda otro mensaje que proteger.
+      _items.Clear();
+      _pendingSupersedable.Clear();
+      _items.AddLast(farewell);
+      _essentialCount = farewell.Delivery == DeliveryClass.Essential ? 1 : 0;
+      _completed = true;
+      waiter = TakeWaiter();
+    }
+
+    waiter?.TrySetResult();
+  }
+
   // Debe llamarse con _gate tomado.
   private EnqueueOutcome EnqueueEssential(OutboundMessage message)
   {

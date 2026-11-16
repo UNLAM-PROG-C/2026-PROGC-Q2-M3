@@ -20,9 +20,15 @@ namespace Rts.Networking;
 /// <item>Cada conexión recibe un <see cref="ConnectionId"/> creciente y se registra mientras vive. Cuando termina se quita del registro y se
 /// cierra su socket.</item>
 /// <item><see cref="Send"/> y <see cref="Enqueue"/> solo encolan, y descartan el mensaje si la conexión ya no existe (09 D-069).</item>
+/// <item>Si ya hay <c>MaxPendingConnections</c> conexiones esperando su <c>Hello</c>, la nueva se acepta solo para cerrarla con
+/// <c>Disconnecting(TooManyConnections)</c> (08 §3). Como toda conexión aceptada, se informa cerrada a GameSession.</item>
+/// <item>Mientras corre <see cref="RunAsync"/>, un <see cref="ConnectionMonitor"/> revisa los plazos de todas las conexiones.</item>
 /// <item>Al cancelar <see cref="RunAsync"/> deja de aceptar; cerrar las conexiones existentes es <see cref="DrainAndCloseAllAsync"/>.</item>
+/// <item><b>Drenaje (08 §7, 07 §9):</b> deja de aceptar, cierra cada conexión con <c>Disconnecting(ServerShuttingDown)</c> detrás de lo ya
+/// encolado (por ejemplo, <c>MatchEnded</c>) y espera que terminen hasta <c>DrainTimeout</c>. Si el plazo vence, corta las que quedan, así
+/// termina aunque haya sockets muertos. Una conexión que llega durante el drenaje se cierra igual.</item>
+/// <item><see cref="GetMetrics"/> devuelve las métricas de las conexiones abiertas en ese momento.</item>
 /// </list>
-/// PENDIENTE (fase 3): <see cref="DrainAndCloseAllAsync"/> y <see cref="GetMetrics"/>.
 /// </summary>
 public sealed class NetworkServer : INetworkServer
 {
@@ -33,10 +39,13 @@ public sealed class NetworkServer : INetworkServer
   private readonly TimeProvider _time;
   private readonly ILogger<NetworkServer> _logger;
   private readonly ILogger<Connection> _connectionLogger;
+  private readonly ConnectionMonitor _monitor;
   private readonly SessionMessageEncoder _encoder = new();
   private readonly ConcurrentDictionary<ConnectionId, Connection> _connections = new();
+  private readonly CancellationTokenSource _stopAccepting = new();
   private readonly TaskCompletionSource<int> _listening = new(TaskCreationOptions.RunContinuationsAsynchronously);
   private long _lastConnectionId;
+  private int _draining;
 
   public NetworkServer(
       NetworkingConfig config,
@@ -53,6 +62,7 @@ public sealed class NetworkServer : INetworkServer
     _time = time;
     _logger = loggers.CreateLogger<NetworkServer>();
     _connectionLogger = loggers.CreateLogger<Connection>();
+    _monitor = new ConnectionMonitor(() => _connections.Values, time, loggers.CreateLogger<ConnectionMonitor>());
   }
 
   /// <summary>Puerto en el que escucha, disponible cuando <see cref="RunAsync"/> ya empezó a escuchar (útil con el puerto 0 en pruebas).</summary>
@@ -60,11 +70,16 @@ public sealed class NetworkServer : INetworkServer
 
   public async Task RunAsync(CancellationToken cancellationToken)
   {
+    // Deja de aceptar al cancelar o al empezar el drenaje.
+    using var stop = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _stopAccepting.Token);
+    cancellationToken = stop.Token;
+
     var listener = new TcpListener(IPAddress.Parse(_config.ListenAddress), _config.Port);
     listener.Start();
     int port = ((IPEndPoint)listener.LocalEndpoint).Port;
     _listening.TrySetResult(port);
     _logger.LogInformation("Networking escuchando en {Address}:{Port}", _config.ListenAddress, port);
+    Task monitor = _monitor.RunAsync(cancellationToken);
 
     try
     {
@@ -81,6 +96,7 @@ public sealed class NetworkServer : INetworkServer
     finally
     {
       listener.Stop();
+      await monitor.ConfigureAwait(false);
     }
   }
 
@@ -110,18 +126,61 @@ public sealed class NetworkServer : INetworkServer
     }
   }
 
-  public Task DrainAndCloseAllAsync() => throw new NotImplementedException("PENDIENTE fase 3: drenaje final (contrato 08 §7).");
+  public async Task DrainAndCloseAllAsync()
+  {
+    Volatile.Write(ref _draining, 1);
+    await _stopAccepting.CancelAsync().ConfigureAwait(false);
 
-  public IReadOnlyList<ConnectionMetricsSnapshot> GetMetrics() => throw new NotImplementedException("PENDIENTE fase 3: métricas.");
+    Connection[] open = [.. _connections.Values];
+    _logger.LogInformation("Drenaje: se cierran {Count} conexiones", open.Length);
+    foreach (Connection connection in open)
+    {
+      connection.Close(NetworkErrors.ServerShuttingDown);
+    }
+
+    Task all = Task.WhenAll(open.Select(connection => connection.Completion));
+    try
+    {
+      await all.WaitAsync(_config.DrainTimeout, _time).ConfigureAwait(false);
+    }
+    catch (TimeoutException)
+    {
+      // Hay clientes que no leen: se corta sin esperar más. Cancelar la escritura destraba un socket muerto.
+      _logger.LogWarning("Drenaje: venció el plazo; se cortan las conexiones que quedan");
+      foreach (Connection connection in open)
+      {
+        connection.Abort();
+      }
+
+      await all.ConfigureAwait(false);
+    }
+  }
+
+  public IReadOnlyList<ConnectionMetricsSnapshot> GetMetrics() => [.. _connections.Values.Select(connection => connection.GetMetrics())];
 
   private void Accept(TcpClient client)
   {
     var id = new ConnectionId(Interlocked.Increment(ref _lastConnectionId));
     var connection = new Connection(id, client.GetStream(), _config, _sessionEvents, _gate, _commands, _time, _connectionLogger);
+
+    // Se cuenta antes de registrar la nueva. Solo este bucle agrega conexiones, así que dos aceptaciones no pueden pasar el tope a la vez.
+    bool tooManyPending = CountPending() >= _config.MaxPendingConnections;
     _connections[id] = connection;
     _logger.LogInformation("Conexión {ConnectionId} aceptada", id);
+
+    if (Volatile.Read(ref _draining) == 1)
+    {
+      connection.Close(NetworkErrors.ServerShuttingDown);
+    }
+    else if (tooManyPending)
+    {
+      connection.Close(NetworkErrors.TooManyConnections);
+    }
+
     _ = RunConnectionAsync(connection, client);
   }
+
+  private int CountPending() => _connections.Values.Count(connection => connection.Phase == ConnectionPhase.AwaitingHello);
 
   private async Task RunConnectionAsync(Connection connection, TcpClient client)
   {

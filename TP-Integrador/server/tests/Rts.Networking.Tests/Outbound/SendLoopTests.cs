@@ -1,4 +1,5 @@
 using System.Text;
+using Rts.Networking.Connections;
 using Rts.Networking.Outbound;
 using Rts.Protocol;
 using Rts.Protocol.Outbound;
@@ -38,7 +39,7 @@ public class SendLoopTests
     }
   }
 
-  private SendLoop CreateLoop(int version = 1) => new(_queue, _stream, version);
+  private SendLoop CreateLoop(int version = 1) => new(_queue, _stream, version, new ConnectionCounters());
 
   // ───────────── Qué escribe ─────────────
 
@@ -223,8 +224,8 @@ public class SendLoopTests
     var slowQueue = new OutboundQueue(Capacity);
     var fastStream = new RecordingStream();
     var fastQueue = new OutboundQueue(Capacity);
-    var slowRun = new SendLoop(slowQueue, slowStream, 1).RunAsync(CancellationToken.None);
-    var fastRun = new SendLoop(fastQueue, fastStream, 1).RunAsync(CancellationToken.None);
+    var slowRun = new SendLoop(slowQueue, slowStream, 1, new ConnectionCounters()).RunAsync(CancellationToken.None);
+    var fastRun = new SendLoop(fastQueue, fastStream, 1, new ConnectionCounters()).RunAsync(CancellationToken.None);
 
     slowQueue.TryEnqueue(Pong(1));
     await slowStream.WriteStarted.WaitAsync(Patience);

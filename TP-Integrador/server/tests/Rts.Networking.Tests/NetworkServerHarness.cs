@@ -3,6 +3,7 @@ using System.Text;
 using Rts.Networking.Configuration;
 using Rts.Networking.Tests.Admission;
 using Rts.Networking.Tests.Connections;
+using Rts.Shared.Commands;
 
 namespace Rts.Networking.Tests;
 
@@ -39,7 +40,8 @@ internal sealed class TestClient : IDisposable
 }
 
 /// <summary>
-/// Un <see cref="NetworkServer"/> real escuchando en un puerto libre de <c>127.0.0.1</c>, con GameSession y la cola de comandos falsas.
+/// Un <see cref="NetworkServer"/> real escuchando en un puerto libre de <c>127.0.0.1</c>, con GameSession falsa. La cola de comandos es
+/// la falsa (<see cref="Commands"/>) salvo que la prueba pase otra.
 /// Al terminar la prueba cancela el servidor y cierra los clientes.
 /// </summary>
 internal sealed class NetworkServerHarness : IAsyncDisposable
@@ -48,7 +50,7 @@ internal sealed class NetworkServerHarness : IAsyncDisposable
   private readonly List<TestClient> _clients = [];
   private Task _run = Task.CompletedTask;
 
-  public NetworkServerHarness(Func<NetworkingConfig, NetworkingConfig>? configure = null)
+  public NetworkServerHarness(Func<NetworkingConfig, NetworkingConfig>? configure = null, ICommandSink? commands = null)
   {
     NetworkingConfig config = ContractsTests.ValidConfig() with
     {
@@ -61,7 +63,7 @@ internal sealed class NetworkServerHarness : IAsyncDisposable
       config = configure(config);
     }
 
-    Server = new NetworkServer(config, Session, Gate, Commands, TimeProvider.System, Loggers);
+    Server = new NetworkServer(config, Session, Gate, commands ?? Commands, TimeProvider.System, Loggers);
   }
 
   public FakeSessionEventSink Session { get; } = new();
@@ -87,6 +89,9 @@ internal sealed class NetworkServerHarness : IAsyncDisposable
     _clients.Add(client);
     return client;
   }
+
+  /// <summary>La tarea de <see cref="NetworkServer.RunAsync"/>; termina al cancelar o al terminar el drenaje.</summary>
+  public Task Running => _run;
 
   public Task StopAsync()
   {
