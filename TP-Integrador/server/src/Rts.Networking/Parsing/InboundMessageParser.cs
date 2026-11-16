@@ -100,6 +100,12 @@ internal sealed class InboundMessageParser : IInboundMessageParser
       ProtocolMessageTypes.Pong => ParsePong(payload, messageId),
       ProtocolMessageTypes.Move => ParseGameplay<MoveCommandDto>(type, payload, messageId, BuildMove),
       ProtocolMessageTypes.Stop => ParseGameplay<StopCommandDto>(type, payload, messageId, BuildStop),
+      ProtocolMessageTypes.Attack => ParseGameplay<AttackCommandDto>(type, payload, messageId,
+          dto => new AttackCommand(new EntityId(dto.TargetId), new MapRevision(dto.RouteMapRevision), ReadRoutes(type, dto.Routes))),
+      ProtocolMessageTypes.GatherWood => ParseGameplay<GatherWoodCommandDto>(type, payload, messageId,
+          dto => new GatherWoodCommand(new EntityId(dto.TreeId), new MapRevision(dto.RouteMapRevision), ReadRoutes(type, dto.Routes))),
+      ProtocolMessageTypes.RepairFarm => ParseGameplay<RepairFarmCommandDto>(type, payload, messageId,
+          dto => new RepairFarmCommand(new EntityId(dto.FarmId), new MapRevision(dto.RouteMapRevision), ReadRoutes(type, dto.Routes))),
 
       // Llegan acá los comandos de gameplay de la fase 2: se reconocen pero todavía no se convierten (decisión provisoria).
       _ => ParseResult.Violation(NetworkErrors.UnknownType, messageId, $"El tipo '{type}' todavía no está soportado."),
@@ -190,23 +196,34 @@ internal sealed class InboundMessageParser : IInboundMessageParser
     }
   }
 
-  /// <summary>DTO → <see cref="MoveCommand"/>. El constructor rechaza coordenadas no finitas, rutas vacías y unidades repetidas o inválidas.</summary>
+  /// <summary>DTO → <see cref="MoveCommand"/>. El constructor rechaza coordenadas no finitas.</summary>
   private static MoveCommand BuildMove(MoveCommandDto dto)
   {
-    if (dto.Destination is null
-        || dto.Routes is null
-        || dto.Routes.Any(route => route is null || route.Waypoints is null || route.Waypoints.Any(point => point is null)))
+    if (dto.Destination is null)
     {
-      throw new ArgumentException("Move necesita destination y routes completos, sin elementos nulos.");
+      throw new ArgumentException("Move necesita destination.");
     }
 
-    EquatableArray<UnitRouteCandidate> routes = dto.Routes
+    return new MoveCommand(
+        new PositionXZ(dto.Destination.X, dto.Destination.Z), new MapRevision(dto.RouteMapRevision), ReadRoutes(ProtocolMessageTypes.Move, dto.Routes));
+  }
+
+  /// <summary>
+  /// Las rutas candidatas de un comando de unidades (Move, Attack, GatherWood, Build, RepairFarm). Los nulos que deja el
+  /// deserializador se rechazan acá; las rutas vacías y las unidades repetidas o inválidas, en los constructores de dominio.
+  /// </summary>
+  private static EquatableArray<UnitRouteCandidate> ReadRoutes(string type, IReadOnlyList<UnitRouteDto>? routes)
+  {
+    if (routes is null || routes.Any(route => route is null || route.Waypoints is null || route.Waypoints.Any(point => point is null)))
+    {
+      throw new ArgumentException($"{type} necesita routes completas, sin elementos nulos.");
+    }
+
+    return routes
         .Select(route => new UnitRouteCandidate(
             new EntityId(route.UnitId),
             route.Waypoints.Select(point => new PositionXZ(point.X, point.Z)).ToEquatableArray()))
         .ToEquatableArray();
-
-    return new MoveCommand(new PositionXZ(dto.Destination.X, dto.Destination.Z), new MapRevision(dto.RouteMapRevision), routes);
   }
 
   /// <summary>DTO → <see cref="StopCommand"/>. El constructor rechaza la lista vacía y las unidades inválidas o repetidas.</summary>

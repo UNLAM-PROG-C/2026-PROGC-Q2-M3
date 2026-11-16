@@ -119,10 +119,7 @@ public class InboundMessageParserTests
 
   // Decisión provisoria de Flor (opción A): los comandos de la fase 2 todavía no se convierten.
   [Theory]
-  [InlineData("Attack")]
-  [InlineData("GatherWood")]
   [InlineData("Build")]
-  [InlineData("RepairFarm")]
   [InlineData("TrainUnit")]
   [InlineData("RepathResponse")]
   public void Parse_GameplayTypeNotYetSupported_ReturnsUnknownTypeViolation(string type)
@@ -337,6 +334,72 @@ public class InboundMessageParserTests
     var result = ParseLine("""{"protocolVersion":1,"type":"Stop","messageId":6,"payload":{"unitIds":""" + unitIds + "}}");
 
     AssertInvalidCommand(result, 6);
+  }
+
+  // Attack, GatherWood y RepairFarm: el molde de Move, con un objetivo en lugar de un destino.
+  private const string TargetedRoutes = """
+      "routeMapRevision":2,"routes":[{"unitId":3,"waypoints":[{"x":9,"z":5}]},{"unitId":4,"waypoints":[]}]
+      """;
+
+  private static EquatableArray<UnitRouteCandidate> ExpectedTargetedRoutes() => EquatableArray.Create<UnitRouteCandidate>(
+      [new UnitRouteCandidate(new EntityId(3), EquatableArray.Create<PositionXZ>([new PositionXZ(9, 5)])),
+       new UnitRouteCandidate(new EntityId(4), EquatableArray<PositionXZ>.Empty)]);
+
+  private static string TargetedLine(string type, string targetField, string target, string routes = TargetedRoutes) =>
+      "{\"protocolVersion\":1,\"type\":\"" + type + "\",\"messageId\":7,\"payload\":{\"" + targetField + "\":" + target + "," + routes + "}}";
+
+  public static TheoryData<string, string> TargetedCommands => new()
+  {
+    { "Attack", "targetId" },
+    { "GatherWood", "treeId" },
+    { "RepairFarm", "farmId" },
+  };
+
+  private static IGameCommand ExpectedTargeted(string type) => type switch
+  {
+    "Attack" => new AttackCommand(new EntityId(20), new MapRevision(2), ExpectedTargetedRoutes()),
+    "GatherWood" => new GatherWoodCommand(new EntityId(20), new MapRevision(2), ExpectedTargetedRoutes()),
+    _ => new RepairFarmCommand(new EntityId(20), new MapRevision(2), ExpectedTargetedRoutes()),
+  };
+
+  [Theory]
+  [MemberData(nameof(TargetedCommands))]
+  public void Parse_ValidTargetedCommand_ReturnsGameplayMessageWithItsCommand(string type, string targetField)
+  {
+    var result = ParseLine(TargetedLine(type, targetField, "20"));
+
+    Assert.Equal(ParseOutcome.Parsed, result.Outcome);
+    Assert.Equal(new GameplayMessage(new ClientCommandId(7), ExpectedTargeted(type)), result.Message);
+  }
+
+  [Theory]
+  [MemberData(nameof(TargetedCommands))]
+  public void Parse_TargetedCommandWithoutMessageId_ReturnsInvalidMessageIdViolation(string type, string targetField)
+  {
+    var result = ParseLine(TargetedLine(type, targetField, "20").Replace("\"messageId\":7,", ""));
+
+    AssertViolation(result, NetworkErrors.InvalidMessageId);
+  }
+
+  // Estructura inválida (objetivo que no es entero, rutas ausentes o con nulos) o valores que el constructor rechaza
+  // (objetivo 0, sin rutas, unidad repetida): siempre InvalidCommand con el ClientCommandId.
+  [Theory]
+  [MemberData(nameof(TargetedCommands))]
+  public void Parse_TargetedCommandWithBadPayload_ReturnsInvalidCommand(string type, string targetField)
+  {
+    string[] lines =
+    [
+        TargetedLine(type, targetField, "\"veinte\""),
+        TargetedLine(type, targetField, "0"),
+        TargetedLine(type, targetField, "20", "\"routeMapRevision\":2"),
+        TargetedLine(type, targetField, "20", "\"routeMapRevision\":2,\"routes\":[null]"),
+        TargetedLine(type, targetField, "20", "\"routeMapRevision\":2,\"routes\":[{\"unitId\":3}]"),
+        TargetedLine(type, targetField, "20", "\"routeMapRevision\":2,\"routes\":[{\"unitId\":3,\"waypoints\":[null]}]"),
+        TargetedLine(type, targetField, "20", "\"routeMapRevision\":2,\"routes\":[]"),
+        TargetedLine(type, targetField, "20", "\"routeMapRevision\":2,\"routes\":[{\"unitId\":3,\"waypoints\":[]},{\"unitId\":3,\"waypoints\":[]}]"),
+    ];
+
+    Assert.All(lines, line => AssertInvalidCommand(ParseLine(line), 7));
   }
 
   // El playerId nunca viene del cliente: si lo manda, se ignora.
