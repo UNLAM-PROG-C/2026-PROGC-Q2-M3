@@ -7,6 +7,10 @@ signal navigation_bake_failed(revision: int, detail: String)
 
 const OBSTACLE_HEIGHT := 4.0
 const TARGET_POSITION_EPSILON := 0.0001
+## Distancia máxima (en celdas) entre la posición oficial y la malla de navegación para aceptar el origen. Las unidades
+## trabajan pegadas a edificios y árboles y pueden quedar dentro del margen que la malla deja alrededor de los obstáculos
+## (agent_radius); en ese caso la ruta arranca con un tramo corto hasta la malla, que cae en celdas libres.
+const ORIGIN_SNAP_TOLERANCE_CELLS := 0.5
 ## Margen que se resta al rango de interacción para que el final de la ruta quede
 ## dentro del rango aunque el servidor use la posición exacta y el cliente la redondeada.
 const RANGE_SAFETY_MARGIN := 0.05
@@ -151,7 +155,9 @@ func _query_navigation_path(origin_xz: Vector2, destination_xz: Vector2) -> Dict
 			"error": "NoRouteFound",
 			"detail": "La navegación no encontró una ruta completa.",
 		}
-	if Vector2(path[0].x, path[0].z).distance_to(origin_xz) > TARGET_POSITION_EPSILON:
+	var navigable_start := Vector2(path[0].x, path[0].z)
+	var origin_gap := navigable_start.distance_to(origin_xz)
+	if origin_gap > cell_size * ORIGIN_SNAP_TOLERANCE_CELLS:
 		return {
 			"ok": false,
 			"error": "OriginNotNavigable",
@@ -159,6 +165,9 @@ func _query_navigation_path(origin_xz: Vector2, destination_xz: Vector2) -> Dict
 		}
 
 	var waypoints: Array[Dictionary] = []
+	if origin_gap > TARGET_POSITION_EPSILON:
+		# Origen dentro del margen de un obstáculo: primero un tramo corto hasta la malla.
+		waypoints.append({"x": float(navigable_start.x), "z": float(navigable_start.y)})
 	for index in range(1, path.size()):
 		var point: Vector3 = path[index]
 		if (
