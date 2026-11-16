@@ -153,6 +153,10 @@ func _test_defeat_and_draw_titles() -> void:
 	)
 	_check(SessionScreensScript.match_result_title({"resultType": "Draw"}, 1) == "Empate", "Draw has its own title.")
 	_check(
+		SessionScreensScript.disconnect_reason_text("ServerNotResponding") == "El servidor dejó de responder.",
+		"A server that stops answering the client heartbeat has a clear message."
+	)
+	_check(
 		SessionScreensScript.match_result_title({"resultType": "TechnicalEnd", "reason": "ServerShutdown"}, 1)
 			== "Partida terminada",
 		"A technical end has a neutral title."
