@@ -264,7 +264,8 @@ public class ConnectionTests
     gate.SetResult();
     await run.WaitAsync(Patience);
 
-    Assert.Equal([PongLine(1), PongLine(2)], Written); // Lo ya encolado se entrega; el 3 no.
+    // El 1 ya se estaba escribiendo; el 2 se descarta y solo se intenta enviar el Disconnecting (08 §7).
+    Assert.Equal([PongLine(1), DisconnectingLine(NetworkErrors.OutboundSaturated)], Written);
     Assert.Equal([Id], _session.Closed);
   }
 

@@ -25,7 +25,8 @@ namespace Rts.Networking.Connections;
 /// socket al entregar todo o al vencer <c>CloseLinger</c> (08 §7).</item>
 /// <item><b>Cliente ido</b> (cierre o error de socket sin <see cref="Close"/>): no se entrega nada pendiente, porque no hay entrega a
 /// sockets muertos.</item>
-/// <item><b>Saturación:</b> si un mensaje no entra en la cola de salida, se cierra con <c>Network.OutboundSaturated</c> (D-073).</item>
+/// <item><b>Saturación:</b> si un mensaje no entra en la cola de salida, se cierra con <c>Network.OutboundSaturated</c> (D-073): se
+/// descartan los pendientes y se intenta enviar solo el <c>Disconnecting</c>, con <c>CloseLinger</c> como plazo (08 §7).</item>
 /// </list>
 /// No es dueña del <see cref="Stream"/>: quien la creó lo cierra cuando <see cref="RunAsync"/> termina.
 /// </summary>
@@ -160,17 +161,22 @@ internal sealed class Connection : IConnectionOutput
     }
   }
 
-  /// <summary>Encola un mensaje para el cliente. No bloquea. Si un mensaje no entra, cierra la conexión por saturación (D-073).</summary>
+  /// <summary>
+  /// Encola un mensaje para el cliente. No bloquea. Si un mensaje no entra, cierra la conexión por saturación (D-073): se descartan
+  /// los pendientes y se intenta enviar solo el <c>Disconnecting</c> (08 §7).
+  /// </summary>
   public void Send(OutboundMessage message)
   {
     if (_queue.TryEnqueue(message) == EnqueueOutcome.Saturated)
     {
-      Close(NetworkErrors.OutboundSaturated);
+      Close(NetworkErrors.OutboundSaturated, discardPending: true);
     }
   }
 
-  /// <summary>Cierre individual (08 §7). Solo el primer llamado tiene efecto.</summary>
-  public void Close(ErrorCode reason)
+  /// <summary>Cierre individual (08 §7): lo ya encolado se entrega antes del <c>Disconnecting</c>. Solo el primer llamado tiene efecto.</summary>
+  public void Close(ErrorCode reason) => Close(reason, discardPending: false);
+
+  private void Close(ErrorCode reason, bool discardPending)
   {
     if (Interlocked.Exchange(ref _closing, 1) == 1)
     {
@@ -179,9 +185,18 @@ internal sealed class Connection : IConnectionOutput
 
     _logger.LogInformation("Conexión {ConnectionId} se cierra: {Reason}", _id, reason);
 
-    // El Disconnecting va último: lo que ya estaba encolado se entrega antes.
-    _queue.TryEnqueue(new OutboundMessage(ProtocolMessageTypes.Disconnecting, new DisconnectingDto(reason.Value), DeliveryClass.Essential));
-    _queue.Complete();
+    var farewell = new OutboundMessage(ProtocolMessageTypes.Disconnecting, new DisconnectingDto(reason.Value), DeliveryClass.Essential);
+    if (discardPending)
+    {
+      _queue.DiscardPendingAndComplete(farewell);
+    }
+    else
+    {
+      // El Disconnecting va último: lo que ya estaba encolado se entrega antes.
+      _queue.TryEnqueue(farewell);
+      _queue.Complete();
+    }
+
     _receiveCancellation.Cancel();
     _ = CutAfterLingerAsync();
   }
