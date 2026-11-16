@@ -9,6 +9,7 @@ using Rts.Shared.Events;
 using Rts.Shared.Geometry;
 using Rts.Shared.Ids;
 using Rts.Shared.Match;
+using Rts.Shared.Resources;
 using Rts.Shared.Time;
 using Rts.Shared.World;
 using Rts.StateSync.Configuration;
@@ -187,6 +188,39 @@ public class StateEventsProjectionTests
 
     Assert.Empty(projection.Player1.Messages);
     Assert.Empty(projection.Player2.Messages);
+  }
+
+  [Fact]
+  public void ProjectTick_TreeEventsGoToBoth()
+  {
+    var tree = new EntityId(50);
+
+    DomainEvent depleted = Event(0, new TreeDepleted(tree));
+    DomainEvent respawned = Event(1, new TreeRespawned(tree));
+
+    TickProjection projection = _projector.ProjectTick(Publication(events: [depleted, respawned]));
+
+    foreach (RecipientMessages recipient in new[] { projection.Player1, projection.Player2 })
+    {
+      Assert.Equal(
+          [new TreeDepletedDto(depleted.Stamp.IndexInTick, tree.Value),
+           new TreeRespawnedDto(respawned.Stamp.IndexInTick, tree.Value)],
+          SingleBatch(recipient).Events);
+    }
+  }
+
+  [Fact]
+  public void ProjectTick_ResourcesChangedOnlyToItsPlayer()
+  {
+    var balance = new ResourceAmount(120, 35);
+    DomainEvent changed = Event(0, new ResourcesChanged(PlayerId.Two, balance));
+
+    TickProjection projection = _projector.ProjectTick(Publication(events: [changed]));
+
+    Assert.Empty(projection.Player1.Messages);
+    Assert.Equal(
+        [new ResourcesChangedDto(changed.Stamp.IndexInTick, balance.Wood, balance.Food)],
+        SingleBatch(projection.Player2).Events);
   }
 
   private static DomainEvent Event(int index, IDomainEventPayload payload) => new(new EventStamp(Tick, index), payload);
