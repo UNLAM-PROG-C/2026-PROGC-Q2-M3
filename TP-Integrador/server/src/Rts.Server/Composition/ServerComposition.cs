@@ -34,7 +34,8 @@ internal static class ServerComposition
   /// Ejecuta una partida completa y devuelve su resultado oficial. Cancelar el token pide el apagado ordenado (D-084).
   /// </summary>
   /// <param name="map">El mapa ya cargado y validado por <c>Program</c>, junto con la configuración (contrato 10 §1).</param>
-  public static Task<MatchResult> RunMatchAsync(
+  /// <exception cref="System.Net.Sockets.SocketException">Si la red no pudo escuchar (por ejemplo, el puerto está ocupado).</exception>
+  public static async Task<MatchResult> RunMatchAsync(
       ServerConfig config, MapDefinition map, GameCatalog catalog, ILoggerFactory loggers, CancellationToken shutdown)
   {
     ArgumentNullException.ThrowIfNull(config);
@@ -45,23 +46,37 @@ internal static class ServerComposition
     // Orden de construcción (contrato 10 §4). Cada paso solo usa lo creado en pasos anteriores.
     TransportPieces transport = CreateTransport(config, catalog, loggers);           // Pasos 1 a 4.
     SimulationPieces simulation = CreateSimulation(config, map, transport, loggers); // Paso 5.
+    ISessionHost session = CreateSession(config, transport, simulation);             // Paso 6.
 
-    // PENDIENTE: lo que sigue todavía es borrador (las variables sueltas pasan a ser las de transport y simulation).
-    //
-    // 6. Consumidor de sesión (GameSession): el único que necesita a casi todos, por eso va al final.
-    //      var effects = new SessionEffectsAdapter(network, stateSync);
-    //      var session = new SessionHost(inbox, sessionView, new SessionStateMachine(config.GameSession), effects, simulation,
-    //                                    config.GameSession, TimeProvider.System, loggers);
-    //
-    // Arranque y fin (contrato 10 §5):
-    //      Task listening = network.RunAsync(shutdown);       // aceptación en segundo plano
-    //      MatchResult result = await session.RunAsync(shutdown); // hasta Ended: ya detuvo ticks y drenó conexiones
-    //      diagnostics.WriteFinalSummary();                    // los ticks ya están detenidos: no llegan más (D-097)
-    //      await listening;                                    // termina al completar el drenaje
-    //      return result;
-    _ = simulation;
-    throw new NotImplementedException(
-        "La composición todavía no crea el host de sesión (paso 6). Se completa en la vertical slice (AGENTS §8).");
+    return await RunAsync(transport.Network, session, simulation.Diagnostics, shutdown);
+  }
+
+  /// <summary>
+  /// Arranque y fin (contrato 10 §4): la red acepta en segundo plano mientras el host de sesión corre hasta <c>Ended</c>. Para
+  /// entonces la sesión ya detuvo los ticks y drenó las conexiones, y con el drenaje la red dejó de aceptar.
+  /// </summary>
+  private static async Task<MatchResult> RunAsync(
+      NetworkServer network, ISessionHost session, LoggingSimulationDiagnostics diagnostics, CancellationToken shutdown)
+  {
+    // La red NO recibe el token de apagado: si lo recibiera, el primer Ctrl+C cortaría la aceptación y el monitor de heartbeat
+    // antes del drenaje ordenado. Termina sola cuando la sesión pide DrainAndCloseAllAsync, que siempre ocurre antes de Ended.
+    Task listening = network.RunAsync(CancellationToken.None);
+
+    // La sesión sí recibe el apagado (D-084), y además un segundo motivo: que la red se caiga antes de tiempo.
+    using var stopSession = CancellationTokenSource.CreateLinkedTokenSource(shutdown);
+    Task<MatchResult> running = session.RunAsync(stopSession.Token);
+
+    // Si la red falla primero (por ejemplo, el puerto está ocupado), sin red no hay partida: en vez de esperar jugadores para
+    // siempre, se pide el apagado ordenado y después se propaga el error de la red.
+    if (await Task.WhenAny(listening, running) == listening && listening.IsFaulted)
+    {
+      await stopSession.CancelAsync();
+    }
+
+    MatchResult result = await running;
+    diagnostics.WriteFinalSummary(); // Los ticks ya están detenidos: no llegan más métricas (D-097, D-100).
+    await listening;                 // Ya terminó con el drenaje; si había fallado, acá se relanza su error.
+    return result;
   }
 
   /// <summary>
@@ -107,6 +122,19 @@ internal static class ServerComposition
         engine, config.Simulation, transport.StateSync, transport.Inbox, diagnostics, TimeProvider.System);
 
     return new SimulationPieces(loop, diagnostics);
+  }
+
+  /// <summary>
+  /// Paso 6 (contrato 10 §4): el consumidor único de la sesión. Va al final porque es el que necesita a casi todos: lee del buzón,
+  /// escribe la vista, habla con la red y State Sync por el adaptador de efectos (10 §5) y controla los ticks con el loop.
+  /// Sin logger: la O-011 sigue abierta (propuesta D-096).
+  /// </summary>
+  internal static ISessionHost CreateSession(ServerConfig config, TransportPieces transport, SimulationPieces simulation)
+  {
+    var effects = new SessionEffectsAdapter(transport.Network, transport.StateSync);
+    var machine = new SessionStateMachine(config.GameSession);
+    return new SessionHost(
+        transport.Inbox, transport.SessionView, machine, effects, simulation.Loop, config.GameSession, TimeProvider.System);
   }
 
   /// <summary>

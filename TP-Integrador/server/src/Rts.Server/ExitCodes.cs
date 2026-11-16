@@ -20,6 +20,9 @@ public static class ExitCodes
   /// <summary>TEMPORAL: la composición todavía no tiene implementaciones que instanciar (contrato 10 §5).</summary>
   public const int NotYetComposed = 4;
 
+  /// <summary>La red no pudo escuchar (por ejemplo, el puerto está ocupado): el servidor no arrancó.</summary>
+  public const int NetworkUnavailable = 5;
+
   /// <summary>Código de salida para un resultado oficial.</summary>
   public static int FromResult(MatchResult result)
   {

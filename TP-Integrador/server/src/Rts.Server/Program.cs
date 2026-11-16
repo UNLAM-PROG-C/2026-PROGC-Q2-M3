@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using Rts.Server;
@@ -102,6 +103,12 @@ try
   MatchResult result = await ServerComposition.RunMatchAsync(config, map, catalog, loggers, shutdown.Token);
   log.LogInformation("Partida terminada: {Type}, ganador {Winner}, motivo {Reason}.", result.ResultType, result.Winner?.ToString() ?? "ninguno", result.Reason);
   return ExitCodes.FromResult(result);
+}
+catch (SocketException ex)
+{
+  // La red no pudo escuchar (por ejemplo, el puerto está ocupado): la sesión ya se cerró ordenada, sin partida (D-085).
+  log.LogError("No se pudo escuchar en {Address}:{Port}: {Error}", config.Networking.ListenAddress, config.Networking.Port, ex.Message);
+  return ExitCodes.NetworkUnavailable;
 }
 catch (NotImplementedException ex)
 {

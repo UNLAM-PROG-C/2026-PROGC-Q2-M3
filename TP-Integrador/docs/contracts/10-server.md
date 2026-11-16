@@ -51,6 +51,7 @@ Se ejecuta **una vez** por proceso:
 | 2 | Configuración ilegible o inválida: no arrancó |
 | 3 | Argumentos inválidos |
 | 4 | **Temporal:** composición todavía sin implementaciones (§6) |
+| 5 | La red no pudo escuchar (por ejemplo, el puerto está ocupado): no arrancó |
 
 ## 3. Configuración
 
@@ -95,10 +96,11 @@ Cada paso usa solo lo creado en los anteriores (D-082):
 
 **Arranque y fin:**
 
-1. `network.RunAsync` empieza a aceptar conexiones en segundo plano.
-2. `await session.RunAsync(shutdown)` corre hasta `Ended`. Para entonces la sesión ya detuvo los ticks y drenó las conexiones.
-3. Se espera que termine la aceptación.
-4. Se devuelve el resultado.
+1. `network.RunAsync` empieza a aceptar conexiones en segundo plano. **No recibe el token de apagado:** deja de aceptar cuando la sesión pide `DrainAndCloseAllAsync`, que siempre ocurre antes de `Ended`. Así el primer Ctrl+C no corta la aceptación ni el heartbeat antes del drenaje ordenado.
+2. `await session.RunAsync(shutdown)` corre hasta `Ended`. Para entonces la sesión ya detuvo los ticks y drenó las conexiones. Si la red falla antes (por ejemplo, el puerto está ocupado), la composición pide el apagado ordenado de la sesión en vez de esperar jugadores para siempre.
+3. Se escribe el resumen final del diagnóstico de Simulation (D-100).
+4. Se espera que termine la aceptación. Si había fallado, su error sale de `RunMatchAsync` y el proceso sale con el código 5.
+5. Se devuelve el resultado.
 
 **Hilos en ejecución** (lo que se muestra en la defensa):
 
