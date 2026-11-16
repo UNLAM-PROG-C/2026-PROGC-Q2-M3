@@ -156,8 +156,8 @@ internal sealed class InboundRouter
       ErrorCode error = decision.Error!.Value;
       Send(ProtocolMessageTypes.CommandRejected, new CommandRejectedDto(gameplay.ClientCommandId.Value, error.Value));
 
-      // De los rechazos de la admisión, solo el límite por segundo es culpa del cliente (08 §6).
-      if (error == NetworkErrors.RateLimited)
+      // De los rechazos de la admisión, solo el límite por segundo es culpa del cliente (08 §6); lo decide la admisión.
+      if (decision.IsViolation)
       {
         RegisterViolation(error);
       }
