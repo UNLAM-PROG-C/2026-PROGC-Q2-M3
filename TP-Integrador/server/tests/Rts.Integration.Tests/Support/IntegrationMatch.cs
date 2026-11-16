@@ -1,4 +1,5 @@
 using Rts.Combat;
+using Rts.Construction;
 using Rts.Economy;
 using Rts.Integration.Tests.Stubs;
 using Rts.Movement;
@@ -19,8 +20,8 @@ namespace Rts.Integration.Tests.Support;
 
 /// <summary>
 /// Una partida armada como la armaría el servidor: la configuración de <c>server.example.json</c>, la cola de comandos real y
-/// el motor de <see cref="SimulationFactory"/> con Economy, Combat y Movement reales. Solo Construction y Production son stubs,
-/// porque todavía no existen. Los ticks se avanzan a mano (sin el loop de 20 Hz): la prueba es determinista y no espera.
+/// el motor de <see cref="SimulationFactory"/> con Economy, Combat, Movement y Construction reales. Solo Production es un stub,
+/// porque todavía no existe. Los ticks se avanzan a mano (sin el loop de 20 Hz): la prueba es determinista y no espera.
 /// </summary>
 internal sealed class IntegrationMatch
 {
@@ -123,7 +124,6 @@ internal sealed class IntegrationMatch
   private static DomainModules RealModules(ServerConfig config)
   {
     var movementRules = new MovementRules(config.Movement, config.Simulation.TickRate);
-    var construction = new ConstructionStub(config.Construction);
     var production = new ProductionStub();
     return new DomainModules(
         movementRules,
@@ -132,8 +132,8 @@ internal sealed class IntegrationMatch
         new EconomyCalculator(config.Economy),
         new CombatRules(config.Combat),
         new CombatCalculator(config.Combat),
-        construction,
-        construction,
+        new ConstructionRules(config.Construction),
+        new ConstructionCalculator(config.Construction),
         production,
         production);
   }

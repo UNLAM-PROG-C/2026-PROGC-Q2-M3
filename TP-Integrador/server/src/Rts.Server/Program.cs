@@ -1,3 +1,4 @@
+using System.Net.Sockets;
 using System.Runtime.InteropServices;
 using Microsoft.Extensions.Logging;
 using Rts.Server;
@@ -5,8 +6,10 @@ using Rts.Server.Composition;
 using Rts.Server.Configuration;
 using Rts.Server.Diagnostics;
 using Rts.Server.Validation;
+using Rts.Shared.Entities;
 using Rts.Shared.Match;
 using Rts.Shared.World;
+using Rts.Simulation.Map;
 
 // Programa principal (contrato 10). Se ejecuta una vez: leer, validar, componer, esperar el fin y salir. No contiene lógica de
 // juego; el bucle de ticks vive en Simulation.
@@ -54,6 +57,19 @@ if (errors.Count > 0)
   return ExitCodes.InvalidConfiguration;
 }
 
+// El contenido del mapa lo valida Simulation al cargarlo (contrato 06 §8). Se carga acá, antes de crear nada, para que un mapa
+// inválido salga como cualquier otra configuración inválida (contrato 10 §1).
+MapDefinition map;
+try
+{
+  map = MapLoader.Load(config.MapFile, config.Construction.FootprintSizes[BuildingType.MainCenter]);
+}
+catch (MapLoadException ex)
+{
+  log.LogError("{Error}", ex.Message);
+  return ExitCodes.InvalidConfiguration;
+}
+
 GameCatalog catalog = GameCatalogBuilder.Build(config);
 log.LogInformation(
     "Configuración válida: {Address}:{Port}, {TickRate} ticks/s, posiciones a {PositionRate} Hz, mapa '{Map}'.",
@@ -84,13 +100,13 @@ using PosixSignalRegistration sigterm = PosixSignalRegistration.Create(PosixSign
 // 4. Partida.
 try
 {
-  MatchResult result = await ServerComposition.RunMatchAsync(config, catalog, loggers, shutdown.Token);
+  MatchResult result = await ServerComposition.RunMatchAsync(config, map, catalog, loggers, shutdown.Token);
   log.LogInformation("Partida terminada: {Type}, ganador {Winner}, motivo {Reason}.", result.ResultType, result.Winner?.ToString() ?? "ninguno", result.Reason);
   return ExitCodes.FromResult(result);
 }
-catch (NotImplementedException ex)
+catch (SocketException ex)
 {
-  // TEMPORAL hasta la vertical slice (contrato 10 §6).
-  log.LogError("{Error}", ex.Message);
-  return ExitCodes.NotYetComposed;
+  // La red no pudo escuchar (por ejemplo, el puerto está ocupado): la sesión ya se cerró ordenada, sin partida (D-085).
+  log.LogError("No se pudo escuchar en {Address}:{Port}: {Error}", config.Networking.ListenAddress, config.Networking.Port, ex.Message);
+  return ExitCodes.NetworkUnavailable;
 }

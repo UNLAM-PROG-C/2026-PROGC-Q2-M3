@@ -1,6 +1,6 @@
 # Contrato 10 — Server (composición)
 
-> **Estado:** esqueleto implementado y probado (`server/src/Rts.Server`, `server/tests/Rts.Server.Tests`). Están completos: configuración, validación cruzada, catálogo, adaptador de efectos, diagnóstico de Simulation (D-100), códigos de salida y apagado ordenado. La creación de las piezas (§4) se completa en la vertical slice, cuando existan las implementaciones de los módulos.
+> **Estado:** implementado y probado (`server/src/Rts.Server`, `server/tests/Rts.Server.Tests`). El servidor arma las seis piezas reales en el orden de §4 y corre una partida completa; una prueba de punta a punta con dos clientes TCP la recorre entera (§6). Están completos también la configuración, la validación cruzada y la carga del mapa, el catálogo, el adaptador de efectos, el diagnóstico de Simulation (D-100), los códigos de salida y el apagado ordenado. **Provisorio:** Production, hasta que exista el módulo real (§6).
 > **Etiquetas:** **DECIDIDO** = aprobado por el equipo (ver [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **No es un módulo:** no tiene reglas de juego ni lógica de interacción. Es el `main()` del servidor (contrato 00 §1), y el único proyecto que referencia a todos.
 
@@ -9,7 +9,7 @@
 Se ejecuta **una vez** por proceso:
 
 1. lee los argumentos;
-2. lee y valida la configuración completa, incluidas las validaciones cruzadas;
+2. lee y valida la configuración completa, incluidas las validaciones cruzadas, y carga el mapa (un mapa inválido también sale con el código 2);
 3. arma el catálogo;
 4. crea las piezas en orden y las conecta;
 5. arranca la partida;
@@ -50,7 +50,8 @@ Se ejecuta **una vez** por proceso:
 | 1 | `CriticalError` (D-058) |
 | 2 | Configuración ilegible o inválida: no arrancó |
 | 3 | Argumentos inválidos |
-| 4 | **Temporal:** composición todavía sin implementaciones (§6) |
+| 4 | **Retirado** (era «composición pendiente», temporal). No se reutiliza |
+| 5 | La red no pudo escuchar (por ejemplo, el puerto está ocupado): no arrancó |
 
 ## 3. Configuración
 
@@ -90,15 +91,16 @@ Cada paso usa solo lo creado en los anteriores (D-082):
 | 2 | Buzón y vista de sesión (GameSession) | capacidad, estado inicial | `ISessionEventSink` + `IMatchResultSink`; `ISessionGate` |
 | 3 | `NetworkServer` | 1, 2, configuración | recibe, admite, escribe |
 | 4 | `StateSyncPublisher` | 3 (como `IClientOutbox`), catálogo | proyecta y encola |
-| 5 | Mapa, `SimulationEngine` (con los 5 módulos de dominio) y `SimulationLoop` | 1, 4 (como `ITickPublisher`), buzón (como `IMatchResultSink`) | ticks |
+| 5 | `SimulationEngine` (con el mapa ya cargado y los 5 módulos de dominio) y `SimulationLoop` | 1, 4 (como `ITickPublisher`), buzón (como `IMatchResultSink`) | ticks |
 | 6 | `SessionEffectsAdapter` y `SessionHost` | 2, 3, 4, 5 (como `ISimulationControl`) | máquina de estados de la sesión |
 
 **Arranque y fin:**
 
-1. `network.RunAsync` empieza a aceptar conexiones en segundo plano.
-2. `await session.RunAsync(shutdown)` corre hasta `Ended`. Para entonces la sesión ya detuvo los ticks y drenó las conexiones.
-3. Se espera que termine la aceptación.
-4. Se devuelve el resultado.
+1. `network.RunAsync` empieza a aceptar conexiones en segundo plano. **No recibe el token de apagado:** deja de aceptar cuando la sesión pide `DrainAndCloseAllAsync`, que siempre ocurre antes de `Ended`. Así el primer Ctrl+C no corta la aceptación ni el heartbeat antes del drenaje ordenado.
+2. `await session.RunAsync(shutdown)` corre hasta `Ended`. Para entonces la sesión ya detuvo los ticks y drenó las conexiones. Si la red falla antes (por ejemplo, el puerto está ocupado), la composición pide el apagado ordenado de la sesión en vez de esperar jugadores para siempre.
+3. Se escribe el resumen final del diagnóstico de Simulation (D-100).
+4. Se espera que termine la aceptación. Si había fallado, su error sale de `RunMatchAsync` y el proceso sale con el código 5.
+5. Se devuelve el resultado.
 
 **Hilos en ejecución** (lo que se muestra en la defensa):
 
@@ -123,14 +125,26 @@ Cada paso usa solo lo creado en los anteriores (D-082):
 
 ## 6. Estado actual y pendientes
 
-- `ServerComposition.RunMatchAsync` documenta en código el orden de §4 y por ahora lanza `NotImplementedException`; el programa sale con el código 4.
-- `rts-server --validate-only` ya funciona: carga, valida, arma el catálogo y muestra el resumen.
-- **Listo del lado de Simulation:** la cola de comandos (`CommandQueue`), el cargador de mapa (`MapLoader`) y la fábrica `SimulationFactory` (`CreateEngine`, `CreateLoop`), que reciben los cinco módulos de dominio agrupados en `DomainModules` (D-090) y el observador de diagnóstico (D-095).
-- **Listo del lado del Server:** `LoggingSimulationDiagnostics`, que la composición pasa a `CreateLoop` y al que le pide `WriteFinalSummary()` al terminar (D-100).
-- **Listo en otros módulos** (2026-11-15): buzón, vista y `SessionHost` (GameSession); reglas y calculadores de Economy, Combat y Movement (este último solo mueve órdenes `Move`; las de tarea están pendientes, 04 §5).
-- **PENDIENTE:** las implementaciones que faltan para completar la composición:
-  - `NetworkServer` (Networking) y `StateSyncPublisher` (State Sync);
-  - reglas y calculadores de Construction y Production.
+**Composición (2026-11-16).** `ServerComposition.RunMatchAsync` arma las piezas en tres grupos, uno por método, cada uno probado por separado:
 
-  Se agregan en la vertical slice (AGENTS §8).
-- **PENDIENTE:** el archivo de mapa real (formato D-052) y los valores definitivos de configuración.
+| Método | Piezas de §4 | Devuelve |
+|---|---|---|
+| `CreateTransport` | 1 a 4: cola de comandos, buzón y vista de sesión, `NetworkServer`, `StateSyncPublisher` | `TransportPieces` |
+| `CreateSimulation` | 5: motor con los cinco módulos de dominio (`CreateDomainModules`) y loop, con `LoggingSimulationDiagnostics` | `SimulationPieces` (loop y diagnóstico) |
+| `CreateSession` | 6: `SessionStateMachine`, `SessionEffectsAdapter` y `SessionHost` | `ISessionHost` |
+
+Crear no arranca nada: la red escucha recién en `RunAsync` y los ticks los arranca GameSession con `StartTicks`. Después corre la secuencia de «Arranque y fin» de §4.
+
+**Pruebas** (`server/tests/Rts.Server.Tests`):
+
+- `Composition/ServerCompositionTests`: cada grupo por separado, el apagado sin jugadores (`ServerShutdown`) y el puerto ocupado (código 5).
+- `EndToEnd/FullMatchTests`: **prueba de punta a punta.** Dos clientes TCP que hablan JSON crudo por líneas, como Godot: `Hello` → `PlayerAssigned` → `InitialState` → `ClientReady` → `MatchStarted` → un `Stop` aceptado y un `TrainUnit` rechazado, de ida y vuelta → Ctrl+C → `MatchEnded` antes que `Disconnecting` → cierre.
+
+**Provisorio:** `UnavailableProduction` ocupa el lugar de Production: rechaza todo `TrainUnit` con `Production.NotAvailable` y nunca lanza (ver «Comportamientos provisorios» en [decisiones](../decisions.md)). Se reemplaza por las reglas y el calculador reales en `CreateDomainModules` cuando existan, junto con el stub de `Rts.Integration.Tests` y `Rts.Measurement`.
+
+**PENDIENTE:**
+
+- Production real (ver arriba).
+- Prueba manual con el cliente Godot real: dos instancias contra `rts-server` (08 §11).
+- Logging de `SessionHost`: se le pasará `ILogger<T>` si se acepta la D-096 (O-011).
+- El archivo de mapa real (formato D-052) y los valores definitivos de configuración.
