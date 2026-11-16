@@ -2,6 +2,7 @@ using System.Text;
 using Rts.Networking.Parsing;
 using Rts.Shared.Collections;
 using Rts.Shared.Commands;
+using Rts.Shared.Entities;
 using Rts.Shared.Errors;
 using Rts.Shared.Geometry;
 using Rts.Shared.Ids;
@@ -120,7 +121,6 @@ public class InboundMessageParserTests
   // Decisión provisoria de Flor (opción A): los comandos de la fase 2 todavía no se convierten.
   [Theory]
   [InlineData("Build")]
-  [InlineData("TrainUnit")]
   [InlineData("RepathResponse")]
   public void Parse_GameplayTypeNotYetSupported_ReturnsUnknownTypeViolation(string type)
   {
@@ -400,6 +400,39 @@ public class InboundMessageParserTests
     ];
 
     Assert.All(lines, line => AssertInvalidCommand(ParseLine(line), 7));
+  }
+
+  // TrainUnit: productor y tipo de unidad (el enum viaja como texto, nunca como número).
+  [Fact]
+  public void Parse_ValidTrainUnit_ReturnsGameplayMessageWithTrainUnitCommand()
+  {
+    var result = ParseLine("""{"protocolVersion":1,"type":"TrainUnit","messageId":4,"payload":{"producerId":1,"unitType":"Soldier"}}""");
+
+    Assert.Equal(ParseOutcome.Parsed, result.Outcome);
+    Assert.Equal(new GameplayMessage(new ClientCommandId(4), new TrainUnitCommand(new EntityId(1), UnitType.Soldier)), result.Message);
+  }
+
+  [Fact]
+  public void Parse_TrainUnitWithoutMessageId_ReturnsInvalidMessageIdViolation()
+  {
+    var result = ParseLine("""{"protocolVersion":1,"type":"TrainUnit","payload":{"producerId":1,"unitType":"Worker"}}""");
+
+    AssertViolation(result, NetworkErrors.InvalidMessageId);
+  }
+
+  // Tipo desconocido, como número o ausente; productor que no es entero o es 0; sin payload.
+  [Theory]
+  [InlineData("""{"producerId":1,"unitType":"Dragon"}""")]
+  [InlineData("""{"producerId":1,"unitType":1}""")]
+  [InlineData("""{"producerId":1}""")]
+  [InlineData("""{"producerId":"uno","unitType":"Worker"}""")]
+  [InlineData("""{"producerId":0,"unitType":"Worker"}""")]
+  [InlineData("null")]
+  public void Parse_TrainUnitWithBadPayload_ReturnsInvalidCommand(string payload)
+  {
+    var result = ParseLine("""{"protocolVersion":1,"type":"TrainUnit","messageId":4,"payload":""" + payload + "}");
+
+    AssertInvalidCommand(result, 4);
   }
 
   // El playerId nunca viene del cliente: si lo manda, se ignora.

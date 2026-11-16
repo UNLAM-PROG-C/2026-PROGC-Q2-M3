@@ -107,6 +107,10 @@ internal sealed class InboundMessageParser : IInboundMessageParser
       ProtocolMessageTypes.RepairFarm => ParseGameplay<RepairFarmCommandDto>(type, payload, messageId,
           dto => new RepairFarmCommand(new EntityId(dto.FarmId), new MapRevision(dto.RouteMapRevision), ReadRoutes(type, dto.Routes))),
 
+      // Un tipo de unidad desconocido no llega al constructor: el deserializador ya lo rechaza (enums solo como texto).
+      ProtocolMessageTypes.TrainUnit => ParseGameplay<TrainUnitCommandDto>(type, payload, messageId,
+          dto => new TrainUnitCommand(new EntityId(dto.ProducerId), dto.UnitType)),
+
       // Llegan acá los comandos de gameplay de la fase 2: se reconocen pero todavía no se convierten (decisión provisoria).
       _ => ParseResult.Violation(NetworkErrors.UnknownType, messageId, $"El tipo '{type}' todavía no está soportado."),
     };
