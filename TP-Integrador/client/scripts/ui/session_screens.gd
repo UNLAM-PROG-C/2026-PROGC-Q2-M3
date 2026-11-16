@@ -443,7 +443,7 @@ func _build_ui() -> void:
 	_result_detail = _make_detail("ResultDetail")
 	result_box.add_child(_result_title)
 	result_box.add_child(_result_detail)
-	_menu_button = _make_button("MenuButton", "Volver al menú", _on_menu_pressed)
+	_menu_button = _make_button("MenuButton", "Volver atrás", _on_menu_pressed)
 	result_box.add_child(_menu_button)
 
 

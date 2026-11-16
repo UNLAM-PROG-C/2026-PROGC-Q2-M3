@@ -97,7 +97,7 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -0.5253805, 0, -0.114613056)
 
 [node name="MenuLayer" type="CanvasLayer" parent="." unique_id=76055057]
 
-[node name="MainMenu" type="Control" parent="MenuLayer" unique_id=394141823]
+[node name="MenuUI" type="Control" parent="MenuLayer" unique_id=394141823]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
@@ -107,7 +107,7 @@ grow_vertical = 2
 theme = ExtResource("16_theme")
 script = ExtResource("17_menu")
 
-[node name="Margin" type="MarginContainer" parent="MenuLayer/MainMenu" unique_id=185109549]
+[node name="Margin" type="MarginContainer" parent="MenuLayer/MenuUI" unique_id=185109549]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -117,12 +117,12 @@ grow_vertical = 2
 mouse_filter = 2
 theme_override_constants/margin_bottom = 24
 
-[node name="Buttons" type="VBoxContainer" parent="MenuLayer/MainMenu/Margin" unique_id=1599967231]
+[node name="Buttons" type="VBoxContainer" parent="MenuLayer/MenuUI/Margin" unique_id=1599967231]
 layout_mode = 2
 mouse_filter = 2
 alignment = 2
 
-[node name="PlayButton" type="Button" parent="MenuLayer/MainMenu/Margin/Buttons" unique_id=860837530]
+[node name="PlayButton" type="Button" parent="MenuLayer/MenuUI/Margin/Buttons" unique_id=860837530]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(260, 64)
 layout_mode = 2

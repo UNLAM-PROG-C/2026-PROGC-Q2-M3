@@ -6,6 +6,8 @@ signal building_selection_changed(building_id: int)
 signal command_failed(error_code: String, detail: String)
 ## Marcador visual inmediato de una orden de clic derecho (work-plan §2): tipo de orden y lugar.
 signal command_marker_shown(command_type: String, world_position: Vector3)
+## Se soltó el clic de un cuadro de selección (no se emite con un clic simple).
+signal box_selection_finished(unit_ids: Array[int])
 
 const SELECTION_PICK_RADIUS_PIXELS := 32.0
 ## Distancia en píxeles a partir de la cual un clic izquierdo se vuelve rectángulo de selección.
@@ -132,6 +134,7 @@ func _unhandled_input(event: InputEvent) -> void:
 				_is_box_selecting = false
 				_update_selection_box(Rect2())
 				select_in_screen_rect(Rect2(_press_position, mouse_event.position - _press_position).abs())
+				box_selection_finished.emit(selected_unit_ids.duplicate())
 			else:
 				select_at_screen_position(mouse_event.position)
 		return

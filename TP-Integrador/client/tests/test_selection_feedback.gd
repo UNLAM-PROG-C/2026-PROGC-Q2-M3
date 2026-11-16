@@ -87,6 +87,8 @@ func _test_box_selection_with_input_events() -> void:
 	var controller: Node = setup["controller"]
 	var start := _screen_position(setup, 3) - Vector2(30, 30)
 	var end := _screen_position(setup, 4) + Vector2(30, 30)
+	var finished: Array = []
+	controller.box_selection_finished.connect(func(ids: Array) -> void: finished.append(ids))
 	_push_mouse_button(MOUSE_BUTTON_LEFT, true, start)
 	_check(not controller.is_box_selecting(), "A press alone is not a box selection.")
 	var motion := InputEventMouseMotion.new()
@@ -97,10 +99,12 @@ func _test_box_selection_with_input_events() -> void:
 	_check(box != null and box.visible and box.size.x > 50.0, "The selection box is drawn while dragging.")
 	_push_mouse_button(MOUSE_BUTTON_LEFT, false, end)
 	_check(controller.get_selected_units() == [3, 4], "Releasing selects the units inside the box.")
+	_check(finished == [[3, 4]], "Finishing a box notifies it once, with the selected units.")
 	_check(box != null and not box.visible, "The selection box hides on release.")
 	_push_mouse_button(MOUSE_BUTTON_LEFT, true, _screen_position(setup, 4))
 	_push_mouse_button(MOUSE_BUTTON_LEFT, false, _screen_position(setup, 4))
 	_check(controller.get_selected_units() == [4], "A click without dragging selects a single unit on release.")
+	_check(finished.size() == 1, "A simple click is not a finished selection box.")
 	await process_frame
 	_free_setup(setup)
 

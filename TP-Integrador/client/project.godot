@@ -19,6 +19,7 @@ config/icon="res://icon.svg"
 
 NetworkClient="*res://scripts/network/network_client.gd"
 SessionController="*res://scripts/session_controller.gd"
+CursorManager="*res://scripts/ui/cursor_manager.gd"
 
 [display]
 
