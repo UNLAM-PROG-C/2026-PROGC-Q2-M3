@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Rts.Networking.Admission;
 using Rts.Shared.Commands;
 using Rts.Shared.Ids;
@@ -16,15 +17,38 @@ internal sealed class FakeSessionGate : ISessionGate
   /// <summary>Jugador que devuelve <see cref="GetPlayer"/>; <c>null</c> simula una conexión sin plaza.</summary>
   public PlayerId? Player { get; set; } = PlayerId.One;
 
-  public List<ConnectionId> PlayerLookups { get; } = [];
+  /// <summary>Jugador de cada conexión; si una conexión no está acá, <see cref="GetPlayer"/> devuelve <see cref="Player"/>.</summary>
+  public ConcurrentDictionary<ConnectionId, PlayerId> PlayersByConnection { get; } = new();
+
+  private readonly object _lock = new();
+  private readonly List<ConnectionId> _playerLookups = [];
+
+  public IReadOnlyList<ConnectionId> PlayerLookups
+  {
+    get
+    {
+      lock (_lock)
+      {
+        return [.. _playerLookups];
+      }
+    }
+  }
 
   public PlayerId? GetPlayer(ConnectionId connection)
   {
-    PlayerLookups.Add(connection);
-    return Player;
+    lock (_lock)
+    {
+      _playerLookups.Add(connection);
+    }
+
+    return PlayersByConnection.TryGetValue(connection, out PlayerId player) ? player : Player;
   }
 
-  public ConnectionId? GetConnection(PlayerId player) => null;
+  /// <summary>Conexión que devuelve <see cref="GetConnection"/>; <c>null</c> simula un jugador desconectado.</summary>
+  public ConnectionId? ConnectionOfPlayer { get; set; }
+
+  public ConnectionId? GetConnection(PlayerId player) =>
+      ConnectionOfPlayer ?? PlayersByConnection.Where(pair => pair.Value == player).Select(pair => (ConnectionId?)pair.Key).FirstOrDefault();
 }
 
 internal sealed class FakeRateLimiter : ICommandRateLimiter
@@ -44,11 +68,28 @@ internal sealed class FakeCommandSink : ICommandSink
 {
   public CommandAdmission Result { get; set; } = CommandAdmission.Admitted(new CommandSequence(1));
 
-  public List<(PlayerId Player, ClientCommandId ClientCommandId, IGameCommand Command)> Calls { get; } = [];
+  private readonly object _lock = new();
+  private readonly List<(PlayerId Player, ClientCommandId ClientCommandId, IGameCommand Command)> _calls = [];
+
+  /// <summary>Los receptores de cada conexión lo llaman a la vez, por eso se protege la lista.</summary>
+  public IReadOnlyList<(PlayerId Player, ClientCommandId ClientCommandId, IGameCommand Command)> Calls
+  {
+    get
+    {
+      lock (_lock)
+      {
+        return [.. _calls];
+      }
+    }
+  }
 
   public CommandAdmission Admit(PlayerId player, ClientCommandId clientCommandId, IGameCommand command)
   {
-    Calls.Add((player, clientCommandId, command));
+    lock (_lock)
+    {
+      _calls.Add((player, clientCommandId, command));
+    }
+
     return Result;
   }
 }

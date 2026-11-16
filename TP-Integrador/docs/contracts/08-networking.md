@@ -1,6 +1,6 @@
 # Contrato 08 — Networking
 
-> **Estado:** primera versión de contratos implementada (`server/src/Rts.Networking`, DTOs en `server/src/Rts.Protocol`) y probada (`server/tests/Rts.Networking.Tests`, `server/tests/Rts.Protocol.Tests`). El servidor TCP, el framing, el parser y las colas **todavía no tienen lógica**.
+> **Estado:** primera versión de contratos implementada (`server/src/Rts.Networking`, DTOs en `server/src/Rts.Protocol`) y probada (`server/tests/Rts.Networking.Tests`, `server/tests/Rts.Protocol.Tests`). Con lógica y pruebas: framing, parser (`Hello`, `ClientReady`, `Ping`/`Pong`, `Move`), admisión, cola de salida con `SendLoop` y el servidor TCP (aceptación, receptor, ruteo y conexión con cierre único). **Todavía sin lógica:** el resto de los comandos del parser, el cierre por abuso, el heartbeat, el timeout de handshake, el tope de conexiones pendientes, el drenaje final y las métricas.
 > **Etiquetas:** **DECIDIDO** = aprobado por el equipo (ver [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Módulo:** [08 — Networking](../modules/08-networking.md). **Vecinos:** [06 Simulation](06-simulation.md), [07 GameSession](07-game-session.md), [09 State Sync](09-state-sync.md).
 

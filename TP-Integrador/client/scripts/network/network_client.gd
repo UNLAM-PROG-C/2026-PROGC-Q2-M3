@@ -35,6 +35,16 @@ const CLIENT_MESSAGE_TYPES := [
 
 @export var client_name := "godot-agus"
 @export var max_inbound_message_bytes: int = FrameDecoder.DEFAULT_MAX_MESSAGE_BYTES
+## Heartbeat propio (RECOMENDADO D-079, simétrico al del servidor): si el servidor no manda
+## nada durante este tiempo, el cliente le envía un Ping.
+@export var ping_idle_seconds := 5.0
+## Sin ninguna respuesta del servidor durante este tiempo después del Ping, la conexión se
+## da por perdida. Es generoso a propósito: cerrar por error durante Running le daría la
+## victoria al rival (08 §6). Los valores del servidor todavía son PENDIENTE (08 §10).
+@export var pong_timeout_seconds := 15.0
+
+## Motivo de cierre cuando el servidor deja de responder al heartbeat del cliente.
+const SERVER_NOT_RESPONDING := "ServerNotResponding"
 
 var connection_state: int = State.DISCONNECTED
 
@@ -48,6 +58,10 @@ var _connection_client_name := ""
 var _connection_attempt_active := false
 var _close_notified := true
 var _accept_outbound := false
+var _last_inbound_usec := 0
+var _heartbeat_ping_id := 0
+var _heartbeat_sent_usec := 0
+var _next_heartbeat_ping_id := 1
 
 
 func _ready() -> void:
@@ -94,6 +108,31 @@ func _process(_delta: float) -> void:
 	_flush_outbound()
 	if connection_state == State.CLOSING and _outbound.is_empty():
 		_finish_connection(_close_reason)
+		return
+	update_heartbeat(Time.get_ticks_usec())
+
+
+## Heartbeat del cliente. Cualquier mensaje válido del servidor cuenta como señal de vida
+## (igual que en el servidor con los del cliente, D-079), así que en Running, con posiciones
+## a 10 Hz, casi nunca hace falta un Ping: sirve sobre todo en la espera y en Starting.
+func update_heartbeat(now_usec: int) -> void:
+	if connection_state != State.CONNECTED or not _accept_outbound:
+		return
+	if _heartbeat_ping_id > 0:
+		if now_usec - _heartbeat_sent_usec >= int(pong_timeout_seconds * 1_000_000.0):
+			_fail_connection(SERVER_NOT_RESPONDING, "El servidor no respondió al Ping %d." % _heartbeat_ping_id)
+		return
+	if now_usec - _last_inbound_usec >= int(ping_idle_seconds * 1_000_000.0):
+		var ping_id := _next_heartbeat_ping_id
+		_next_heartbeat_ping_id += 1
+		if send_message("Ping", {"pingId": ping_id}):
+			_heartbeat_ping_id = ping_id
+			_heartbeat_sent_usec = now_usec
+
+
+## Ping propio pendiente de respuesta (0 si no hay).
+func pending_heartbeat_ping_id() -> int:
+	return _heartbeat_ping_id
 
 
 func connect_to_server(host: String, port: int, hello_client_name: String = client_name) -> Error:
@@ -185,6 +224,8 @@ func _on_tcp_connected() -> void:
 	var hello_result: Dictionary = Codec.encode_message("Hello", hello_payload)
 	_outbound.append(hello_result["bytes"])
 	_accept_outbound = true
+	_last_inbound_usec = Time.get_ticks_usec()
+	_heartbeat_ping_id = 0
 	_set_state(State.CONNECTED)
 
 
@@ -230,6 +271,9 @@ func _handle_frame(frame: PackedByteArray) -> bool:
 
 	var envelope: Dictionary = parse_result["envelope"]
 	var message_type: String = envelope["type"]
+	# Un mensaje válido del servidor demuestra que sigue vivo: se da por respondido el Ping.
+	_last_inbound_usec = Time.get_ticks_usec()
+	_heartbeat_ping_id = 0
 	var payload: Variant = parse_result["payload"]
 
 	if message_type == "Ping":

@@ -39,7 +39,14 @@ public enum ParseOutcome
 /// </summary>
 public sealed record ParseResult
 {
-  private ParseResult(ParseOutcome outcome, InboundMessage? message, ErrorCode? error, long? messageId, ClientCommandId? clientCommandId, string? detail)
+  private ParseResult(
+      ParseOutcome outcome,
+      InboundMessage? message,
+      ErrorCode? error,
+      long? messageId,
+      ClientCommandId? clientCommandId,
+      string? detail,
+      string? messageType = null)
   {
     Outcome = outcome;
     Message = message;
@@ -47,6 +54,7 @@ public sealed record ParseResult
     MessageId = messageId;
     ClientCommandId = clientCommandId;
     Detail = detail;
+    MessageType = messageType;
   }
 
   public ParseOutcome Outcome { get; }
@@ -63,6 +71,12 @@ public sealed record ParseResult
   /// <summary>Explicación breve para el cliente y los logs.</summary>
   public string? Detail { get; }
 
+  /// <summary>
+  /// <c>type</c> del sobre, solo en <c>UnsupportedVersion</c>: un <c>Hello</c> con otra versión cierra la conexión y cualquier otro
+  /// mensaje con otra versión es una falta (08 §3).
+  /// </summary>
+  public string? MessageType { get; }
+
   /// <summary>El mensaje cuenta como falta.</summary>
   public bool IsViolation => Outcome != ParseOutcome.Parsed;
 
@@ -72,10 +86,10 @@ public sealed record ParseResult
     return new ParseResult(ParseOutcome.Parsed, message, null, null, null, null);
   }
 
-  public static ParseResult Violation(ErrorCode error, long? messageId, string detail)
+  public static ParseResult Violation(ErrorCode error, long? messageId, string detail, string? messageType = null)
   {
     RequireError(error);
-    return new ParseResult(ParseOutcome.ProtocolViolation, null, error, messageId, null, detail);
+    return new ParseResult(ParseOutcome.ProtocolViolation, null, error, messageId, null, detail, messageType);
   }
 
   public static ParseResult InvalidCommand(ClientCommandId clientCommandId, string detail)
