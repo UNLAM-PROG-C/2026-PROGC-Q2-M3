@@ -8,6 +8,10 @@ signal world_preparation_failed(initialization_id: int, detail: String)
 signal world_discarded(initialization_id: int)
 signal unit_removed(unit_id: int)
 signal building_removed(building_id: int)
+## Unidad creada durante la partida (UnitSpawned), ya en el mundo.
+signal unit_spawned(unit_id: int)
+## Entidad dañada (EntityDamaged), con su HP ya actualizado.
+signal entity_damaged(entity_id: int)
 signal world_sync_warning(error_code: String, detail: String)
 signal world_sync_failed(detail: String)
 signal map_revision_changed(revision: int)
@@ -1805,6 +1809,7 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 			units_parent.add_child(unit_node)
 			entities_by_id[int(unit["unitId"])] = unit_node
 			_store_entity_snapshot(int(unit["unitId"]), unit)
+			unit_spawned.emit(int(unit["unitId"]))
 			_add_position_sample(
 				int(unit["unitId"]),
 				tick,
@@ -1839,6 +1844,7 @@ func _apply_state_event(event: Dictionary, tick: int) -> Dictionary:
 			event_notification = {"type": "map_revision", "revision": int(event["revision"])}
 		"EntityDamaged":
 			_update_entity_state(int(event["entityId"]), {"hp": int(event["hp"])})
+			entity_damaged.emit(int(event["entityId"]))
 		"EntityDestroyed":
 			var entity_id := int(event["entityId"])
 			var node: Node3D = entities_by_id[entity_id]

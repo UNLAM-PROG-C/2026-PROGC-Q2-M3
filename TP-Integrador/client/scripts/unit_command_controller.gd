@@ -8,6 +8,9 @@ signal command_failed(error_code: String, detail: String)
 signal command_marker_shown(command_type: String, world_position: Vector3)
 ## Se soltó el clic de un cuadro de selección (no se emite con un clic simple).
 signal box_selection_finished(unit_ids: Array[int])
+## El jugador seleccionó algo con un clic o un rectángulo (no se emite al limpiar la selección
+## ni cuando una unidad seleccionada muere).
+signal selection_made
 
 const SELECTION_PICK_RADIUS_PIXELS := 32.0
 ## Distancia en píxeles a partir de la cual un clic izquierdo se vuelve rectángulo de selección.
@@ -170,10 +173,12 @@ func select_at_screen_position(screen_position: Vector2) -> void:
 	if not candidates.is_empty():
 		var picked: Array[int] = [candidates[index]]
 		set_selected_units(picked)
+		selection_made.emit()
 		return
 	var building_id := _pick_own_building(_mouse_to_map_position(screen_position))
 	if building_id > 0:
 		set_selected_building(building_id)
+		selection_made.emit()
 	else:
 		clear_selection()
 		_clear_building_selection()
@@ -195,6 +200,7 @@ func select_in_screen_rect(screen_rect: Rect2) -> void:
 		_clear_building_selection()
 	else:
 		set_selected_units(picked)
+		selection_made.emit()
 
 
 func is_box_selecting() -> bool:

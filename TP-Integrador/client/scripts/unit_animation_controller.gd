@@ -9,6 +9,17 @@ extends Node
 
 const AnimationLoops = preload("res://scripts/animation_loops.gd")
 
+## Cambió lo que hace una unidad quieta: "gather", "build", "attack" o "" (nada / caminando).
+## Lo usa el sonido para los golpes de trabajo y de combate.
+signal unit_activity_changed(unit_id: int, activity: String)
+
+const ORDER_ACTIVITIES := {
+	"GatherWood": "gather",
+	"Build": "build",
+	"RepairFarm": "build",
+	"Attack": "attack",
+}
+
 const LIBRARY_NAME := "rts"
 const IDLE := "idle"
 const WALK := "walk"
@@ -25,6 +36,7 @@ const BLEND_SECONDS := 0.15
 
 var _world: Node
 var _last_positions: Dictionary = {}
+var _activities: Dictionary = {}
 
 
 func _ready() -> void:
@@ -38,6 +50,8 @@ func _process(delta: float) -> void:
 func update_units(delta: float) -> void:
 	if _world == null or _world.get("active_world") == null:
 		_last_positions.clear()
+		for unit_id: Variant in _activities.keys():
+			_set_activity(int(unit_id), "")
 		return
 	var alive: Dictionary = {}
 	for entity_id: Variant in _world.entities_by_id:
@@ -57,9 +71,34 @@ func update_units(delta: float) -> void:
 			unit.rotation.y = lerp_angle(unit.rotation.y, target_yaw, clampf(TURN_SPEED * delta, 0.0, 1.0))
 		var order := str(unit.get_meta("entity_state", {}).get("order", "Idle"))
 		play(unit, animation_for(order, moving))
+		_set_activity(unit_id, activity_for(order, moving))
 	for unit_id: Variant in _last_positions.keys():
 		if not alive.has(unit_id):
 			_last_positions.erase(unit_id)
+	# Una unidad que murió o desapareció deja de trabajar (su cuerpo puede seguir un rato).
+	for unit_id: Variant in _activities.keys():
+		if not alive.has(unit_id):
+			_set_activity(int(unit_id), "")
+
+
+static func activity_for(order: String, moving: bool) -> String:
+	if moving:
+		return ""
+	return ORDER_ACTIVITIES.get(order, "")
+
+
+func activity_of(unit_id: int) -> String:
+	return _activities.get(unit_id, "")
+
+
+func _set_activity(unit_id: int, activity: String) -> void:
+	if str(_activities.get(unit_id, "")) == activity:
+		return
+	if activity.is_empty():
+		_activities.erase(unit_id)
+	else:
+		_activities[unit_id] = activity
+	unit_activity_changed.emit(unit_id, activity)
 
 
 static func animation_for(order: String, moving: bool) -> String:
