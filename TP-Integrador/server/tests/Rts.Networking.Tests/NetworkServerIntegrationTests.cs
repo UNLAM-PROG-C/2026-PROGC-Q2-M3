@@ -30,7 +30,7 @@ public class NetworkServerIntegrationTests
 
   private static string PongLine(long pingId) => "{\"protocolVersion\":1,\"type\":\"Pong\",\"payload\":{\"pingId\":" + pingId + "}}";
 
-  private static async Task WaitUntil(Func<bool> condition)
+  internal static async Task WaitUntil(Func<bool> condition)
   {
     var deadline = DateTime.UtcNow + Patience;
     while (!condition())
@@ -41,7 +41,7 @@ public class NetworkServerIntegrationTests
   }
 
   /// <summary>Conecta dos clientes con su Hello y registra sus plazas en el gate, como haría GameSession.</summary>
-  private static async Task<(TestClient First, ConnectionId FirstId, TestClient Second, ConnectionId SecondId)> ConnectTwoPlayersAsync(
+  internal static async Task<(TestClient First, ConnectionId FirstId, TestClient Second, ConnectionId SecondId)> ConnectTwoPlayersAsync(
       NetworkServerHarness harness)
   {
     TestClient first = await harness.ConnectAsync();
