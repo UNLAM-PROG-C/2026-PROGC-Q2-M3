@@ -3,6 +3,7 @@
 > **Para:** Agus, Luca, Flor, Ivan, Coro y Joaco.
 > **Qué es:** quién hace qué, en qué orden y cómo trabajamos juntos. **No** explica los módulos: para eso están los contratos (`docs/contracts/`), que dicen qué construir, qué recibe y devuelve cada pieza, qué esperan los vecinos y qué pruebas hacen falta.
 > **Antes de empezar:** leer `AGENTS.md`, el contrato de cada módulo propio y la sección "lo que deben hacer los demás" de los contratos vecinos.
+> **Estado (2026-11-18):** las Fases 0 a 3 están hechas, con todos los módulos integrados y probados de punta a punta, también con el cliente Godot. De la Fase 4 solo falta el **balance** (números y mapa) y preparar la defensa (§3).
 
 ## 1. Reparto
 
@@ -17,7 +18,7 @@ Los módulos se agrupan por afinidad y por tamaño: no son todos iguales, así q
 | **Joaco** | GameSession + Production | 07, 05 | Dos máquinas de estado con colas: la vida de la partida y la cola de entrenamiento |
 | **Agus** | Cliente Godot | 08 §2, 09, 04 §2 | Ya venía trabajando en Godot |
 
-**La asignación de Flor, Ivan, Coro y Joaco es tentativa:** pueden intercambiar los grupos según preferencias o fortalezas. Lo importante es que cada grupo tenga un dueño.
+~~**La asignación de Flor, Ivan, Coro y Joaco es tentativa.**~~ Quedó como en la tabla: cada grupo tuvo su dueño.
 
 **Ser dueño** significa:
 - implementar la lógica y sus pruebas;
@@ -90,11 +91,13 @@ El cliente Godot está **desacoplado del servidor**: la única unión entre los 
 
 ### Idea para más adelante: servidor falso
 
-Un programa chico que hable el protocolo de verdad sobre TCP. Aceptaría el `Hello`, enviaría `PlayerAssigned`, `InitialState` y `MatchStarted`, reproduciría los ejemplos a 20 Hz y movería en línea recta las unidades de un `Move`. Le permitiría a Agus probar su código de red antes de que exista la vertical slice. No se hace por ahora; se evalúa si hace falta.
+Un programa chico que hable el protocolo de verdad sobre TCP. Aceptaría el `Hello`, enviaría `PlayerAssigned`, `InitialState` y `MatchStarted`, reproduciría los ejemplos a 20 Hz y movería en línea recta las unidades de un `Move`. Le permitiría a Agus probar su código de red antes de que exista la vertical slice. ~~No se hace por ahora; se evalúa si hace falta.~~ No se hizo: la vertical slice llegó antes y no hizo falta.
 
 ## 3. Fases
 
 Las fases no tienen fecha: pónganla en la primera reunión. Los módulos de dominio son funciones puras, así que **todos arrancan en paralelo desde el día 1**.
+
+**Estado (2026-11-18):** Fases 0 a 3 hechas. De la Fase 4 quedan el balance (números y mapa) y la defensa.
 
 ### Fase 0 — Puesta en marcha
 
@@ -139,7 +142,7 @@ Todos:
 ### Fase 4 — Cierre
 
 - **Balance:** Coro, Ivan y Joaco proponen los números y el equipo los aprueba. Se registran en `decisions.md` y reemplazan los valores temporales de `server/config/server.example.json`.
-- **Mapa:** Agus e Ivan arman el mapa (formato D-052).
+- **Mapa:** Agus e Ivan arman el mapa (formato D-052). Es parte del balance; hasta entonces se usa el temporal `server/config/maps/default.json`.
 - **Defensa:** prepararla (§6).
 
 ## 4. Pruebas de integración (AGENTS §7)
@@ -155,6 +158,8 @@ Todos:
 | Cliente lento: no bloquea Simulation ni al otro cliente | Flor |
 | Desconexiones y `MatchEnded` concurrentes: un solo resultado | Joaco |
 | Eventos por cliente: mismo mundo público, datos privados aislados | Flor |
+
+**Estado (2026-11-18):** las nueve están escritas y en verde. Están en `Rts.Integration.Tests` (motor con los módulos reales), en `Rts.Simulation.Tests/Engine` (casos del mismo tick, determinismo), en `Rts.Networking.Tests/Integration` (comandos concurrentes, cliente lento), en `Rts.StateSync.Tests/Integration` (repetición por cliente) y en `Rts.Server.Tests/EndToEnd` (desconexiones).
 
 ## 5. Cómo trabajamos
 

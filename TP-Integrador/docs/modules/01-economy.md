@@ -1,6 +1,6 @@
 # 01 — Economy
 
-> **Estado:** definición funcional cerrada; contratos C# concretos y balance final pendientes.
+> **Estado:** especificación funcional original, cerrada. Se formalizó en el [contrato 01](../contracts/01-economy.md), está implementada y probada, y todas sus decisiones están `DECIDIDO` ([decisiones](../decisions.md), 2026-11-18). Los PENDIENTE y RECOMENDADO de este documento se resolvieron en el contrato y en las decisiones; solo quedan los valores numéricos y el mapa definitivo (balance).
 > **Etiquetas:** **DECIDIDO** = aprobado; **RECOMENDADO** = sugerencia no aprobada; **PENDIENTE** = punto a especificar.
 > **Referencias:** [Simulation](06-simulation.md), [Construction](03-construction.md), [Production](05-production.md), [Units / Movement](04-units-movement.md), [Combat](02-combat.md).
 

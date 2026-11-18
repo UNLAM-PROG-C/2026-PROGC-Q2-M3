@@ -1,6 +1,6 @@
 # 09 — State Sync
 
-> **Estado:** estrategia funcional de sincronización aprobada; mensajes JSON exactos y política interna de buffers por formalizar.
+> **Estado:** especificación funcional original, cerrada. Se formalizó en el [contrato 09](../contracts/09-state-sync.md), está implementada y probada, y todas sus decisiones están `DECIDIDO` ([decisiones](../decisions.md), 2026-11-18). Los PENDIENTE y RECOMENDADO de este documento se resolvieron en el contrato y en las decisiones; solo quedan los valores numéricos y el mapa definitivo (balance).
 > **Etiquetas:** **DECIDIDO**, **RECOMENDADO**, **PENDIENTE**.
 > **Referencias:** [Simulation](06-simulation.md), [Networking](08-networking.md), [GameSession](07-game-session.md), [Units / Movement](04-units-movement.md), [Economy](01-economy.md), [Production](05-production.md).
 
@@ -92,7 +92,7 @@ Los nombres pueden precisarse en contrato JSON. Los eventos de gameplay poseen *
 - Nunca se eliminan silenciosamente eventos esenciales (`UnitSpawned`, `EntityDestroyed`, costos/saldos confirmados, etc.).
 - No se intenta modificar bytes o mensajes que ya comenzaron a enviarse por TCP.
 - Si un cliente sigue saturado y sus publicaciones esenciales no caben, Networking aplica su política de cola limitada y eventual desconexión; **Simulation no espera I/O**.
-- La política exacta del buffer, tamaños y algoritmo de coalescing es **PENDIENTE**, siempre sujeta a esas garantías.
+- La política exacta del buffer, tamaños y algoritmo de coalescing es **PENDIENTE**, siempre sujeta a esas garantías. **Resuelto** por D-064 y D-065 (contrato 09); los tamaños son balance.
 
 ## 8. Navegación y mapa — DECIDIDO
 

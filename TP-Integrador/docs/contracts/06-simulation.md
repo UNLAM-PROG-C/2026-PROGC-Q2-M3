@@ -1,6 +1,6 @@
 # Contrato 06 — Simulation (`Rts.Simulation`)
 
-> **Estado:** Fases 1 y 2 implementadas y probadas (`server/src/Rts.Simulation`, `server/tests/Rts.Simulation.Tests`) contra fakes de los módulos de dominio: modelo del mundo, configuración, cargador de mapa, cola de comandos, motor con las **9 fases** del tick (§4), un handler por cada uno de los 8 tipos de comando (D-094), loop de 20 Hz con supervisión y fábrica pública (`SimulationFactory`). Las pruebas de §11 están escritas, incluido el determinismo paralelo frente a secuencial. **Fase 3 (§10) completa:** el loop entrega métricas y fallas críticas con motivo a `ISimulationDiagnostics` (D-095, D-097, D-099), con resúmenes por ventana (D-098); el Server las escribe en el log (D-100), y `server/tools/Rts.Measurement` mide paralelo frente a secuencial (D-101). **Integración:** `server/tests/Rts.Integration.Tests` corre el motor con Economy, Combat, Movement (incluidas las órdenes de tarea, 04 §5), Construction y Production reales (ver §12).
+> **Estado:** implementado y probado (`server/src/Rts.Simulation`, `server/tests/Rts.Simulation.Tests`, cuyas pruebas unitarias usan fakes de los módulos de dominio). Fases 1 y 2: modelo del mundo, configuración, cargador de mapa, cola de comandos, motor con las **9 fases** del tick (§4), un handler por cada uno de los 8 tipos de comando (D-094), loop de 20 Hz con supervisión y fábrica pública (`SimulationFactory`). Las pruebas de §11 están escritas, incluido el determinismo paralelo frente a secuencial. **Fase 3 (§10) completa:** el loop entrega métricas y fallas críticas con motivo a `ISimulationDiagnostics` (D-095, D-097, D-099), con resúmenes por ventana (D-098); el Server las escribe en el log (D-100), y `server/tools/Rts.Measurement` mide paralelo frente a secuencial (D-101). **Integración:** `server/tests/Rts.Integration.Tests` corre el motor con Economy, Combat, Movement (incluidas las órdenes de tarea, 04 §5), Construction y Production reales (ver §12). Corre en el servidor (`Rts.Server`) con los cinco módulos reales. Solo falta el balance (§12).
 > **Etiquetas:** **DECIDIDO** = aprobado (módulo [06-simulation](../modules/06-simulation.md) o [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Depende de:** [Contrato 00](00-shared-kernel.md) y de los contratos de dominio [01](01-economy.md), [02](02-combat.md), [03](03-construction.md), [04](04-units-movement.md) y [05](05-production.md). Ningún módulo de dominio depende de Simulation.
 
@@ -35,7 +35,7 @@ Tipos de integración en `Rts.Shared`, que usan módulos que no pueden referenci
 - Las entidades agregan las vistas que usa cada módulo, para no duplicar datos:
   - `UnitEntity`: Movement (orden, ruta, repath), Economy (`GatherTicksAccumulated`) y Combat (`Hp`, `ReadyAtTick`).
   - `BuildingEntity`: guarda directamente los modelos de los módulos (`FarmEconomyState`, `FarmRepairState`, `ProducerState`) y el cooldown de torre. Sus constructores verifican qué partes corresponden a cada tipo y estado.
-  - `TreeEntity`: reserva una celda y su posición es el centro de esa celda (RECOMENDADO D-050).
+  - `TreeEntity`: reserva una celda y su posición es el centro de esa celda (DECIDIDO D-050).
 - `LastEntityId` y `LastOrderId` son los contadores de IDs del servidor.
 - `IdempotencyLedger` es el registro de idempotencia (D-043).
 - `GameplayResult` lleva el resultado fijado por Victory Rules.
@@ -79,7 +79,7 @@ Sea `S` el último `WorldState` confirmado y `W` el estado de trabajo, inicialme
 - Economy y Combat solo leen `snapshot`, y se aplican en orden fijo, sin importar cuál termina primero.
 - Mismas entradas y mismo orden de comandos ⇒ mismo `WorldState` y mismos eventos.
 
-## 5. Orden oficial de eventos dentro del tick (RECOMENDADO D-048)
+## 5. Orden oficial de eventos dentro del tick (DECIDIDO D-048)
 
 `EventStamp.IndexInTick` se asigna en este orden:
 
@@ -102,7 +102,7 @@ Sea `S` el último `WorldState` confirmado y `W` el estado de trabajo, inicialme
 - **Sobrecarga (DECIDIDO D-047):** si un tick se pasa del intervalo, se registra `IsOverrun`, el próximo arranca de inmediato y el reloj se **re-ancla**. No hay ráfagas de recuperación. "Se pasa" se mide sobre la vuelta completa del loop (despertar, cálculo y publicación), y lo decide la agenda del loop, no el motor (DECIDIDO D-097).
 - **Agenda sin deriva (DECIDIDO D-088):** cada tick se agenda en `anterior + intervalo`, no en `ahora + intervalo`, así un despertar tardío del hilo no se acumula. La espera entre ticks es interrumpible por un pedido de detención. La decisión de arrancar otro tick y el pedido de detención comparten un lock: un Stop llega antes del tick (que no arranca) o durante él (que se termina y se entrega).
 - **Supervisión (DECIDIDO D-089):** si un tick queda bloqueado más allá de `TickStallTimeout`, se informa una falla crítica desde fuera del hilo del tick. La revisa un temporizador una vez por intervalo, no un hilo propio. Al vencer: avisa `CriticalError` con el último tick confirmado, completa `StopTicksAsync` y abandona el tick, cuyo resultado se descarta si termina más tarde. El fin de partida se avisa una sola vez, lo detecte el loop o el supervisor.
-- `StartTicks` se llama al pasar a Running. Si no puede arrancar (falta `InitializeMatch`, o no pudo crear el supervisor o el hilo), lanza sin haber corrido ningún tick y el `StopTicksAsync` que sigue devuelve enseguida; GameSession lo informa como `CriticalError` (DECIDIDO D-086). `StopTicksAsync` termina el tick en curso, si lo hay, y detiene el loop; es idempotente. Devuelve el último tick confirmado (`TickId.Zero` si no corrió ninguno), que GameSession usa como `FinalTick` de un resultado por desconexión (RECOMENDADO D-061).
+- `StartTicks` se llama al pasar a Running. Si no puede arrancar (falta `InitializeMatch`, o no pudo crear el supervisor o el hilo), lanza sin haber corrido ningún tick y el `StopTicksAsync` que sigue devuelve enseguida; GameSession lo informa como `CriticalError` (DECIDIDO D-086). `StopTicksAsync` termina el tick en curso, si lo hay, y detiene el loop; es idempotente. Devuelve el último tick confirmado (`TickId.Zero` si no corrió ninguno), que GameSession usa como `FinalTick` de un resultado por desconexión (DECIDIDO D-061).
 - Ante `GameplayResult` o `Failure`, el loop llama a `IMatchResultSink.OnSimulationResult` y deja de ejecutar ticks.
 - **Orden exigido por D-055:** si el tick en curso al pedir la detención produce un resultado, el loop publica ese tick y llama al sink **antes** de completar `StopTicksAsync`. Así el resultado del mundo llega a GameSession antes que el aviso de detención ([contrato 07 §6](07-game-session.md#6-desconexiones-en-running-lote-y-precedencia)).
 - En los estados WaitingForPlayers y Starting no corren ticks (06 §2).
@@ -127,7 +127,7 @@ DECIDIDO (D-046): el mapa sale de un **archivo del servidor**, que es la única 
 
 Devuelve `WorldView`. Puede repetirse en una nueva preparación de Starting (07 §4).
 
-Formato del archivo (RECOMENDADO D-052; lo lee `MapLoader.Load`, que rechaza campos desconocidos, nulos, enteros en lugar de enums y mapas que no pasan `GetValidationErrors`):
+Formato del archivo (DECIDIDO D-052; lo lee `MapLoader.Load`, que rechaza campos desconocidos, nulos, enteros en lugar de enums y mapas que no pasan `GetValidationErrors`):
 
 ```json
 {
@@ -227,5 +227,5 @@ Estas pruebas de 06 §10 se escriben al implementar:
 - ~~Fase 3: registro de métricas, sobrecargas y fallas críticas (§10).~~ Hecho (D-095 a D-101).
 - ~~Integración con Construction y con Movement para órdenes de tarea (04 §5, pasos 5 a 7).~~ Hecho: módulos reales en `Rts.Integration.Tests` y `Rts.Measurement`.
 - ~~Integración con el módulo real que falta: Production.~~ Hecho (2026-11-16): `Rts.Integration.Tests` y `Rts.Measurement` usan `ProductionRules` y `ProductionCalculator`; el stub se borró. `ProductionTests` cubre un `TrainUnit` de punta a punta y dos apariciones del mismo commit que no comparten celda (AGENTS §7).
-- ~~Valores (§9)~~ elegidos en D-092. Queda el diseño del mapa simétrico real. `server/config/maps/default.json` es un mapa **temporal** de 48×48 para pruebas.
+- ~~Valores (§9)~~ elegidos en D-092. **PENDIENTE (balance):** el mapa definitivo; `server/config/maps/default.json` es un mapa **temporal** de 48×48. Si cambian los límites de Networking, revisar D-092.
 - ~~Precedencia fina entre el resultado de Simulation y desconexiones casi simultáneas.~~ Resuelta por D-055 (ver [contrato 07 §6](07-game-session.md#6-desconexiones-en-running-lote-y-precedencia)).

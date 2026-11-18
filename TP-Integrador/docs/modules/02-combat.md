@@ -1,6 +1,6 @@
 # 02 — Combat
 
-> **Estado:** definición funcional cerrada; contrato técnico conceptual, balance y firmas definitivas pendientes.
+> **Estado:** especificación funcional original, cerrada. Se formalizó en el [contrato 02](../contracts/02-combat.md), está implementada y probada, y todas sus decisiones están `DECIDIDO` ([decisiones](../decisions.md), 2026-11-18). Los PENDIENTE y RECOMENDADO de este documento se resolvieron en el contrato y en las decisiones; solo quedan los valores numéricos y el mapa definitivo (balance).
 > **Etiquetas:** **DECIDIDO**, **RECOMENDADO**, **PENDIENTE**.
 > **Referencias:** [Simulation](06-simulation.md), [Units / Movement](04-units-movement.md), [Construction](03-construction.md), [Economy](01-economy.md), [State Sync](09-state-sync.md).
 
@@ -71,7 +71,7 @@ Resolver los ataques de **soldados** y **torres**, determinar objetivos válidos
 | `TowerCombatCalculation` | Resolver autoataques de torres operativas |
 | `ValidateAttackTarget` | Evaluación tipada de objetivos autorizados y estado de orden |
 
-El contrato exacto de persecución y cancelación de objetivo es transversal a Units / Movement y Simulation: **PENDIENTE** definir tipos compartidos, no las reglas funcionales.
+El contrato exacto de persecución y cancelación de objetivo es transversal a Units / Movement y Simulation: **PENDIENTE** definir tipos compartidos, no las reglas funcionales. **Resuelto** por D-025, D-026 y D-027 (contrato 02).
 
 ## 7. Concurrencia y sincronización — DECIDIDO
 

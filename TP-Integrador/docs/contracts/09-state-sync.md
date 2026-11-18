@@ -1,6 +1,6 @@
 # Contrato 09 — State Sync
 
-> **Estado:** primera versión de contratos implementada (`server/src/Rts.StateSync`, DTOs en `server/src/Rts.Protocol`) y probada (`server/tests/Rts.StateSync.Tests`, `server/tests/Rts.Protocol.Tests`). **Fases 1 y 2 hechas:** InitialState con catálogo, `StateEvents` por destinatario, `PositionUpdate` cada N ticks y publicador; la política de visibilidad cubre la tabla completa de §3 y el proyector convierte los 17 eventos de dominio (mapeo 1:1, §5). Un evento que no está en la tabla sigue haciendo fallar la política (§3).
+> **Estado:** implementado (`server/src/Rts.StateSync`, DTOs en `server/src/Rts.Protocol`) y probado (`server/tests/Rts.StateSync.Tests`, `server/tests/Rts.Protocol.Tests`). **Fases 1 y 2 hechas:** InitialState con catálogo, `StateEvents` por destinatario, `PositionUpdate` cada N ticks y publicador; la política de visibilidad cubre la tabla completa de §3 y el proyector convierte los 17 eventos de dominio (mapeo 1:1, §5). Un evento que no está en la tabla sigue haciendo fallar la política (§3). **Fase 3 hecha:** repetición de ticks sobre clientes simulados (`Integration/ReplayConvergenceTests`), cliente lento que no bloquea la publicación (`Rts.Networking.Tests/Integration/SlowClientTests`), e integración en el servidor con pruebas de punta a punta (`Rts.Server.Tests/EndToEnd`) y con el cliente Godot real. Solo falta el balance.
 > **Etiquetas:** **DECIDIDO** = aprobado por el equipo (ver [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Módulo:** [09 — State Sync](../modules/09-state-sync.md). **Vecinos:** [06 Simulation](06-simulation.md), [07 GameSession](07-game-session.md), [08 Networking](../modules/08-networking.md).
 
@@ -68,12 +68,12 @@ La decide `IEventAudiencePolicy` **mirando solo el evento**. Los eventos privado
 | `catalog` | `GameCatalog` |
 
 - **DECIDIDO (D-068):** el InitialState trae un **catálogo** público, igual para ambos: HP máximo y huella por tipo, costos, duración de entrenamiento, velocidad, ataques, costo y trabajo de reparación, rangos de interacción y tick rate. Godot no duplica valores de balance.
-- **RECOMENDADO (D-071):** la composición del servidor (`Rts.Server`) arma el `GameCatalog` una vez, desde las configuraciones ya validadas de cada módulo, y lo inyecta en State Sync. `GameCatalog` vive en `Rts.Shared.World` porque State Sync no puede referenciar los módulos de dominio.
+- **DECIDIDO (D-071):** la composición del servidor (`Rts.Server`) arma el `GameCatalog` una vez, desde las configuraciones ya validadas de cada módulo, y lo inyecta en State Sync. `GameCatalog` vive en `Rts.Shared.World` porque State Sync no puede referenciar los módulos de dominio.
 - Para cada cliente, el InitialState se encola después de `PlayerAssigned`, porque el host de GameSession ejecuta sus acciones en orden (contrato 07 §5).
 
 ## 5. Lotes de eventos (`StateEvents`)
 
-**RECOMENDADO (D-070):**
+**DECIDIDO (D-070):**
 
 - **Un `StateEventsDto` por tick y destinatario**, con `tick`, `mapRevision`, los eventos visibles en el **orden oficial** (contrato 06 §5) y los resultados de los comandos de ese destinatario procesados en el tick, incluidas las respuestas a duplicados.
 - Cada evento lleva `index` = su `IndexInTick`. Puede tener huecos, porque cada destinatario ve un subconjunto, pero junto con `tick` identifica el evento de forma estable (09 §4).
@@ -85,7 +85,7 @@ La decide `IEventAudiencePolicy` **mirando solo el evento**. Los eventos privado
 ## 6. Posiciones (`PositionUpdate`)
 
 - **DECIDIDO (D-062, resuelve O-007):** se publica en los ticks **múltiplos de `N = TickRate / PositionRateHz`**. Con los valores aprobados, N = 2. La configuración se valida para que N sea entero. Es determinista: en 20 ticks hay exactamente 10 actualizaciones (prueba obligatoria de 09 §10).
-- Contenido (RECOMENDADO D-070): `tick` y **todas las unidades vivas** al cierre del tick, como `{id, x, z}`. Va igual a ambos. Las coordenadas se redondean a `PositionDecimals` (3, milímetros): solo afecta a la vista, porque el servidor conserva las posiciones exactas.
+- Contenido (DECIDIDO D-070): `tick` y **todas las unidades vivas** al cierre del tick, como `{id, x, z}`. Va igual a ambos. Las coordenadas se redondean a `PositionDecimals` (3, milímetros): solo afecta a la vista, porque el servidor conserva las posiciones exactas.
 - En un tick de posiciones, cada destinatario recibe primero `StateEvents` y después `PositionUpdate`. Una unidad creada en el tick aparece por `UnitSpawned` antes que su posición; una destruida en el tick ya no figura en las posiciones (09 §5-6).
 - **Reglas para Godot (09 §5):** interpolar entre posiciones recibidas sin extrapolar; descartar las de un tick menor o igual al último aplicado; ignorar IDs desconocidos o ya destruidos. Una posición nunca crea ni revive una entidad.
 
@@ -112,7 +112,7 @@ La decide `IEventAudiencePolicy` **mirando solo el evento**. Los eventos privado
 
 ## 9. Convenciones JSON (`ProtocolJson.Options`)
 
-**RECOMENDADO (D-072):**
+**DECIDIDO (D-072):**
 
 - Propiedades en `camelCase`.
 - Enums como string con el nombre del valor (`"Worker"`, `"Farm"`, `"Training"`); se rechazan los números.
@@ -127,7 +127,7 @@ La decide `IEventAudiencePolicy` **mirando solo el evento**. Los eventos privado
 | Parámetro | Regla | Valor |
 |---|---|---|
 | `PositionRateHz` | entre 1 y `TickRate`; `TickRate` múltiplo de él | **10** (DECIDIDO 09 §5) |
-| `PositionDecimals` | 0 a 6 | 3 (RECOMENDADO) |
+| `PositionDecimals` | 0 a 6 | 3 (DECIDIDO, 2026-11-18) |
 
 ## 11. Lo que deben hacer los demás módulos
 
@@ -150,10 +150,10 @@ La decide `IEventAudiencePolicy` **mirando solo el evento**. Los eventos privado
 - Daño y progreso de una obra en el mismo tick: dos eventos, y el último HP es el correcto.
 - Doble destrucción de bases: ambos reciben el lote final antes de `MatchEnded(Draw)` (con GameSession).
 - Ida y vuelta JSON de cada DTO (ya cubierto en `Rts.Protocol.Tests` para las convenciones).
-- Repetición de cientos de ticks sobre clientes simulados: convergencia del estado público y aislamiento de lo privado (RECOMENDADO 09 §10).
+- Repetición de cientos de ticks sobre clientes simulados: convergencia del estado público y aislamiento de lo privado (hecho: `Integration/ReplayConvergenceTests`).
 
 ## 13. Pendientes
 
-- ~~Política de saturación, sobre JSON, versión, `Hello`, sesión y comandos entrantes~~: definidos en el [contrato 08](08-networking.md). Quedan los valores de tamaños y capacidades.
-- Optimización futura: publicar solo las posiciones que cambiaron. Requiere guardar estado por destinatario; hoy no se hace.
-- Frecuencia de métricas de red.
+- ~~Política de saturación, sobre JSON, versión, `Hello`, sesión y comandos entrantes~~: definidos en el [contrato 08](08-networking.md). **PENDIENTE (balance):** los valores de tamaños y capacidades.
+- **Fuera del alcance (optimización opcional):** publicar solo las posiciones que cambiaron. Requiere guardar estado por destinatario; no se hace, y no hace falta para el juego.
+- ~~Frecuencia de métricas de red.~~ **Resuelto:** no hay publicación periódica; se leen a pedido con `INetworkServer.GetMetrics()`, una instantánea por conexión (08 §11, D-106).

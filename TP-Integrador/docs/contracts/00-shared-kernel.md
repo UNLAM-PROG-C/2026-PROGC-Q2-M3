@@ -1,12 +1,12 @@
 # Contrato 00 — Núcleo compartido (`Rts.Shared`)
 
-> **Estado:** primera versión implementada (`server/src/Rts.Shared`) y probada (`server/tests/Rts.Shared.Tests`).
+> **Estado:** implementado y probado (`server/src/Rts.Shared`, `server/tests/Rts.Shared.Tests`); lo usan todos los módulos del servidor integrado.
 > **Etiquetas:** **DECIDIDO** = aprobado por el equipo (ver [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Alcance:** tipos base que comparten todos los módulos. **No** contiene reglas de gameplay, estado mutable, I/O ni DTOs JSON: los modelos de dominio, las interfaces entre módulos y los DTOs de red siguen siendo cosas distintas (AGENTS §4).
 
 ## 1. Estructura de la solución
 
-**DECIDIDO (D-001, D-002) / RECOMENDADO (D-008):**
+**DECIDIDO (D-001, D-002, D-008):**
 
 ```
 server/
@@ -72,8 +72,8 @@ Reglas de dependencia previstas, que el compilador hace cumplir mediante referen
 | `OrderId` | `long` | Simulation | `0` = sin orden. Repath con `OrderId` viejo se rechaza. |
 | `MapRevision` | `long` | Simulation | `Initial` = 0; ordenable. |
 | `ConnectionId` | `long` | Networking | Sin referencias a sockets. |
-| `SessionId` | `Guid` | GameSession | RECOMENDADO (D-010). |
-| `InitializationId` | `long` | GameSession | RECOMENDADO (D-010): contador creciente por intento de inicio. |
+| `SessionId` | `Guid` | GameSession | DECIDIDO (D-010). |
+| `InitializationId` | `long` | GameSession | DECIDIDO (D-010): contador creciente por intento de inicio. |
 
 ## 4. Geometría y grilla
 
@@ -89,12 +89,12 @@ Reglas de dependencia previstas, que el compilador hace cumplir mediante referen
 
 **Coordenadas con Godot (DECIDIDO D-029):** son idénticas. Servidor X/Z = Godot X/Z, se ignora Godot Y, 1 unidad = 1 metro, y el mapa ocupa X y Z positivos con la esquina (0,0) en el origen.
 
-**PENDIENTE:** escala concreta del mapa, valores de `CellSize` y tamaño del mapa, tamaño de huella por tipo, tolerancias de distancia y rango (módulos 02-04).
+**PENDIENTE (balance):** escala concreta del mapa, valores de `CellSize` y tamaño del mapa, tamaño de huella por tipo, tolerancias de distancia y rango (módulos 02-04).
 
 ## 5. Comandos y resultados
 
 - `CommandEnvelope(Sequence, Player, ClientCommandId, Command)`: comando ya admitido. `Key` devuelve la `IdempotencyKey`.
-- `IGameCommand`: payload tipado con `Type`. **Nunca incluye `PlayerId`**. RECOMENDADO (D-009): los payloads concretos (`MoveCommand`, `BuildCommand`, …) se agregan en `Rts.Shared.Commands` al trabajar cada módulo.
+- `IGameCommand`: payload tipado con `Type`. **Nunca incluye `PlayerId`**. DECIDIDO (D-009): los payloads concretos (`MoveCommand`, `BuildCommand`, …) viven en `Rts.Shared.Commands`.
 - `CommandType`: `Move`, `Stop`, `Attack`, `GatherWood`, `Build`, `RepairFarm`, `TrainUnit`, `RepathResponse` (D-028).
 - Payloads ya definidos: `MoveCommand`, `StopCommand`, `AttackCommand`, `GatherWoodCommand`, `BuildCommand` (formas `Place` y `Continue`, D-032), `RepairFarmCommand` y `RepathResponseCommand`, con una `UnitRouteCandidate` por unidad (ver contratos [03](03-construction.md) y [04](04-units-movement.md)), y `TrainUnitCommand` (ver [contrato 05](05-production.md)).
 - `CommandResult(Key, Sequence, Tick, Outcome, Error?, EntityResults)`: el resultado oficial que produce Simulation y se reutiliza para responder duplicados. Invariantes que verifica el constructor:
@@ -112,7 +112,7 @@ DECIDIDO (D-043, resuelve O-004): el registro de idempotencia vive en Simulation
 - `DomainEvent(EventStamp Stamp, IDomainEventPayload Payload)`: **solo Simulation lo crea, y solo después del commit**. Los módulos de dominio proponen payloads sin sello.
 - `EventStamp(TickId Tick, int IndexInTick)`: identidad y orden oficial; se ordena por tick y luego por índice.
 - La visibilidad (ambos / solo dueño / solo emisor) **no** forma parte del evento: la decide State Sync (09 §9).
-- RECOMENDADO (D-011): las colecciones dentro de contratos usan `EquatableArray<T>`, que tiene igualdad estructural y admite expresiones de colección `[a, b]`. Así dos resultados con igual contenido son iguales, lo que habilita las pruebas de determinismo exigidas (Economy/Combat en distinto orden ⇒ resultado idéntico).
+- DECIDIDO (D-011): las colecciones dentro de contratos usan `EquatableArray<T>`, que tiene igualdad estructural y admite expresiones de colección `[a, b]`. Así dos resultados con igual contenido son iguales, lo que habilita las pruebas de determinismo exigidas (Economy/Combat en distinto orden ⇒ resultado idéntico).
 
 ## 7. Errores
 
@@ -120,13 +120,13 @@ DECIDIDO (D-043, resuelve O-004): el registro de idempotencia vive en Simulation
 
 Transversales (`CommonErrors`): `Common.InvalidCommand`, `Common.NotOwner`, `Common.EntityNotFound`, `Common.IncompatibleEntity`, `Common.MatchNotRunning`, `Common.NoEntityAccepted`.
 
-Cada módulo declara sus códigos en su proyecto con su prefijo de área (p. ej. `Economy.InsufficientWood`, `Movement.InvalidPath`, `Production.QueueFull`). **PENDIENTE:** taxonomía exhaustiva.
+Cada módulo declara sus códigos en su proyecto con su prefijo de área (p. ej. `Economy.InsufficientWood`, `Movement.InvalidPath`, `Production.QueueFull`). ~~**PENDIENTE:** taxonomía exhaustiva.~~ **Resuelto:** cada área declara los suyos en una clase `*Errors` (`CommonErrors` en `Rts.Shared.Errors`, y `EconomyErrors`, `CombatErrors`, `ConstructionErrors`, `MovementErrors`, `ProductionErrors`, `SessionErrors` y `NetworkErrors` en su proyecto).
 
 ## 8. Recursos, entidades y tiempo
 
 - `ResourceAmount(int Wood, int Food)`: saldos, costos y deltas. La aritmética usa `checked`, de modo que un desbordamiento lanza una excepción. La asequibilidad (`CanAfford`) pertenece a Economy.
 - `UnitType { Worker, Soldier }`, `BuildingType { MainCenter, Farm, Barracks, Tower, Fence }`, `EntityKind { Unit, Building, Tree }`. El valor `0` queda sin definir a propósito, para detectar valores no inicializados.
-- `TickRate`: `Default` = 20 Hz (50 ms). `PerTick(perSecond)` convierte velocidades. RECOMENDADO (O-007): usarlo en lugar de la constante 20.
+- `TickRate`: `Default` = 20 Hz (50 ms). `PerTick(perSecond)` convierte velocidades. DECIDIDO (D-030, D-062; cerró la O-007): usarlo en lugar de la constante 20.
 
 ## 9. Pendientes de este contrato
 

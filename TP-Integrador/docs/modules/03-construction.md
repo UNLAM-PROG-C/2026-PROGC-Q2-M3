@@ -1,6 +1,6 @@
 # 03 — Construction
 
-> **Estado:** mecánicas cerradas; esquemas C# y balance por formalizar.
+> **Estado:** especificación funcional original, cerrada. Se formalizó en el [contrato 03](../contracts/03-construction.md), está implementada y probada, y todas sus decisiones están `DECIDIDO` ([decisiones](../decisions.md), 2026-11-18). Los PENDIENTE y RECOMENDADO de este documento se resolvieron en el contrato y en las decisiones; solo quedan los valores numéricos y el mapa definitivo (balance).
 > **Etiquetas:** **DECIDIDO**, **RECOMENDADO**, **PENDIENTE**.
 > **Referencias:** [Economy](01-economy.md), [Units / Movement](04-units-movement.md), [Combat](02-combat.md), [Simulation](06-simulation.md), [State Sync](09-state-sync.md).
 

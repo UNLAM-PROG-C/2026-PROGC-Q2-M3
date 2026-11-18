@@ -1,6 +1,6 @@
 # Contrato 04 — Units / Movement (`Rts.Movement`)
 
-> **Estado:** contratos, modelos, interfaces y configuración implementados (`server/src/Rts.Movement`) y probados (`server/tests/Rts.Movement.Tests`). **La lógica de validación, búsqueda y avance todavía no está implementada.**
+> **Estado:** implementado y probado (`server/src/Rts.Movement`, `server/tests/Rts.Movement.Tests`): contratos, modelos, configuración y la lógica completa de validación, búsqueda y avance (`MovementRules`, `ReachabilitySearch`, `SegmentGridValidator`, `MovementCalculator`). Integrado en el motor de Simulation y en el servidor (`Rts.Integration.Tests`, `Rts.Server.Tests/EndToEnd`). Solo falta el balance: los valores de su configuración.
 > **Etiquetas:** **DECIDIDO** = aprobado (módulo [04-units-movement](../modules/04-units-movement.md) o [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Depende de:** [Contrato 00](00-shared-kernel.md). No depende de ningún otro módulo.
 
@@ -64,7 +64,7 @@ La cadena de tramos es posición oficial → w1 → … → wn. Una ruta es vál
 1. todos los waypoints son finitos y están dentro del mapa;
 2. ningún tramo toca una celda bloqueada.
 
-**"Toca"** (RECOMENDADO D-031) se entiende de forma conservadora, sin radio de unidad:
+**"Toca"** (DECIDIDO D-031) se entiende de forma conservadora, sin radio de unidad:
 
 - Se consideran todas las celdas que el segmento atraviesa (*supercover*).
 - Si el segmento pasa **exactamente por una esquina** de la grilla, cuentan las celdas a ambos lados. Eso prohíbe cortar esquinas bloqueadas en diagonal (04 §4).
@@ -112,10 +112,10 @@ Distancia máxima por tick = `SpeedPerSecond / TickRate` (resuelve O-007). Cada 
 
 | Parámetro | Validación | Valor |
 |---|---|---|
-| `SpeedPerSecond` (Worker, Soldier) | > 0, finito | PENDIENTE |
-| `ArrivalTolerance`, `GatherRange`, `BuildRange` | > 0, finito | PENDIENTE |
-| `AttackRange` | > 0; igual a `CombatConfig.Soldier.Range` (RECOMENDADO D-030, se valida en la composición) | PENDIENTE |
-| `MaxWaypointsPerRoute`, `RepathTimeoutTicks`, `PursuitRepathIntervalTicks` | > 0 | PENDIENTE |
+| `SpeedPerSecond` (Worker, Soldier) | > 0, finito | PENDIENTE (balance) |
+| `ArrivalTolerance`, `GatherRange`, `BuildRange` | > 0, finito | PENDIENTE (balance) |
+| `AttackRange` | > 0; igual a `CombatConfig.Soldier.Range` (DECIDIDO D-030, se valida en la composición) | PENDIENTE (balance) |
+| `MaxWaypointsPerRoute`, `RepathTimeoutTicks`, `PursuitRepathIntervalTicks` | > 0 | PENDIENTE (balance) |
 
 ## 8. Pruebas de aceptación para la etapa de implementación
 
@@ -139,8 +139,8 @@ La selección cíclica de unidades superpuestas es de Godot.
 
 ## 9. Pendientes
 
-- Valores (§7).
-- Tolerancias numéricas de punto flotante en la validación de segmentos.
-- Si una tarea en rango que se aleja sigue la ruta o persigue: solo aplica a Attack; los objetivos de las demás tareas son estáticos.
-- Política de selección y UX en Godot.
-- Búsqueda de la celda de spawn: se coordina con Production (O-010).
+- **PENDIENTE (balance):** los valores de §7.
+- ~~Tolerancias numéricas de punto flotante en la validación de segmentos.~~ **Resuelto:** `SegmentGridValidator` usa un epsilon fijo de 1e-9 hacia el lado conservador: tocar un borde o una esquina cuenta como tocar la celda (D-031).
+- ~~Si una tarea en rango que se aleja sigue la ruta o persigue.~~ **Resuelto:** solo aplica a Attack, que persigue (D-027); los objetivos de las demás tareas son estáticos.
+- ~~Política de selección y UX en Godot.~~ **Resuelto** en el cliente (`client/`).
+- ~~Búsqueda de la celda de spawn: se coordina con Production (O-010).~~ **Resuelto** por D-039 y hecho en Production (`SpawnCellFinder`).

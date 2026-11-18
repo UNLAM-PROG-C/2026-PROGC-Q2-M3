@@ -1,6 +1,6 @@
 # 08 — Networking
 
-> **Estado:** protocolo conceptual y políticas de conexiones aprobadas; esquemas JSON exactos y valores de límites pendientes.
+> **Estado:** especificación funcional original, cerrada. Se formalizó en el [contrato 08](../contracts/08-networking.md), está implementada y probada, y todas sus decisiones están `DECIDIDO` ([decisiones](../decisions.md), 2026-11-18). Los PENDIENTE y RECOMENDADO de este documento se resolvieron en el contrato y en las decisiones; solo quedan los valores numéricos y el mapa definitivo (balance).
 > **Etiquetas:** **DECIDIDO**, **RECOMENDADO**, **PENDIENTE**.
 > **Referencias:** [Simulation](06-simulation.md), [GameSession](07-game-session.md), [State Sync](09-state-sync.md), [Units / Movement](04-units-movement.md).
 
@@ -25,7 +25,7 @@ TCP es **flujo de bytes**, no transporte de mensajes. Una lectura puede contener
 
 **DECIDIDO:** clientes con versión de protocolo **incompatible** se rechazan con error de versión y no se aceptan para gameplay. No se implementa negociación de múltiples versiones.
 
-**RECOMENDADO:** handshake explícito con mensaje `Hello` que valide `ProtocolVersion` antes de registrar definitivamente al jugador; todavía no se aprobó tipo/nombre exacto del handshake.
+**RECOMENDADO:** handshake explícito con mensaje `Hello` que valide `ProtocolVersion` antes de registrar definitivamente al jugador; todavía no se aprobó tipo/nombre exacto del handshake. **Aprobado** como D-053 y D-076.
 
 ## 3. Contratos de red — PROPUESTOS, NO JSON DEFINITIVO
 
@@ -78,7 +78,7 @@ TCP es **flujo de bytes**, no transporte de mensajes. Una lectura puede contener
 - Heartbeat y supervisión no dependen de ticks de gameplay: operan también durante la espera de jugadores y durante `Starting`.
 - Timeout debe ser prudente: durante Running, la desconexión de uno hace ganar al otro por decisión de GameSession.
 - Networking reporta `Disconnected` con identidad de conexión; GameSession decide victoria, espera o cierre técnico.
-- **RECOMENDADO:** tiempo monotónico y un identificador correlativo por Ping. La forma exacta del DTO Ping/Pong aún no fue aprobada.
+- **RECOMENDADO:** tiempo monotónico y un identificador correlativo por Ping. La forma exacta del DTO Ping/Pong aún no fue aprobada. **Aprobado** como D-079.
 
 ## 7. Contratos/componentes internos — PROPUESTOS
 

@@ -1,6 +1,6 @@
 # Contrato 01 — Economy (`Rts.Economy`)
 
-> **Estado:** contratos, modelos, interfaces y configuración implementados (`server/src/Rts.Economy`) y probados (`server/tests/Rts.Economy.Tests`). **La lógica de cálculo todavía no está implementada.**
+> **Estado:** implementado y probado (`server/src/Rts.Economy`, `server/tests/Rts.Economy.Tests`): contratos, modelos, configuración y la lógica completa (`EconomyRules`, `EconomyCalculator`). Integrado en el motor de Simulation y en el servidor (`Rts.Integration.Tests`, `Rts.Server.Tests/EndToEnd`). Solo falta el balance: los valores de su configuración.
 > **Etiquetas:** **DECIDIDO** = aprobado (módulo [01-economy](../modules/01-economy.md) o [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Depende de:** [Contrato 00](00-shared-kernel.md). No depende de ningún otro módulo.
 
@@ -9,7 +9,7 @@
 | Tipo | Namespace | Función |
 |---|---|---|
 | `IEconomyCalculator.CalculateTick(EconomyTickInput) → EconomyTickResult` | `Rts.Economy` | Cálculo del tick (fase 5, en paralelo con Combat) |
-| `IEconomyRules` | `Rts.Economy` | Costos, saldo inicial, `EvaluateSpend`/`CanAfford` para gastos atómicos de Simulation y `EvaluateGatherTarget` para validar `GatherWood` en la fase 1 (RECOMENDADO D-093) |
+| `IEconomyRules` | `Rts.Economy` | Costos, saldo inicial, `EvaluateSpend`/`CanAfford` para gastos atómicos de Simulation y `EvaluateGatherTarget` para validar `GatherWood` en la fase 1 (DECIDIDO D-093) |
 | `EconomyTickInput`, `EconomyTickResult`, `PlayerResourceDelta`, `WoodGathered`, `FoodProduced`, `SpendEvaluation` | `Rts.Economy.Contracts` | Entradas y salidas inmutables |
 | `GathererState`, `TreeEconomyState`, `FarmEconomyState`, `TreeStatus`, `FarmProductionStatus`, `GatherTargetInfo` | `Rts.Economy.Model` | Vistas económicas de entidades |
 | `EconomyConfig` | `Rts.Economy.Configuration` | Parámetros tipados y validación |
@@ -34,10 +34,10 @@ Son internos, y Simulation no los usa: `IGatheringCalculation` y `IFarmProductio
 
 Simulation la construye desde el `TickSnapshot` posterior a Movement y Construction. El constructor exige IDs únicos y que cada recolector apunte a un árbol presente. El orden de las colecciones **no** afecta el resultado.
 
-- `Gatherers`: solo los trabajadores **habilitados**, es decir, con `GatherWood` activa y **en rango** según Units / Movement. Simulation hace el filtrado; Economy no calcula distancias (RECOMENDADO D-016).
+- `Gatherers`: solo los trabajadores **habilitados**, es decir, con `GatherWood` activa y **en rango** según Units / Movement. Simulation hace el filtrado; Economy no calcula distancias (DECIDIDO D-016).
 - `Trees`: todos los árboles, disponibles y agotados.
 - `Farms`: granjas **completadas y existentes**; las obras en construcción quedan fuera.
-- La configuración no viaja en la entrada: se inyecta al construir la implementación (RECOMENDADO D-017).
+- La configuración no viaja en la entrada: se inyecta al construir la implementación (DECIDIDO D-017).
 
 ## 4. Reglas de cálculo que debe cumplir la implementación
 
@@ -51,7 +51,7 @@ Convención general: un "contador" acumula los ticks en que la condición se cum
 4. Si el árbol llega a 0, queda `Depleted` con `DepletedAtTick = Tick` y se propone `TreeDepleted`. **Todos** sus recolectores, hayan completado o no su intervalo, pasan a `WorkersToIdle` (01 §3.9).
 5. Un recolector que apunta a un árbol `Depleted` en el snapshot pasa a `WorkersToIdle`. Es un caso defensivo; en la práctica Simulation no debería entregarlo.
 
-### Regeneración de árboles (RECOMENDADO D-018)
+### Regeneración de árboles (DECIDIDO D-018)
 
 6. Un árbol `Depleted` se regenera en el tick `DepletedAtTick + TreeRespawnTicks`: pasa a `Available(MaxWoodPerTree)` y se propone `TreeRespawned`.
 7. En ese tick nadie recolecta de él, porque el snapshot lo muestra agotado. Puede recolectarse **desde el tick siguiente**, con una orden nueva (01 §3.10).
@@ -83,7 +83,7 @@ Esto vale para el implementador de Simulation; Economy no lo hace.
 - Al reemplazar o cancelar la orden de un trabajador: descartar su contador de recolección (01 §3.8).
 - Confirmar los gastos con `IEconomyRules.EvaluateSpend` en el mismo commit lógico que la operación (`Build`, inicio de `RepairFarm`, inicio de entrenamiento).
 
-### Validación del objetivo de `GatherWood` en la fase 1 (RECOMENDADO D-093)
+### Validación del objetivo de `GatherWood` en la fase 1 (DECIDIDO D-093)
 
 04 §3 pide que Economy valide que el árbol sea recolectable. Simulation llama a `IEconomyRules.EvaluateGatherTarget(GatherTargetInfo?)` por cada trabajador, después de verificar su propiedad y antes de Movement:
 
@@ -100,14 +100,14 @@ El tipo del trabajador (`Common.IncompatibleEntity`) lo valida Movement con `Uni
 
 | Parámetro | Validación | Valor |
 |---|---|---|
-| `InitialBalance` | sin componentes negativas | PENDIENTE |
-| `MaxWoodPerTree`, `WoodPerGather` | > 0 | PENDIENTE |
-| `GatherIntervalTicks`, `TreeRespawnTicks`, `FarmProductionIntervalTicks` | > 0 (ticks) | PENDIENTE |
+| `InitialBalance` | sin componentes negativas | PENDIENTE (balance) |
+| `MaxWoodPerTree`, `WoodPerGather` | > 0 | PENDIENTE (balance) |
+| `GatherIntervalTicks`, `TreeRespawnTicks`, `FarmProductionIntervalTicks` | > 0 (ticks) | PENDIENTE (balance) |
 | `FoodPerFarmBatch` | > 0 | **7** (definición funcional) |
 | `BatchesPerFarmCycle` | > 0 | **5** (definición funcional) |
-| `BuildingWoodCosts` | exactamente Farm, Barracks, Tower y Fence; ≥ 0; sin MainCenter | PENDIENTE |
-| `FarmRepairWoodCost` | ≥ 0 | PENDIENTE |
-| `UnitFoodCosts` | Worker y Soldier; ≥ 0 | PENDIENTE |
+| `BuildingWoodCosts` | exactamente Farm, Barracks, Tower y Fence; ≥ 0; sin MainCenter | PENDIENTE (balance) |
+| `FarmRepairWoodCost` | ≥ 0 | PENDIENTE (balance) |
+| `UnitFoodCosts` | Worker y Soldier; ≥ 0 | PENDIENTE (balance) |
 
 El trabajo requerido para reparar una granja **no** está aquí: es de Construction (D-012).
 
@@ -127,6 +127,6 @@ Las pruebas de gasto único, recolección con muerte simultánea y granja produc
 
 ## 8. Pendientes
 
-- Valores de balance (§6).
-- Política detallada de publicación de cambios económicos en el JSON (State Sync).
-- Métricas de Economy.
+- **PENDIENTE (balance):** los valores de §6.
+- ~~Política detallada de publicación de cambios económicos en el JSON (State Sync).~~ **Resuelto** en el contrato 09: mapeo 1:1 de eventos (D-070) y `ResourcesChanged` solo al dueño (09 §3).
+- ~~Métricas de Economy.~~ **Resuelto:** Simulation mide la fase 5 (Economy ∥ Combat) en sus métricas por tick (D-095, 06 §10), y `Rts.Measurement` la compara en paralelo frente a secuencial (D-101).

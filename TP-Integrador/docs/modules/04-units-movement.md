@@ -1,6 +1,6 @@
 # 04 — Units / Movement
 
-> **Estado:** jugabilidad y arquitectura de desplazamiento aprobadas; contratos geométricos/DTOs y balance pendientes.
+> **Estado:** especificación funcional original, cerrada. Se formalizó en el [contrato 04](../contracts/04-units-movement.md), está implementada y probada, y todas sus decisiones están `DECIDIDO` ([decisiones](../decisions.md), 2026-11-18). Los PENDIENTE y RECOMENDADO de este documento se resolvieron en el contrato y en las decisiones; solo quedan los valores numéricos y el mapa definitivo (balance).
 > **Etiquetas:** **DECIDIDO**, **RECOMENDADO**, **PENDIENTE**.
 > **Referencias:** [Simulation](06-simulation.md), [Combat](02-combat.md), [Construction](03-construction.md), [Production](05-production.md), [State Sync](09-state-sync.md).
 

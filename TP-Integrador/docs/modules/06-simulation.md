@@ -1,6 +1,6 @@
 # 06 — Simulation
 
-> **Estado:** arquitectura del loop y reglas de confirmación aprobadas conceptualmente; firmas y mecanismo concreto de commit por definir.
+> **Estado:** especificación funcional original, cerrada. Se formalizó en el [contrato 06](../contracts/06-simulation.md), está implementada y probada, y todas sus decisiones están `DECIDIDO` ([decisiones](../decisions.md), 2026-11-18). Los PENDIENTE y RECOMENDADO de este documento se resolvieron en el contrato y en las decisiones; solo quedan los valores numéricos y el mapa definitivo (balance).
 > **Etiquetas:** **DECIDIDO**, **RECOMENDADO**, **PENDIENTE**.
 > **Referencias:** [Economy](01-economy.md), [Combat](02-combat.md), [Construction](03-construction.md), [Units / Movement](04-units-movement.md), [Production](05-production.md), [GameSession](07-game-session.md), [Networking](08-networking.md), [State Sync](09-state-sync.md).
 
@@ -61,7 +61,7 @@ Frecuencia objetivo **20 Hz**, **50 ms entre ticks**, **sin ticks solapados**. U
 - Inicio de reparación: pagar una sola vez + iniciar estado de reparación. Inicio de entrenamiento: pagar una vez + crear trabajo activo.
 - Economía y Combate **no** aplican deltas mientras falta resultado de la otra tarea. Barrera → validación conjunta → commit ordenado.
 - Para ataques, Simulation agrega daño por objetivo, limita HP a cero y resuelve destrucciones una vez; para recursos, consolida deltas sin invalidar efectos del snapshot por muertes del mismo tick.
-- La exacta estrategia de preparación/commit seguro sin medias mutaciones es **PENDIENTE de implementación formal**; no asumir que una sucesión de escrituras con posibilidad de excepción es automáticamente transaccional.
+- La exacta estrategia de preparación/commit seguro sin medias mutaciones es **PENDIENTE de implementación formal**; no asumir que una sucesión de escrituras con posibilidad de excepción es automáticamente transaccional. **Resuelto** por D-044 (`WorldState` inmutable, contrato 06 §2).
 - Si una fase esencial falla de forma irrecuperable, **no** continuar arbitrariamente con medio resultado de Economy o Combat. Los cambios ya confirmados en fases anteriores no implican una capacidad de rollback total del tick.
 
 ## 6. Concurrencia y determinismo — DECIDIDO

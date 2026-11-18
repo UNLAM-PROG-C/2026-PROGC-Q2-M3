@@ -1,12 +1,12 @@
 # Contrato 07 — GameSession
 
-> **Estado:** implementado (`server/src/Rts.GameSession`, tipos de integración en `Rts.Shared.Session`) y probado (`server/tests/Rts.GameSession.Tests`). Están completos la máquina de estados (`SessionStateMachine`), el buzón (`SessionInbox`), la vista (`SessionStateStore`) y el host (`SessionHost`). Falta integrarlos con Networking y Simulation reales (ver §12).
+> **Estado:** implementado (`server/src/Rts.GameSession`, tipos de integración en `Rts.Shared.Session`) y probado (`server/tests/Rts.GameSession.Tests`). Están completos la máquina de estados (`SessionStateMachine`), el buzón (`SessionInbox`), la vista (`SessionStateStore`) y el host (`SessionHost`). Integrado en el servidor con Networking y Simulation reales, con logging por `ILogger<SessionHost>` (D-096) y pruebas de punta a punta (`Rts.Server.Tests/EndToEnd`). Solo falta el balance (§12).
 > **Etiquetas:** **DECIDIDO** = aprobado por el equipo (ver [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Módulo:** [07 — GameSession](../modules/07-game-session.md). **Vecinos:** [06 Simulation](06-simulation.md), [08 Networking](../modules/08-networking.md), [09 State Sync](../modules/09-state-sync.md).
 
 ## 1. Superficie pública
 
-**RECOMENDADO (D-059):** GameSession es una **máquina de estados pura** más un **host** que serializa eventos y ejecuta acciones. Los tipos que necesitan Networking y State Sync viven en `Rts.Shared.Session`, así que ninguno de ellos referencia el proyecto GameSession (mismo criterio que D-049).
+**DECIDIDO (D-059):** GameSession es una **máquina de estados pura** más un **host** que serializa eventos y ejecuta acciones. Los tipos que necesitan Networking y State Sync viven en `Rts.Shared.Session`, así que ninguno de ellos referencia el proyecto GameSession (mismo criterio que D-049).
 
 | Tipo | Proyecto / namespace | Uso |
 |---|---|---|
@@ -85,7 +85,7 @@ Inmutable: cada transición crea uno nuevo. Campos: `Session`, `Status`, `Player
 - **DECIDIDO (D-053, resuelve O-005):** una conexión ocupa plaza **recién después de un `Hello` con versión compatible**. Networking valida la versión y solo entonces llama a `TryPostHello`. Un cliente con versión incompatible, o que nunca manda `Hello`, nunca ocupa plaza: lo corta Networking con su propio timeout de handshake (PENDIENTE en el contrato de Networking).
 - **DECIDIDO (D-054, resuelve O-008):** el cliente nuevo ocupa **la plaza libre**. Si P1 se fue antes de Running y P2 sigue, el nuevo es P1 y el que quedó sigue siendo P2. El `PlayerId` de una conexión no cambia mientras vive. "Primero = P1, segundo = P2" (07 §2) describe el llenado inicial, con ambas plazas libres.
 - Un tercer cliente, o cualquiera que llegue fuera de `WaitingForPlayers`, recibe `CloseConnection(Session.MatchFull)` (07 §2).
-- **RECOMENDADO (D-059):** el rechazo no es un mensaje de sesión aparte. `CloseConnection` lleva el motivo, y Networking envía un aviso final con ese código antes de cerrar: el mensaje `Disconnecting(reason)` (D-080, [contrato 08 §3](08-networking.md#3-ciclo-de-vida-de-una-conexión)).
+- **DECIDIDO (D-059):** el rechazo no es un mensaje de sesión aparte. `CloseConnection` lleva el motivo, y Networking envía un aviso final con ese código antes de cerrar: el mensaje `Disconnecting(reason)` (D-080, [contrato 08 §3](08-networking.md#3-ciclo-de-vida-de-una-conexión)).
 
 ## 5. Inicio y `ReadyTimeout`
 
@@ -93,7 +93,7 @@ Inmutable: cada transición crea uno nuevo. Campos: `Session`, `Status`, `Player
 - **DECIDIDO (D-056, resuelve O-010 parte a):** al vencer `ReadyTimeout`, se expulsa a quien no confirmó y se libera su plaza. Quien sí confirmó se queda, con su Ready reiniciado, y la sesión vuelve a `WaitingForPlayers`. Si ninguno confirmó, se expulsa a ambos y la sesión queda vacía. Nunca queda un estado trabado.
 - **DECIDIDO (D-057):** el jugador que se queda recibe `StartAborted(InitializationId, Reason)`, con `Reason = OpponentLeft` o `ReadyTimeout`. Godot descarta el mundo cargado y vuelve a esperar. Es un mensaje de sesión que se agrega a los de 07 §9.
 - Al salir de `Starting`, la inicialización deja de ser vigente. Un Ready viejo recibe `Session.StaleInitialization` (07 §4), y su timer pendiente se ignora porque compara `InitializationId`.
-- **RECOMENDADO (D-060):** si `InitializeMatch` o la publicación del InitialState fallan, el host informa `InitializationFailed` y la sesión termina con `CriticalError` sin `FinalTick`. Reintentar no sirve: con el mismo mapa y la misma configuración, falla igual.
+- **DECIDIDO (D-060):** si `InitializeMatch` o la publicación del InitialState fallan, el host informa `InitializationFailed` y la sesión termina con `CriticalError` sin `FinalTick`. Reintentar no sirve: con el mismo mapa y la misma configuración, falla igual.
 
 ## 6. Desconexiones en Running: lote y precedencia
 
@@ -133,7 +133,7 @@ Para cada conexión, el orden de las acciones es el orden de la cola de salida (
   - el **consumidor** (`ISessionHost`) lee el buzón de a un evento, aplica `Apply`, publica el estado nuevo en la vista (una referencia inmutable) y ejecuta las acciones.
 
   El buzón y la vista no dependen de nada, así que se crean antes que Networking y Simulation, y la composición queda lineal (contrato 10 §4).
-- **Cola (RECOMENDADO D-059):** está acotada por `EventQueueCapacity` solo para `Hello` y `ClientReady`; `TryPost*` devuelve `false` si está llena. `PostConnectionClosed` y los avisos internos (timer, Simulation, detención, drenaje) **nunca se descartan**: hay a lo sumo uno por conexión o por intento, así que su cantidad ya está acotada.
+- **Cola (DECIDIDO D-059):** está acotada por `EventQueueCapacity` solo para `Hello` y `ClientReady`; `TryPost*` devuelve `false` si está llena. `PostConnectionClosed` y los avisos internos (timer, Simulation, detención, drenaje) **nunca se descartan**: hay a lo sumo uno por conexión o por intento, así que su cantidad ya está acotada.
 - **Acciones asincrónicas:** `StopSimulation` y `ShutdownConnections` corren fuera del consumidor y vuelven como eventos (`SimulationStopped`, `ShutdownCompleted`). Si `StopTicksAsync` falla, el host informa `SimulationStopped(null)` igual.
 - **Timer:** `ScheduleReadyTimeout` usa `TimeProvider`, que es monotónico y reemplazable en pruebas, nunca ticks (07 §4).
 - **Falla al arrancar los ticks (DECIDIDO D-086):** si `StartTicks` lanza una excepción, el host informa `CriticalError(null)` como resultado de Simulation. El `StopTicksAsync` que sigue devuelve enseguida, sin esperar ticks que nunca arrancaron (06 §6).
@@ -152,8 +152,8 @@ Para cada conexión, el orden de las acciones es el orden de la cola de salida (
 
 | Parámetro | Regla | Valor |
 |---|---|---|
-| `ReadyTimeout` | > 0, reloj monotónico | PENDIENTE |
-| `EventQueueCapacity` | > 0; solo limita Hello y Ready | PENDIENTE |
+| `ReadyTimeout` | > 0, reloj monotónico | PENDIENTE (balance) |
+| `EventQueueCapacity` | > 0; solo limita Hello y Ready | PENDIENTE (balance) |
 
 La espera del segundo jugador no tiene parámetro, porque es ilimitada (DECIDIDO). El plazo de drenaje al cerrar es de Networking (07 §9).
 
@@ -182,7 +182,7 @@ Todas están implementadas en `server/tests/Rts.GameSession.Tests`, con Networki
 
 ## 12. Pendientes
 
-- Valores de `ReadyTimeout` y `EventQueueCapacity` (balance y entorno).
-- Pruebas de integración con Networking y Simulation reales, cuando existan (work-plan §4): desconexiones y `MatchEnded` concurrentes con un solo resultado oficial, y dos apariciones que no eligen la misma celda.
-- ~~Resolver si `SessionHost` recibe logging (O-011)~~: resuelto, recibe `ILogger<SessionHost>` (D-096, aceptada el 2026-11-16; ver §8). ~~Confirmar la falla de `StartTicks` (D-086)~~: confirmada el 2026-11-15.
+- **PENDIENTE (balance):** valores de `ReadyTimeout` y `EventQueueCapacity`.
+- ~~Pruebas de integración con Networking y Simulation reales (work-plan §4).~~ Hechas: las desconexiones y el `MatchEnded` concurrentes con un solo resultado oficial están en `Rts.Server.Tests/EndToEnd/DisconnectionTests`, y las dos apariciones que no eligen la misma celda en `Rts.Integration.Tests/ProductionTests`.
+- ~~Resolver si `SessionHost` recibe logging (O-011)~~: resuelto, recibe `ILogger<SessionHost>` (D-096, aceptada el 2026-11-16 y aprobada por el equipo el 2026-11-18; ver §8). ~~Confirmar la falla de `StartTicks` (D-086)~~: confirmada el 2026-11-15.
 - ~~DTOs JSON de sesión y aviso de cierre; timeout de handshake y drenaje~~: definidos en el [contrato 08](08-networking.md). Quedan sus valores numéricos.

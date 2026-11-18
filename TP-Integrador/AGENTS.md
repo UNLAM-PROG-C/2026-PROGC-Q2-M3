@@ -1,7 +1,7 @@
 # AGENTS.md — RTS 1v1 · Programación Concurrente
 
 > **Propósito:** instrucciones de trabajo para integrantes y agentes de programación que participen en este repositorio.
-> **Estado:** guía de colaboración derivada de las decisiones de diseño. Los nueve módulos ya tienen contrato (`docs/contracts/`) y estructura de código sin lógica (`server/`); esta guía no los reemplaza.
+> **Estado:** guía de colaboración derivada de las decisiones de diseño. Los nueve módulos tienen contrato (`docs/contracts/`) y están implementados, integrados en `Rts.Server` y probados de punta a punta (`server/`), también con el cliente Godot; solo falta el balance final (§8). Esta guía no reemplaza a los contratos.
 > **Idioma de la documentación:** español. Nombres técnicos, identificadores y símbolos de implementación pueden estar en inglés.
 
 ## 1. Producto y alcance aprobado
@@ -118,7 +118,7 @@ El código del servidor vive en `server/` (solución `server/Rts.slnx`; `dotnet 
 
 ## 8. Estado del proyecto y pendientes
 
-**Formalizado** (contratos y estructura de código, sin lógica):
+**Contratos y decisiones:**
 
 | Ámbito | Contrato | Decisiones |
 |---|---|---|
@@ -129,32 +129,23 @@ El código del servidor vive en `server/` (solución `server/Rts.slnx`; `dotnet 
 | State Sync y esquema JSON (`Rts.Protocol`) | 09 | D-062 a D-072 |
 | Networking | 08 | D-073 a D-080 |
 | Server (composición, no es módulo) | 10 | D-081 a D-085 |
+| Decisiones de implementación e integración | 01, 06, 07, 08, 10 | D-086 a D-107 |
 
-Todos los asuntos abiertos detectados en `docs/modules/` (O-001 a O-010) están resueltos. En `Rts.Server` ya funcionan la carga y validación de la configuración, el catálogo y el apagado ordenado (`rts-server --validate-only`).
+Todas las decisiones están `DECIDIDO`: al cerrar la integración (2026-11-18) el equipo aprobó las que seguían `RECOMENDADO` y convirtió los «Comportamientos provisorios» en D-102 a D-107. Todos los asuntos abiertos (O-001 a O-011) están resueltos.
 
-**Implementado:** Simulation completó sus Fases 1 y 2 contra fakes de los módulos de dominio (cola de comandos, cargador de mapa, motor con las 9 fases del tick, los 8 handlers de comandos, loop de 20 Hz con supervisión y `SimulationFactory`; decisiones D-087 a D-094) y su Fase 3 de diagnóstico (métricas, resúmenes, fallas críticas con motivo, el adaptador de log del Server y la medición de paralelo frente a secuencial; D-095 a D-101). Las pruebas de integración (`server/tests/Rts.Integration.Tests`) ya corren el motor con los cinco módulos de dominio reales (Economy, Combat, Movement, Construction y Production). Ver el estado del contrato 06.
+**Implementado y probado (2026-11-18):** los nueve módulos con su lógica completa y sus pruebas (`dotnet test server/Rts.slnx`: 1155 pruebas en verde).
 
-**Vertical slice (2026-11-16):** `Rts.Server` arma todas las piezas reales (Networking, GameSession, Simulation con los módulos de dominio, State Sync) y corre una partida completa. `server/tests/Rts.Server.Tests/EndToEnd` la recorre con dos clientes TCP, de `Hello` a `MatchEnded`, con un `TrainUnit` aceptado. Ver el estado del contrato 10.
+- **Dominio:** Economy, Combat, Construction, Units / Movement y Production (contratos 01 a 05).
+- **Simulation:** motor con las 9 fases del tick, los 8 handlers de comandos, loop de 20 Hz con supervisión y diagnóstico (métricas, resúmenes y fallas críticas con motivo; D-087 a D-101). `server/tools/Rts.Measurement` mide paralelo frente a secuencial con los módulos reales.
+- **GameSession, Networking y State Sync**, con logging por `ILogger<T>` (D-096).
+- **Server:** `Rts.Server` arma todas las piezas reales en el orden del contrato 10 §4 y corre una partida completa.
+- **Pruebas de integración de §7:** `server/tests/Rts.Integration.Tests` corre el motor con los cinco módulos de dominio reales, y `server/tests/Rts.Server.Tests/EndToEnd` recorre partidas completas por TCP con dos clientes (de `Hello` a `MatchEnded`, con un `TrainUnit` aceptado, y desconexiones).
+- **Cliente Godot:** partida manual con dos instancias reales contra `rts-server` (2026-11-16).
 
-**Production (2026-11-16):** la lógica real (contrato 05) reemplazó al provisorio del Server y a los stubs de las pruebas de integración y de `Rts.Measurement`.
+**PENDIENTE (balance):** es lo único que falta en el proyecto.
 
-**PENDIENTE:**
-
-- **Prueba con el cliente Godot real:** dos instancias contra `rts-server`.
-- **Mapa:** el archivo de mapa real (formato D-052).
-- **Valores numéricos:** balance (costos, HP, daño, rangos, velocidades, duraciones, tamaño del mapa), timeouts, capacidades de colas, límites de red y puerto.
-- **Lógica:** implementar cada contrato y sus pruebas de comportamiento, incluidas las de integración de §7.
-- **Revisión de las decisiones `RECOMENDADO`** y de los «Comportamientos provisorios» de `docs/decisions.md`.
-- **Errores:** códigos que aparezcan al implementar, con el prefijo de área de su módulo (D-007).
-- **Equipo:** el reparto está en `docs/work-plan.md`; la asignación de Flor, Ivan, Coro y Joaco es tentativa.
-
-**RECOMENDADO:**
-
-1. ~~Implementar las piezas que instancia `Rts.Server`~~ e ~~integrar una vertical slice~~: hechos (2026-11-16).
-2. Probar el servidor con dos instancias del cliente Godot real y registrar lo que no encaje, con su responsable.
-3. ~~Integrar Production cuando exista y repetir la prueba de punta a punta con un `TrainUnit` aceptado~~: hecho (2026-11-16).
-
-La división de tareas debe considerar dependencia real e integración continua, no asumir que cada uno de los nueve módulos equivale a un agente.
+- **Valores numéricos:** costos, HP, daño, rangos, velocidades, duraciones, timeouts, capacidades de colas, límites de red y puerto (`server/config/server.example.json`). Si cambian los límites de Networking, revisar los de `SimulationConfig` (D-092).
+- **Mapa definitivo:** `server/config/maps/default.json` es un mapa temporal con el formato D-052; el definitivo (tamaño, árboles e inicios) es parte del balance.
 
 ---
 

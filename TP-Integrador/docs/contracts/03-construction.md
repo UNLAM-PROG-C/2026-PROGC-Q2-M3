@@ -1,6 +1,6 @@
 # Contrato 03 — Construction (`Rts.Construction`)
 
-> **Estado:** contratos, modelos, interfaces y configuración implementados (`server/src/Rts.Construction`) y probados (`server/tests/Rts.Construction.Tests`). **La lógica de validación y cálculo todavía no está implementada.**
+> **Estado:** implementado y probado (`server/src/Rts.Construction`, `server/tests/Rts.Construction.Tests`): contratos, modelos, configuración y la lógica completa de validación y cálculo (`ConstructionRules`, `ConstructionCalculator`). Integrado en el motor de Simulation y en el servidor (`Rts.Integration.Tests`, `Rts.Server.Tests/EndToEnd`). Solo falta el balance: los valores de su configuración.
 > **Etiquetas:** **DECIDIDO** = aprobado (módulo [03-construction](../modules/03-construction.md) o [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Depende de:** [Contrato 00](00-shared-kernel.md). No depende de ningún otro módulo; usa resultados de Movement y Economy que Simulation le entrega como datos.
 
@@ -80,7 +80,7 @@ Simulation actualiza la `OccupancyView` (`WithStructure`) entre comandos del mis
 | Ya hay una reparación en curso | `Join`: los trabajadores se suman sin pagar |
 | No hay reparación en curso | `StartAndPay`: Simulation cobra el costo de Economy **una vez** y crea un `FarmRepairState(WorkDone = 0)` en el mismo commit; emite `FarmRepairStarted` |
 
-Los trabajadores se evalúan con Movement, con la huella de la granja como objetivo y `BuildRange` como rango. Si ninguno es aceptado en un `StartAndPay`, el comando se rechaza entero, sin cobro (RECOMENDADO D-036, por analogía con Build).
+Los trabajadores se evalúan con Movement, con la huella de la granja como objetivo y `BuildRange` como rango. Si ninguno es aceptado en un `StartAndPay`, el comando se rechaza entero, sin cobro (DECIDIDO D-036, por analogía con Build).
 
 ## 5. Reglas del tick (fase 3) que debe cumplir la implementación
 
@@ -94,7 +94,7 @@ Los aportes son contribuciones agregadas, no escritores concurrentes (03 §7). T
    - Si `WorkDone' ≥ RepairWorkRequired`, queda `IsCompleted` y se propone `FarmRepairCompleted`.
    - Si no, se propone `FarmRepairProgressChanged`.
    - Sin reparadores no cambia: el progreso se conserva (03 §4).
-3. **HP inicial (RECOMENDADO D-035):** `ceil(MaxHp × InitialHpFraction)`, con la fracción en (0, 1). Siempre queda en [1, MaxHp − 1], así que ninguna obra nace completa.
+3. **HP inicial (DECIDIDO D-035):** `ceil(MaxHp × InitialHpFraction)`, con la fracción en (0, 1). Siempre queda en [1, MaxHp − 1], así que ninguna obra nace completa.
 
 ## 6. Lo que Simulation debe hacer con el resultado (commit de la fase 3)
 
@@ -109,10 +109,10 @@ Los aportes son contribuciones agregadas, no escritores concurrentes (03 §7). T
 
 | Parámetro | Validación | Valor |
 |---|---|---|
-| `BuildingMaxHp` (los 5 tipos) | ≥ 2 | PENDIENTE |
-| `FootprintSizes` (los 5 tipos) | no vacía; **valla 1×1** | PENDIENTE |
-| `InitialHpFraction` | en (0, 1) | PENDIENTE (el 10 % fue ilustrativo) |
-| `BuildHpPerWorkerTick`, `RepairWorkRequired`, `RepairWorkPerWorkerTick` | > 0 | PENDIENTE |
+| `BuildingMaxHp` (los 5 tipos) | ≥ 2 | PENDIENTE (balance) |
+| `FootprintSizes` (los 5 tipos) | no vacía; **valla 1×1** | PENDIENTE (balance) |
+| `InitialHpFraction` | en (0, 1) | PENDIENTE (balance; el 10 % fue ilustrativo) |
+| `BuildHpPerWorkerTick`, `RepairWorkRequired`, `RepairWorkPerWorkerTick` | > 0 | PENDIENTE (balance) |
 
 ## 8. Pruebas de aceptación para la etapa de implementación
 
@@ -140,6 +140,5 @@ Son de integración con Simulation, Movement y Economy:
 
 ## 9. Pendientes
 
-- Valores (§7).
-- Posiciones iniciales de los Centros Principales y diseño del mapa fijo y simétrico (Simulation).
-- Cómo publica State Sync los eventos de progreso, por ejemplo si los coalesce (O-009).
+- **PENDIENTE (balance):** los valores de §7, y el mapa definitivo con las posiciones iniciales de los Centros Principales. El formato es el de D-052 (06 §8); `server/config/maps/default.json` es un mapa temporal, fijo y simétrico.
+- ~~Cómo publica State Sync los eventos de progreso, por ejemplo si los coalesce (O-009).~~ **Resuelto** por D-065: uno por evento de dominio, sin agrupar.

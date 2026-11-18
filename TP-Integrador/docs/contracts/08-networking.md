@@ -1,6 +1,6 @@
 # Contrato 08 — Networking
 
-> **Estado:** primera versión de contratos implementada (`server/src/Rts.Networking`, DTOs en `server/src/Rts.Protocol`) y probada (`server/tests/Rts.Networking.Tests`, `server/tests/Rts.Protocol.Tests`). Con lógica y pruebas: framing, parser (todos los mensajes que envía el cliente, incluidos los ocho comandos de gameplay), admisión, cola de salida con `SendLoop`, el servidor TCP (aceptación, receptor, ruteo y conexión con cierre único), el cierre por abuso, el tope de conexiones pendientes, el monitor con timeout de handshake y heartbeat, el cierre por saturación con descarte, el drenaje final y las métricas. Las elecciones que este contrato no fija están en «Comportamientos provisorios» de [decisiones](../decisions.md).
+> **Estado:** implementado (`server/src/Rts.Networking`, DTOs en `server/src/Rts.Protocol`) y probado (`server/tests/Rts.Networking.Tests`, `server/tests/Rts.Protocol.Tests`). Con lógica y pruebas: framing, parser (todos los mensajes que envía el cliente, incluidos los ocho comandos de gameplay), admisión, cola de salida con `SendLoop`, el servidor TCP (aceptación, receptor, ruteo y conexión con cierre único), el cierre por abuso, el tope de conexiones pendientes, el monitor con timeout de handshake y heartbeat, el cierre por saturación con descarte, el drenaje final y las métricas. Las elecciones que este contrato no fijaba quedaron como D-102 a D-107. Integrado en el servidor y probado de punta a punta por TCP (`Rts.Server.Tests/EndToEnd`) y con el cliente Godot real. Solo falta el balance (§13).
 > **Etiquetas:** **DECIDIDO** = aprobado por el equipo (ver [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Módulo:** [08 — Networking](../modules/08-networking.md). **Vecinos:** [06 Simulation](06-simulation.md), [07 GameSession](07-game-session.md), [09 State Sync](09-state-sync.md).
 
@@ -28,7 +28,7 @@ Networking no referencia ningún módulo de dominio, ni Simulation, ni GameSessi
 
 ## 2. Sobre y mensajes
 
-**RECOMENDADO (D-076):** todo mensaje, en ambos sentidos, es una línea JSON UTF-8 terminada en `\n`, con este sobre:
+**DECIDIDO (D-076):** todo mensaje, en ambos sentidos, es una línea JSON UTF-8 terminada en `\n`, con este sobre:
 
 ```json
 {"protocolVersion":1,"type":"Move","messageId":42,"payload":{ ... }}
@@ -56,6 +56,8 @@ Networking no referencia ningún módulo de dominio, ni Simulation, ni GameSessi
 
 Los mensajes de entrada nunca traen `PlayerId`: la identidad sale de `ISessionGate.GetPlayer(conexión)` (08 §3). Un `PlayerId` falsificado no tiene dónde ir.
 
+**DECIDIDO (D-107):** después de `Oversize` el decodificador queda inutilizable, y el `\r` de un `\r\n` no cuenta para `MaxInboundMessageBytes`.
+
 ## 3. Ciclo de vida de una conexión
 
 ```
@@ -72,6 +74,8 @@ aceptada ──► AwaitingHello ──Hello válido──► HelloAccepted ─�
   - Sin `Hello` dentro de `HandshakeTimeout`: `Disconnecting(Network.HandshakeTimeout)`.
 - **`HelloAccepted`:** la plaza la decide GameSession, que responde `PlayerAssigned` o `Close(MatchFull)`. Un segundo `Hello` es una falta (`Network.DuplicateHello`).
 - **Cierre:** toda conexión aceptada termina en `Closed` y se informa con `PostConnectionClosed` **exactamente una vez**, cualquiera sea la causa (EOF, error de socket, heartbeat, saturación, abuso, `Close` de GameSession, drenaje). GameSession ignora las conexiones sin plaza.
+
+**DECIDIDO (D-105):** la conexión que supera `MaxPendingConnections` se acepta solo para enviarle `Disconnecting(TooManyConnections)`, y se informa cerrada a GameSession como cualquier conexión aceptada.
 
 ## 4. Recepción (`ReceiveLoop`, una por conexión)
 
@@ -110,7 +114,7 @@ Pasos en orden, para cada comando válido:
 - **DECIDIDO (D-075):** los rechazos antes de admitir usan `CommandRejected(messageId, error)`, distinto del `CommandResult` oficial. Como el comando no entró a Simulation, no queda en el registro de idempotencia y Godot puede **reintentarlo con el mismo `messageId`**.
 - Un comando admitido no recibe respuesta inmediata. Su resultado oficial llega en el `StateEvents` del tick que lo procesa (contrato 09 §5), y un duplicado recibe el resultado original (D-043).
 - `Admit` asigna `Sequence` y encola en una sola operación atómica (contrato 06 §7). Los dos receptores pueden llamarlo a la vez.
-- **RECOMENDADO (D-077):** el límite por segundo es un **balde de fichas**: capacidad `CommandBurst`, recarga a `CommandsPerSecond`. Cuenta solo comandos de gameplay, `RepathResponse` incluido (D-028). Rechazar no quita nada ya admitido (08 §4).
+- **DECIDIDO (D-077):** el límite por segundo es un **balde de fichas**: capacidad `CommandBurst`, recarga a `CommandsPerSecond`. Cuenta solo comandos de gameplay, `RepathResponse` incluido (D-028). Rechazar no quita nada ya admitido (08 §4).
 
 ## 6. Faltas y abuso
 
@@ -123,6 +127,8 @@ Pasos en orden, para cada comando válido:
 - Más de `MaxViolations` faltas dentro de `ViolationWindow` ⇒ `Disconnecting(Network.AbuseDetected)`.
 - Un mensaje que supera el tamaño máximo cierra de inmediato, sin contar faltas.
 - Un JSON malformado aislado **no** cierra la conexión (08 §2).
+
+**DECIDIDO (D-103):** una falta deja de contar al cumplirse la `ViolationWindow` exacta; al superar el límite, primero va la respuesta al mensaje y después `Disconnecting(AbuseDetected)`; un `Hello` con otra versión no suma falta.
 
 ## 7. Salida (`IOutboundQueue` + `SendLoop`)
 
@@ -145,11 +151,13 @@ Pasos en orden, para cada comando válido:
   - espera que las colas se vacíen hasta `DrainTimeout` y cierra todo.
 
   Termina aunque haya sockets muertos.
-- **RECOMENDADO (D-078):** la cola se implementa con una lista enlazada protegida por un lock, más una señal para el consumidor, porque `Channel` no permite quitar un reemplazable intermedio. El lock solo protege la lista y nunca se toma junto con otro lock.
+- **DECIDIDO (D-078):** la cola se implementa con una lista enlazada protegida por un lock, más una señal para el consumidor, porque `Channel` no permite quitar un reemplazable intermedio. El lock solo protege la lista y nunca se toma junto con otro lock.
+
+**DECIDIDO (D-102, D-105):** la cola reserva un lugar para la posición (los esenciales ocupan como máximo `OutboundQueueCapacity − 1`). Al drenar, `RunAsync` deja de aceptar (una conexión que llega se cierra con `ServerShuttingDown`), y si vence `DrainTimeout` las conexiones que quedan se cortan sin esperar su `Disconnecting`.
 
 ## 8. Heartbeat
 
-**RECOMENDADO (D-079)**, sobre lo DECIDIDO en 08 §6:
+**DECIDIDO (D-079)**, sobre lo DECIDIDO en 08 §6:
 
 - Si pasa `PingIdleInterval` sin **entrada válida** del cliente, el servidor envía `Ping` con un `pingId` correlativo por conexión.
 - Si no llega el `Pong` con ese `pingId` dentro de `PongTimeout`, la conexión se da por perdida: `Disconnecting(Network.HeartbeatTimeout)` y `PostConnectionClosed`. GameSession decide el efecto (victoria del otro en Running).
@@ -157,6 +165,8 @@ Pasos en orden, para cada comando válido:
 - El heartbeat es simétrico: Godot puede enviar `Ping` para detectar un servidor caído, y el servidor responde `Pong` con el mismo `pingId`.
 - Un solo monitor periódico revisa handshake y heartbeat de todas las conexiones. Usa `TimeProvider` y no depende de los ticks, así que funciona en todas las fases de la sesión (08 §6).
 - Peor caso de detección: `PingIdleInterval + PongTimeout`. Debe ser prudente, porque en Running una desconexión hace ganar al otro.
+
+**DECIDIDO (D-104):** el monitor revisa los plazos cada 100 ms (`ConnectionMonitor.CheckPeriod`); cuenta como entrada válida todo mensaje que el parser acepta; con un `Ping` pendiente solo su `Pong` evita el `HeartbeatTimeout`; el heartbeat corre también en `AwaitingHello`.
 
 ## 9. Concurrencia
 
@@ -176,16 +186,16 @@ Pasos en orden, para cada comando válido:
 
 | Parámetro | Regla | Valor |
 |---|---|---|
-| `ListenAddress`, `Port` | IP válida; 1–65535 | PENDIENTE |
+| `ListenAddress`, `Port` | IP válida; 1–65535 | PENDIENTE (balance) |
 | `ProtocolVersion` | > 0 | 1 |
-| `MaxInboundMessageBytes` | > 0 | PENDIENTE |
-| `MaxPendingConnections` | > 0 | PENDIENTE |
-| `HandshakeTimeout` | > 0 | PENDIENTE |
-| `CommandsPerSecond`, `CommandBurst` | > 0; ráfaga ≥ por segundo | PENDIENTE |
-| `OutboundQueueCapacity` | ≥ 2 | PENDIENTE |
-| `MaxViolations`, `ViolationWindow` | > 0 | PENDIENTE |
-| `PingIdleInterval`, `PongTimeout` | > 0 | PENDIENTE |
-| `CloseLinger`, `DrainTimeout` | > 0 | PENDIENTE |
+| `MaxInboundMessageBytes` | > 0 | PENDIENTE (balance) |
+| `MaxPendingConnections` | > 0 | PENDIENTE (balance) |
+| `HandshakeTimeout` | > 0 | PENDIENTE (balance) |
+| `CommandsPerSecond`, `CommandBurst` | > 0; ráfaga ≥ por segundo | PENDIENTE (balance) |
+| `OutboundQueueCapacity` | ≥ 2 | PENDIENTE (balance) |
+| `MaxViolations`, `ViolationWindow` | > 0 | PENDIENTE (balance) |
+| `PingIdleInterval`, `PongTimeout` | > 0 | PENDIENTE (balance) |
+| `CloseLinger`, `DrainTimeout` | > 0 | PENDIENTE (balance) |
 
 ## 11. Lo que deben hacer los demás
 
@@ -195,6 +205,8 @@ Pasos en orden, para cada comando válido:
 | **GameSession** | Respaldar `ISessionGate` con una instantánea inmutable (contrato 07 §8) |
 | **Simulation** | Implementar `ICommandSink.Admit` como operación atómica, segura para varios hilos y no bloqueante (contrato 06 §7) |
 | **Godot** | Programar contra los ejemplos de `docs/protocol/examples/` (generados desde estos DTOs); enviar `Hello` primero; incluir `protocolVersion` en cada mensaje; usar `messageId` único y creciente por comando; tratar `CommandRejected` como reintentable y `CommandResult` como definitivo; responder `Ping` con `Pong`; terminar cada mensaje con `\n` |
+
+**DECIDIDO (D-106):** `MessagesReceived` cuenta toda línea completa, válida o no; `BytesSent` incluye el `\n`; `CommandsRejected` cuenta los `CommandRejected` enviados, incluido el de estructura inválida.
 
 ## 12. Pruebas previstas (08 §9)
 
@@ -213,7 +225,7 @@ Pasos en orden, para cada comando válido:
 
 ## 13. Pendientes
 
-- Valores de todos los configurables (§10).
-- Pruebas de ida y vuelta contra el cliente Godot real (08 §11).
-- Proyecto `Rts.Server`: composición de todos los módulos y programa principal.
-- Revisión de los comportamientos provisorios de Networking registrados en [decisiones](../decisions.md).
+- **PENDIENTE (balance):** valores de todos los configurables (§10).
+- ~~Pruebas de ida y vuelta contra el cliente Godot real (08 §11).~~ Hechas (2026-11-16): partida manual con dos instancias de Godot contra `rts-server`.
+- ~~Proyecto `Rts.Server`: composición de todos los módulos y programa principal.~~ Hecho (2026-11-16, [contrato 10](10-server.md)).
+- ~~Revisión de los comportamientos provisorios de Networking registrados en [decisiones](../decisions.md).~~ Hecha (2026-11-18): quedaron como D-102 a D-107, y el logging con `ILogger<T>` como D-096.

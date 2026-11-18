@@ -1,6 +1,6 @@
 # 05 — Production
 
-> **Estado:** mecánica aprobada y cerrada; contratos concretos y balance pendientes.
+> **Estado:** especificación funcional original, cerrada. Se formalizó en el [contrato 05](../contracts/05-production.md), está implementada y probada, y todas sus decisiones están `DECIDIDO` ([decisiones](../decisions.md), 2026-11-18). Los PENDIENTE y RECOMENDADO de este documento se resolvieron en el contrato y en las decisiones; solo quedan los valores numéricos y el mapa definitivo (balance).
 > **Etiquetas:** **DECIDIDO**, **RECOMENDADO**, **PENDIENTE**.
 > **Referencias:** [Economy](01-economy.md), [Construction](03-construction.md), [Units / Movement](04-units-movement.md), [Combat](02-combat.md), [Simulation](06-simulation.md).
 
@@ -39,7 +39,7 @@ Estados conceptuales: `Idle`, `WaitingForResources`, `Training`, `PendingSpawn`.
 - **No se cobra de nuevo** por una tarea `PendingSpawn`; tampoco inicia otro entrenamiento mientras ocupa el productor.
 - Si la unidad termina y aparece en el tick N, **la siguiente tarea solo puede comenzar en el próximo tick de Production (N+1 o después)**, no inmediatamente en la misma fase.
 - Si un productor ya estaba libre al entrar a una fase de Production, una solicitud elegible puede comenzar en esa fase.
-- **PENDIENTE:** convención exacta de si una tarea recién iniciada consume su primer tick de progreso de inmediato o a partir del siguiente tick; no cambiar la regla N+1 para siguiente tarea tras spawn.
+- **PENDIENTE:** convención exacta de si una tarea recién iniciada consume su primer tick de progreso de inmediato o a partir del siguiente tick; no cambiar la regla N+1 para siguiente tarea tras spawn. **Resuelto** por D-037: progresa desde N+1.
 
 ## 5. Aparición (Spawn) — DECIDIDO
 

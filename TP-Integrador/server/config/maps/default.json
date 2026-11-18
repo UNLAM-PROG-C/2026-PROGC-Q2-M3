@@ -1,5 +1,5 @@
 // MAPA TEMPORAL para la vertical slice y las pruebas (formato D-052, contrato 06 §8).
-// El mapa real lo diseñan Agus e Ivan en la Fase 4 (work-plan §3).
+// El mapa definitivo es parte del balance final, lo único pendiente del proyecto (AGENTS §8).
 // Simetría por rotación de 180°: la celda (c, r) de P1 corresponde a (47 - c, 47 - r) de P2,
 // y la posición (x, z) a (48 - x, 48 - z). La huella del Centro Principal (4x4) sale de server.example.json.
 {

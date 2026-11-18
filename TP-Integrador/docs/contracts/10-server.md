@@ -1,6 +1,6 @@
 # Contrato 10 — Server (composición)
 
-> **Estado:** implementado y probado (`server/src/Rts.Server`, `server/tests/Rts.Server.Tests`). El servidor arma las seis piezas reales en el orden de §4 y corre una partida completa; una prueba de punta a punta con dos clientes TCP la recorre entera (§6). Están completos también la configuración, la validación cruzada y la carga del mapa, el catálogo, el adaptador de efectos, el diagnóstico de Simulation (D-100), los códigos de salida y el apagado ordenado. **Provisorio:** Production, hasta que exista el módulo real (§6).
+> **Estado:** implementado y probado (`server/src/Rts.Server`, `server/tests/Rts.Server.Tests`). El servidor arma las seis piezas reales en el orden de §4 y corre una partida completa; una prueba de punta a punta con dos clientes TCP la recorre entera (§6). Están completos también la configuración, la validación cruzada y la carga del mapa, el catálogo, el adaptador de efectos, el diagnóstico de Simulation (D-100), los códigos de salida y el apagado ordenado. Corre con los cinco módulos de dominio reales y se probó con el cliente Godot; solo falta el balance (§6).
 > **Etiquetas:** **DECIDIDO** = aprobado por el equipo (ver [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **No es un módulo:** no tiene reglas de juego ni lógica de interacción. Es el `main()` del servidor (contrato 00 §1), y el único proyecto que referencia a todos.
 
@@ -33,16 +33,16 @@ Se ejecuta **una vez** por proceso:
   - Así cada pieza encuentra ya creadas todas las que necesita, y no hay objetos conectados "más tarde".
   - La comunicación en ambos sentidos entre módulos (la red trae comandos y lleva resultados) pasa siempre por colas. Nadie espera a nadie ni toma el lock de otro módulo, así que no hay riesgo de bloqueos cruzados.
   - Las referencias entre proyectos siguen siendo un árbol sin ciclos, y el compilador lo hace cumplir.
-- **RECOMENDADO (D-083): configuración y logging.**
+- **DECIDIDO (D-083): configuración y logging.**
   - **Configuración:** un `server.json` con una sección por módulo, leído con el lector JSON de .NET. La ruta del mapa es relativa al archivo de configuración. Por línea de comandos se pueden pasar `--config`, `--port` y `--validate-only`.
-  - **Logging:** el de consola estándar de .NET (`Microsoft.Extensions.Logging.Console`), que escribe en segundo plano y no frena el tick. El Server es el único que escribe: traduce a `ILogger` el diagnóstico de Simulation (DECIDIDO D-095) y les pasa `ILogger<T>` a GameSession y Networking (RECOMENDADO D-096).
+  - **Logging:** el de consola estándar de .NET (`Microsoft.Extensions.Logging.Console`), que escribe en segundo plano y no frena el tick. El Server es el único que escribe: traduce a `ILogger` el diagnóstico de Simulation (DECIDIDO D-095) y les pasa `ILogger<T>` a GameSession y Networking (DECIDIDO D-096).
   - **Diagnóstico de Simulation (DECIDIDO D-100):** lo escribe `LoggingSimulationDiagnostics` (`Rts.Server.Diagnostics`), categoría `Rts.Simulation`. Qué se escribe lo decide solo `SimulationConfig.Diagnostics`; por eso `Program` deja pasar esa categoría en todos los niveles. La composición lo crea junto al loop y llama `WriteFinalSummary()` cuando la sesión terminó.
 - **DECIDIDO (D-084): apagado ordenado.**
   - El primer Ctrl+C (o SIGTERM) cancela `RunAsync`, y GameSession lo recibe como `ShutdownRequested`.
   - Si no hay otro resultado, la partida termina como final técnico con motivo nuevo `ServerShutdown`, sin declarar un "error" que no ocurrió.
   - En Running se detienen los ticks antes de fijar el resultado (contrato 07 §3).
   - Un segundo Ctrl+C corta el proceso en seco.
-- **RECOMENDADO (D-085): códigos de salida.**
+- **DECIDIDO (D-085): códigos de salida.**
 
 | Código | Significado |
 |---|---|
@@ -139,11 +139,13 @@ Crear no arranca nada: la red escucha recién en `RunAsync` y los ticks los arra
 
 - `Composition/ServerCompositionTests`: cada grupo por separado, el apagado sin jugadores (`ServerShutdown`) y el puerto ocupado (código 5).
 - `EndToEnd/FullMatchTests`: **prueba de punta a punta.** Dos clientes TCP que hablan JSON crudo por líneas, como Godot: `Hello` → `PlayerAssigned` → `InitialState` → `ClientReady` → `MatchStarted` → un `Stop` y un `TrainUnit` aceptados, de ida y vuelta → Ctrl+C → `MatchEnded` antes que `Disconnecting` → cierre.
+- `EndToEnd/DisconnectionTests` (AGENTS §7): si un jugador se desconecta, el otro gana y recibe un solo `MatchEnded`; si se desconectan los dos a la vez, o una desconexión compite con Ctrl+C, hay un único resultado oficial.
 
 **Production real (2026-11-16):** `CreateDomainModules` arma `ProductionRules` y `ProductionCalculator`, y le pasa al calculador `EconomyConfig.UnitFoodCosts` (D-015, contrato 05 §1). Reemplazó al provisorio `UnavailableProduction` y al stub de `Rts.Integration.Tests` y `Rts.Measurement`, que se borraron.
 
-**PENDIENTE:**
+**Hechos:**
 
-- Prueba manual con el cliente Godot real: dos instancias contra `rts-server` (08 §11).
+- ~~Prueba manual con el cliente Godot real~~: hecha (2026-11-16), dos instancias contra `rts-server` (08 §11). Del lado del servidor no hubo fallas; en el cliente apareció un problema de navegación (origen fuera del navmesh), que ya está corregido en `client/scripts/client_navigation.gd`.
 - ~~Logging de `SessionHost`~~: hecho (2026-11-16). `CreateSession` le pasa `loggers.CreateLogger<SessionHost>()` (D-096, cierra la O-011).
-- El archivo de mapa real (formato D-052) y los valores definitivos de configuración.
+
+**PENDIENTE (balance):** los valores definitivos de `server.example.json` y el mapa definitivo. `server/config/maps/default.json` es un mapa temporal con el formato D-052.

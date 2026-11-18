@@ -1,6 +1,6 @@
 # Contrato 05 — Production (`Rts.Production`)
 
-> **Estado:** contratos, modelos, interfaces y configuración implementados (`server/src/Rts.Production`) y probados (`server/tests/Rts.Production.Tests`). **La lógica está implementada:** `ProductionRules` (validación de `TrainUnit`, duraciones y búsqueda de celda de aparición) y `ProductionCalculator` (la fase 8). **Integrado:** el Server, `Rts.Integration.Tests` y `Rts.Measurement` usan el módulo real; `Rts.Integration.Tests/ProductionTests` lo prueba dentro del motor de Simulation.
+> **Estado:** contratos, modelos, interfaces y configuración implementados (`server/src/Rts.Production`) y probados (`server/tests/Rts.Production.Tests`). **La lógica está implementada:** `ProductionRules` (validación de `TrainUnit`, duraciones y búsqueda de celda de aparición) y `ProductionCalculator` (la fase 8). **Integrado:** el Server, `Rts.Integration.Tests` y `Rts.Measurement` usan el módulo real; `Rts.Integration.Tests/ProductionTests` lo prueba dentro del motor de Simulation. Solo falta el balance: los valores de su configuración.
 > **Etiquetas:** **DECIDIDO** = aprobado (módulo [05-production](../modules/05-production.md) o [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Depende de:** [Contrato 00](00-shared-kernel.md). No depende de ningún otro módulo: recibe la comida y los costos de Economy como datos inyectados.
 
@@ -32,7 +32,7 @@
 | HP máximo de la unidad nueva | Combat (D-021) | Lo aplica Simulation al crearla |
 | ID de la unidad nueva | Simulation | Emite `UnitSpawned` |
 
-Una solicitud se identifica por la `Sequence` global de su comando `TrainUnit`; no hay un `RequestId` aparte (RECOMENDADO D-041).
+Una solicitud se identifica por la `Sequence` global de su comando `TrainUnit`; no hay un `RequestId` aparte (DECIDIDO D-041).
 
 ## 3. TrainUnit en la fase 1
 
@@ -55,7 +55,7 @@ La fase 8 solo corre si la partida sigue tras Victory Rules (05 §6). Solo actú
 
 1. **Libres al entrar:** se anotan los productores sin tarea activa. Son los únicos que pueden iniciar en esta fase (05 §4).
 2. **Progreso (DECIDIDO D-037):** toda tarea con `RemainingTicks > 0` resta 1. Como el progreso ocurre antes de los inicios, una tarea iniciada en N avanza por primera vez en N+1. Con duración D, termina y aparece en **N+D**.
-3. **Apariciones:** las tareas con `RemainingTicks == 0`, recién terminadas o en `PendingSpawn` de antes, se procesan por **`Sequence` ascendente** (RECOMENDADO D-041):
+3. **Apariciones:** las tareas con `RemainingTicks == 0`, recién terminadas o en `PendingSpawn` de antes, se procesan por **`Sequence` ascendente** (DECIDIDO D-041):
    - se busca celda con `FindSpawnCell`, salteando las ya reservadas en esta fase;
    - si hay celda, se propone `SpawnProposal`, se reserva la celda y se libera la tarea activa (pero ese productor **no** inicia otra en esta fase);
    - si no hay celda, la tarea queda `PendingSpawn` y no se vuelve a cobrar.
@@ -64,7 +64,7 @@ La fase 8 solo corre si la partida sigue tras Victory Rules (05 §6). Solo actú
    - Se lleva la comida disponible de cada jugador. Para cada candidato: si el costo alcanza, se propone `ProductionStart` con `RemainingTicks = D`, `PaidFood = costo` y `StartedAtTick = Tick`, y se descuenta la comida localmente.
    - Si **no** alcanza, ese jugador queda bloqueado por el resto de la fase: ninguna solicitud posterior suya inicia, aunque sea más barata. La más antigua nunca queda postergada.
    - Los jugadores son independientes, porque cada uno tiene su propia comida.
-5. **Eventos:** `ProductionChanged` por cada productor cuyo estado discreto cambió, ordenados por `ProducerId`. No se emite en cada tick de progreso (RECOMENDADO D-042).
+5. **Eventos:** `ProductionChanged` por cada productor cuyo estado discreto cambió, ordenados por `ProducerId`. No se emite en cada tick de progreso (DECIDIDO D-042).
 6. Las colecciones del resultado no dependen del orden de las colecciones de entrada.
 
 ### Búsqueda de celda de aparición (`FindSpawnCell`, DECIDIDO D-039, D-040)
@@ -103,9 +103,9 @@ No agrega reglas: precisa detalles que el contrato dejaba abiertos, sin contrade
 
 | Parámetro | Validación | Valor |
 |---|---|---|
-| `TrainingDurationTicks` (Worker, Soldier) | > 0 | PENDIENTE |
-| `MaxPendingPerProducer` | > 0 | PENDIENTE |
-| `SpawnSearchRadiusCells` | > 0 (anillos de celdas) | PENDIENTE |
+| `TrainingDurationTicks` (Worker, Soldier) | > 0 | PENDIENTE (balance) |
+| `MaxPendingPerProducer` | > 0 | PENDIENTE (balance) |
+| `SpawnSearchRadiusCells` | > 0 (anillos de celdas) | PENDIENTE (balance) |
 
 Los costos en comida (3 y 5 fueron ejemplos ilustrativos) viven en `EconomyConfig.UnitFoodCosts`.
 
@@ -131,7 +131,7 @@ Son de integración con Simulation: productor destruido que pierde cola y tarea,
 
 ## 8. Pendientes
 
-- Valores (§6).
-- Política de publicación del progreso en Godot (State Sync).
+- **PENDIENTE (balance):** los valores de §6.
+- ~~Política de publicación del progreso en Godot (State Sync).~~ **Resuelto** por D-042: `ProductionChanged` solo en cambios discretos, con `RemainingTicks`, y solo al dueño (D-063).
 - ~~Integración con el motor de Simulation real.~~ Hecha (2026-11-16): un `TrainUnit` de punta a punta, la espera sin comida y **dos apariciones del mismo commit que no eligen la misma celda** (work-plan §4) están en `Rts.Integration.Tests/ProductionTests`.
-- Quedan por escribir, con el motor real: productor destruido que pierde cola y tarea, duplicado de solicitud y fin de partida que evita Production.
+- ~~Quedan por escribir, con el motor real: productor destruido que pierde cola y tarea, duplicado de solicitud y fin de partida que evita Production.~~ **Cubiertos** en `Rts.Simulation.Tests`, porque las tres conductas son de Simulation y no de Production: la cascada que cancela al productor destruido (D-025, `SameTickCasesTests`), la idempotencia (D-043, `CommandBatchPhaseTests`) y la fase 7, que no deja correr Production si la partida terminó (`ProductionPhaseTests`).

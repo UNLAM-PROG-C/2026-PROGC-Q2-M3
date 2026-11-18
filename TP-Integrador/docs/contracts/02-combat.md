@@ -1,6 +1,6 @@
 # Contrato 02 — Combat (`Rts.Combat`)
 
-> **Estado:** contratos, modelos, interfaces y configuración implementados (`server/src/Rts.Combat`) y probados (`server/tests/Rts.Combat.Tests`). **La lógica de cálculo todavía no está implementada.**
+> **Estado:** implementado y probado (`server/src/Rts.Combat`, `server/tests/Rts.Combat.Tests`): contratos, modelos, configuración y la lógica completa (`CombatRules`, `CombatCalculator`). Integrado en el motor de Simulation y en el servidor (`Rts.Integration.Tests`, `Rts.Server.Tests/EndToEnd`). Solo falta el balance: los valores de su configuración.
 > **Etiquetas:** **DECIDIDO** = aprobado (módulo [02-combat](../modules/02-combat.md) o [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Depende de:** [Contrato 00](00-shared-kernel.md). No depende de ningún otro módulo.
 
@@ -38,7 +38,7 @@ Se construye desde el mismo snapshot que la de Economy. Las colecciones pueden v
 - `Units`: todas las unidades vivas, con su posición oficial ya actualizada por Movement en este tick.
 - `Buildings`: todos los edificios existentes, en obra o completados. El HP ya incluye la obra confirmada en la fase 3. `OperationalFromTick` es nulo en obra; si el edificio se completó en N, vale N+1.
 - `Soldiers`: solo los soldados con orden `Attack` activa. Su posición y su dueño salen de `Units`.
-- `Towers`: todas las torres **completadas**. Combat decide si ya son operativas (RECOMENDADO D-024: igual que en Economy, el chequeo de operatividad vive en el módulo y es comprobable en sus tests).
+- `Towers`: todas las torres **completadas**. Combat decide si ya son operativas (DECIDIDO D-024: igual que en Economy, el chequeo de operatividad vive en el módulo y es comprobable en sus tests).
 - `Grid`: la convención de grilla, para convertir huellas a coordenadas de mundo.
 
 ## 4. Reglas de cálculo que debe cumplir la implementación
@@ -49,7 +49,7 @@ Convenciones de distancia (DECIDIDO D-019, D-020):
 - Cualquier distancia que involucre un edificio: al **borde más cercano de su huella** (`Grid.ToWorldRect(footprint)`), tanto para un soldado que ataca un edificio como para el rango de una torre.
 - Todas las comparaciones de rango son **inclusivas** (`distancia <= rango`) y se hacen con distancias al cuadrado.
 
-Cooldown (RECOMENDADO D-022): un atacante está **listo** si `Tick >= ReadyAtTick`. Al atacar en el tick T, su nuevo `ReadyAtTick` es `T + CooldownTicks` del tipo. Como el valor pertenece al atacante, cambiar de objetivo no lo reinicia (02 §3). Un atacante nuevo arranca listo, así que su primer ataque es inmediato.
+Cooldown (DECIDIDO D-022): un atacante está **listo** si `Tick >= ReadyAtTick`. Al atacar en el tick T, su nuevo `ReadyAtTick` es `T + CooldownTicks` del tipo. Como el valor pertenece al atacante, cambiar de objetivo no lo reinicia (02 §3). Un atacante nuevo arranca listo, así que su primer ataque es inmediato.
 
 ### Soldados
 
@@ -71,7 +71,7 @@ Cooldown (RECOMENDADO D-022): un atacante está **listo** si `Tick >= ReadyAtTic
 10. Por cada `TargetDamage`, en orden de `TargetId`, se propone `EntityDamaged(id, HpAfter)` si sobrevive o `EntityDestroyed(id)` si llega a 0.
 11. Todas las colecciones del resultado se ordenan por ID ascendente. El resultado no depende del orden de finalización de los subcálculos de soldados y torres.
 
-Daño (RECOMENDADO D-023): un valor fijo por tipo de atacante, sin armadura ni modificadores por tipo de objetivo, porque 02 §10 habla de "ataque por tipo".
+Daño (DECIDIDO D-023): un valor fijo por tipo de atacante, sin armadura ni modificadores por tipo de objetivo, porque 02 §10 habla de "ataque por tipo".
 
 ## 5. Lo que Simulation debe hacer con el resultado (commit)
 
@@ -79,13 +79,13 @@ Daño (RECOMENDADO D-023): un valor fijo por tipo de atacante, sin armadura ni m
 - Para cada destrucción:
   - quitar la entidad;
   - si es un edificio, liberar su huella y avanzar la `MapRevision`;
-  - cancelar lo que dependía de ella: la cola y el trabajo de un productor (sin reembolso), los constructores y reparadores, y los soldados cuyo objetivo era esa entidad, que pasan a Idle (RECOMENDADO D-025).
+  - cancelar lo que dependía de ella: la cola y el trabajo de un productor (sin reembolso), los constructores y reparadores, y los soldados cuyo objetivo era esa entidad, que pasan a Idle (DECIDIDO D-025).
 - Un edificio `Completed` dañado sigue `Completed` (02 §4).
 - Conservar los créditos de Economy del mismo tick, aunque el trabajador o la granja hayan muerto (06 §3).
 - Aplicar los `CooldownUpdates` de los atacantes que sigan vivos y pasar a Idle los `SoldiersToIdle`.
 - Fijar el `ReadyAtTick` inicial: el tick de aparición para un soldado nuevo y `OperationalFromTick` para una torre recién completada.
 - Después del commit, la fase 7 evalúa la victoria: solo cae el Centro Principal de P1 ⇒ gana P2; solo cae el de P2 ⇒ gana P1; caen ambos en el mismo tick ⇒ `Draw`. Si la partida termina, no se ejecuta Production.
-- PENDIENTE (Simulation): orden relativo entre los eventos de Economy y los de Combat al sellarlos en el mismo tick.
+- ~~PENDIENTE (Simulation): orden relativo entre los eventos de Economy y los de Combat al sellarlos en el mismo tick.~~ **Resuelto** por D-048 (06 §5): primero los de Economy, después los de Combat y después la cascada.
 
 ## 6. Validación del comando `Attack` (`ICombatRules.ValidateAttackTarget`)
 
@@ -105,9 +105,9 @@ Una orden inválida no altera la orden anterior (04 §2). La alcanzabilidad la d
 
 | Parámetro | Validación | Valor |
 |---|---|---|
-| `UnitMaxHp` (Worker, Soldier) | > 0, todos los tipos | PENDIENTE |
-| `Soldier`: `Damage`, `Range`, `CooldownTicks` | > 0; rango finito | PENDIENTE |
-| `Tower`: `Damage`, `Range`, `CooldownTicks` | > 0; rango finito | PENDIENTE |
+| `UnitMaxHp` (Worker, Soldier) | > 0, todos los tipos | PENDIENTE (balance) |
+| `Soldier`: `Damage`, `Range`, `CooldownTicks` | > 0; rango finito | PENDIENTE (balance) |
+| `Tower`: `Damage`, `Range`, `CooldownTicks` | > 0; rango finito | PENDIENTE (balance) |
 
 ## 8. Pruebas de aceptación para la etapa de implementación
 
@@ -130,7 +130,7 @@ Las de persecución, edificio `Completed` que no vuelve a obra y doble destrucci
 
 ## 9. Pendientes
 
-- Valores de balance (§7).
-- Tolerancias de punto flotante más allá de la comparación inclusiva.
-- Eventos visuales de ataque: `AttackPerformed` existe como dato del resultado, pero publicarlo hacia Godot es PENDIENTE (02 §11.4).
-- Tipos compartidos de persecución y cancelación de objetivo con Movement (02 §6, O-001).
+- **PENDIENTE (balance):** los valores de §7.
+- ~~Tolerancias de punto flotante más allá de la comparación inclusiva.~~ **Resuelto:** no hay tolerancia extra; los rangos se comparan inclusivos con distancias al cuadrado (`DistanceSquared <= rango²`).
+- ~~Eventos visuales de ataque.~~ **Fuera del alcance:** `AttackPerformed` existe como dato del resultado, pero no se publica hacia Godot; el cliente ve el combate con `EntityDamaged` y `EntityDestroyed`. El módulo 02 §11.4 deja los eventos visuales de ataque como opcionales.
+- ~~Tipos compartidos de persecución y cancelación de objetivo con Movement (02 §6, O-001).~~ **Resuelto** por D-026, D-027 y D-025.

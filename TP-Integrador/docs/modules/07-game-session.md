@@ -1,6 +1,6 @@
 # 07 — GameSession
 
-> **Estado:** ciclo de vida de partida aprobado; detalles de timeout y modelos concretos pendientes.
+> **Estado:** especificación funcional original, cerrada. Se formalizó en el [contrato 07](../contracts/07-game-session.md), está implementada y probada, y todas sus decisiones están `DECIDIDO` ([decisiones](../decisions.md), 2026-11-18). Los PENDIENTE y RECOMENDADO de este documento se resolvieron en el contrato y en las decisiones; solo quedan los valores numéricos y el mapa definitivo (balance).
 > **Etiquetas:** **DECIDIDO**, **RECOMENDADO**, **PENDIENTE**.
 > **Referencias:** [Simulation](06-simulation.md), [Networking](08-networking.md), [State Sync](09-state-sync.md).
 
@@ -46,8 +46,8 @@ No implementa matchmaking, lobby, espectadores, reconexiones, IA, múltiples par
 - **DECIDIDO:** `ReadyTimeout` configurable; si ambos ya están conectados pero alguno no confirma dentro del plazo, se **aborta ese intento de inicio** y se vuelve al proceso de espera/preparación, sin comenzar ticks.
 - **DECIDIDO:** no confundirlo con espera ilimitada por el **segundo jugador**; son etapas diferentes.
 - **DECIDIDO:** al abandonar `Starting`, invalidar `InitializationId` y los `Ready` anteriores; cualquier futura preparación usa nueva inicialización.
-- **PENDIENTE:** política exacta sobre **qué conexión se conserva o se expulsa al vencer ReadyTimeout** cuando ambos sockets siguen abiertos. No basta transicionar nominalmente a WaitingForPlayers con ambas plazas ocupadas: evitar estado imposible de desbloquear.
-- **RECOMENDADO:** expulsar al cliente que no confirmó, conservar al que sí confirmó con Ready reiniciado, liberar plaza y volver a WaitingForPlayers; si ninguno confirmó, definir tratamiento de ambos. Esta es una sugerencia aún no aprobada, no un requisito.
+- **PENDIENTE:** política exacta sobre **qué conexión se conserva o se expulsa al vencer ReadyTimeout** cuando ambos sockets siguen abiertos. No basta transicionar nominalmente a WaitingForPlayers con ambas plazas ocupadas: evitar estado imposible de desbloquear. **Resuelto** por D-056.
+- **RECOMENDADO:** expulsar al cliente que no confirmó, conservar al que sí confirmó con Ready reiniciado, liberar plaza y volver a WaitingForPlayers; si ninguno confirmó, definir tratamiento de ambos. Esta es una sugerencia aún no aprobada, no un requisito. **Aprobado** como D-056.
 
 > **Nota (2026-11-10):** la política al vencer `ReadyTimeout` quedó **DECIDIDA** en [D-056](../decisions.md): se adopta la recomendación anterior y, si ninguno confirmó, se expulsa a ambos. El jugador que queda recibe `StartAborted` (D-057). Ver [contrato 07 §5](../contracts/07-game-session.md#5-inicio-y-readytimeout).
 - Los plazos de espera prepartida usan un reloj monotónico, **no** ticks de Simulation.
@@ -75,7 +75,7 @@ No implementa matchmaking, lobby, espectadores, reconexiones, IA, múltiples par
 - Una desconexión, una finalización de gameplay y un cierre técnico pueden llegar casi simultáneamente. Debe prevalecer el **primer resultado oficialmente confirmado** según el orden/agrupación de eventos definido, sin sobrescrituras.
 - Para dos desconexiones observadas **dentro de un mismo lote de sesión antes de fijar resultado**, aplicar finalización técnica sin ganador, no declarar arbitrariamente ganador al segundo que se procesó.
 - `Ending` impide que se acepten nuevos comandos/ticks después de comunicar la parada. `Ended` es terminal para ese proceso de partida.
-- **PENDIENTE:** contrato temporal exacto para conciliar resultados de Simulation y eventos de Networking recibidos durante el cierre de tick; no inventar precedencia distinta de las decisiones anteriores.
+- **PENDIENTE:** contrato temporal exacto para conciliar resultados de Simulation y eventos de Networking recibidos durante el cierre de tick; no inventar precedencia distinta de las decisiones anteriores. **Resuelto** por D-055.
 
 > **Nota (2026-11-10):** resuelto por [D-055](../decisions.md): las desconexiones en Running se resuelven después de detener los ticks; el lote son las desconexiones observadas hasta que termina el tick en curso, y un resultado de Simulation de ese último tick prevalece. Ver [contrato 07 §6](../contracts/07-game-session.md#6-desconexiones-en-running-lote-y-precedencia).
 
