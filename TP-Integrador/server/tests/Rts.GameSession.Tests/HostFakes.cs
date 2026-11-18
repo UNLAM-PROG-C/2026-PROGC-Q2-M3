@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using Microsoft.Extensions.Logging;
 using Rts.GameSession.Actions;
 using Rts.GameSession.Configuration;
 using Rts.GameSession.Model;
@@ -68,6 +69,8 @@ internal sealed class FakeSimulation(CallLog log) : ISimulationControl
 
   public TaskCompletionSource<TickId>? StopGate { get; set; }
 
+  public Exception? StopFailure { get; set; }
+
   public WorldView InitializeMatch()
   {
     log.Add("InitializeMatch");
@@ -86,8 +89,27 @@ internal sealed class FakeSimulation(CallLog log) : ISimulationControl
   public Task<TickId> StopTicksAsync()
   {
     log.Add("StopTicks");
-    return StopGate?.Task ?? Task.FromResult(FinalTick);
+    return StopFailure is null ? StopGate?.Task ?? Task.FromResult(FinalTick) : Task.FromException<TickId>(StopFailure);
   }
+}
+
+/// <summary>Una línea del log, ya formateada como la escribiría el Server.</summary>
+internal sealed record LogEntry(LogLevel Level, string Message, Exception? Exception);
+
+/// <summary>Logger falso y seguro para hilos: guarda lo que el host registra para que las pruebas lo lean (D-096).</summary>
+internal sealed class CapturingLogger<T> : ILogger<T>
+{
+  private readonly ConcurrentQueue<LogEntry> _entries = new();
+
+  public IReadOnlyList<LogEntry> Entries => _entries.ToArray();
+
+  public IDisposable? BeginScope<TState>(TState state)
+      where TState : notnull => null;
+
+  public bool IsEnabled(LogLevel logLevel) => true;
+
+  public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+      _entries.Enqueue(new LogEntry(logLevel, formatter(state, exception), exception));
 }
 
 /// <summary>Reloj manual: no espera nada. Guarda los timers y la prueba los dispara cuando quiere.</summary>
@@ -164,10 +186,12 @@ internal sealed class HostRig
     Inbox = new SessionInbox(queueCapacity);
     Store = new SessionStateStore(GameSessionState.Initial(session));
     Machine = new SessionStateMachine(Config);
-    Host = new SessionHost(Inbox, Store, Machine, Effects, Simulation, Config, Clock);
+    Host = new SessionHost(Inbox, Store, Machine, Effects, Simulation, Config, Clock, Logger);
   }
 
   public CallLog Log { get; } = new();
+
+  public CapturingLogger<SessionHost> Logger { get; } = new();
 
   public ManualTimeProvider Clock { get; } = new();
 

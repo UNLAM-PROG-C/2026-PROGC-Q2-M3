@@ -139,6 +139,12 @@ Para cada conexión, el orden de las acciones es el orden de la cola de salida (
 - **Falla al arrancar los ticks (DECIDIDO D-086):** si `StartTicks` lanza una excepción, el host informa `CriticalError(null)` como resultado de Simulation. El `StopTicksAsync` que sigue devuelve enseguida, sin esperar ticks que nunca arrancaron (06 §6).
 - **Una sola ejecución:** `RunAsync` se llama una vez; una segunda llamada lanza `InvalidOperationException`. Para otra partida se lanza el servidor de nuevo (D-058).
 - **Cancelación:** cancelar el token de `RunAsync` no corta el bucle: publica `ShutdownRequested` y la sesión termina de forma ordenada (D-084).
+- **Logging (D-096, cierra la O-011):** el host recibe `ILogger<SessionHost>` (`Microsoft.Extensions.Logging.Abstractions`, solo interfaces; el que escribe es el Server). Registra, como texto sobre lo que la máquina de estados ya decidió:
+  - en `Information`: cada cambio de estado con el evento que lo causó, el pedido de detener los ticks, la plaza de cada conexión, los intentos de inicio cancelados, los cierres de conexión con su motivo y el resultado oficial;
+  - en `Debug`: las solicitudes sin efecto (`SessionRequestRejected`);
+  - en `Error`, **con su excepción**: las fallas que el host absorbe para que la sesión termine igual (`InitializeMatch` o la publicación del InitialState, `StartTicks`, `StopTicksAsync` y el drenaje).
+
+  La máquina de estados sigue siendo pura: no loguea.
 - **Fin (DECIDIDO D-058):** al llegar a `Ended`, `RunAsync` devuelve el resultado y el proceso termina, con código 0, o distinto de 0 si el motivo fue `CriticalError`. Para otra partida se lanza el servidor de nuevo.
 - No toma locks sobre `WorldState` ni llama a módulos de dominio (07 §7).
 
@@ -178,5 +184,5 @@ Todas están implementadas en `server/tests/Rts.GameSession.Tests`, con Networki
 
 - Valores de `ReadyTimeout` y `EventQueueCapacity` (balance y entorno).
 - Pruebas de integración con Networking y Simulation reales, cuando existan (work-plan §4): desconexiones y `MatchEnded` concurrentes con un solo resultado oficial, y dos apariciones que no eligen la misma celda.
-- Resolver si `SessionHost` recibe logging (O-011): hay una propuesta, `ILogger<SessionHost>` vía `Microsoft.Extensions.Logging.Abstractions` (RECOMENDADO D-096), pendiente de su dueño. ~~Confirmar la falla de `StartTicks` (D-086)~~: confirmada el 2026-11-15.
+- ~~Resolver si `SessionHost` recibe logging (O-011)~~: resuelto, recibe `ILogger<SessionHost>` (D-096, aceptada el 2026-11-16; ver §8). ~~Confirmar la falla de `StartTicks` (D-086)~~: confirmada el 2026-11-15.
 - ~~DTOs JSON de sesión y aviso de cierre; timeout de handshake y drenaje~~: definidos en el [contrato 08](08-networking.md). Quedan sus valores numéricos.

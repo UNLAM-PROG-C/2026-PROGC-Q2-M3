@@ -2,7 +2,7 @@
 
   <!--
     Módulo GameSession: registro de dos jugadores, plazas, preparación e inicio sincronizado, desconexiones y resultado único.
-    Solo depende de Rts.Shared. Es el único escritor de GameSessionState; no toca WorldState ni sockets.
+    Solo depende de Rts.Shared y de las interfaces de logging. Es el único escritor de GameSessionState; no toca WorldState ni sockets.
     Ver docs/modules/07-game-session.md y docs/contracts/07-game-session.md.
   -->
   <PropertyGroup>
@@ -11,6 +11,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Rts.Shared\Rts.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Solo las interfaces de logging (ILogger<T>): el único que escribe sigue siendo Rts.Server (D-096). -->
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
   <ItemGroup>

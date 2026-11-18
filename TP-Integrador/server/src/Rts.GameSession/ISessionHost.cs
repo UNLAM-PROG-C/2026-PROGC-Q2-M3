@@ -48,7 +48,7 @@ public interface ISessionStateStore : ISessionGate
 /// <item>No toma locks sobre WorldState ni llama a módulos de dominio.</item>
 /// </list>
 /// Se construye con el buzón, la vista, la máquina de estados, <see cref="ISessionEffects"/>, <see cref="ISimulationControl"/>,
-/// la configuración y un <see cref="TimeProvider"/>.
+/// la configuración, un <see cref="TimeProvider"/> y un <c>ILogger</c> (D-096).
 /// </summary>
 public interface ISessionHost
 {

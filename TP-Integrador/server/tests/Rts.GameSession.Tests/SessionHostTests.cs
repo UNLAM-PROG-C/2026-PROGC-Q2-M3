@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging;
 using Rts.Shared.Ids;
 using Rts.Shared.Match;
 using Rts.Shared.Session;
@@ -198,9 +199,117 @@ public class SessionHostTests : StateMachineTestBase
     HostRig rig = NewRig();
     var invalid = rig.Config with { ReadyTimeout = TimeSpan.Zero };
 
-    Assert.Throws<ArgumentNullException>(() => new SessionHost(null!, rig.Store, rig.Machine, rig.Effects, rig.Simulation, rig.Config, rig.Clock));
-    Assert.Throws<ArgumentNullException>(() => new SessionHost(rig.Inbox, rig.Store, rig.Machine, rig.Effects, rig.Simulation, rig.Config, null!));
-    Assert.Throws<ArgumentException>(() => new SessionHost(rig.Inbox, rig.Store, rig.Machine, rig.Effects, rig.Simulation, invalid, rig.Clock));
+    Assert.Throws<ArgumentNullException>(() => new SessionHost(null!, rig.Store, rig.Machine, rig.Effects, rig.Simulation, rig.Config, rig.Clock, rig.Logger));
+    Assert.Throws<ArgumentNullException>(() => new SessionHost(rig.Inbox, rig.Store, rig.Machine, rig.Effects, rig.Simulation, rig.Config, null!, rig.Logger));
+    Assert.Throws<ArgumentNullException>(() => new SessionHost(rig.Inbox, rig.Store, rig.Machine, rig.Effects, rig.Simulation, rig.Config, rig.Clock, null!));
+    Assert.Throws<ArgumentException>(() => new SessionHost(rig.Inbox, rig.Store, rig.Machine, rig.Effects, rig.Simulation, invalid, rig.Clock, rig.Logger));
+  }
+
+  [Fact]
+  public async Task TheLog_TellsTheStoryOfAMatch_StatesPlayersAndTheOfficialResult()
+  {
+    HostRig rig = NewRig();
+    Task<MatchResult> run = rig.Host.RunAsync(CancellationToken.None);
+    await StartMatchAsync(rig);
+
+    rig.Inbox.OnSimulationResult(MatchResult.BaseDestroyed(PlayerId.One, FinalTick));
+    await run.WaitAsync(WaitLimit);
+
+    string[] story = [.. rig.Logger.Entries.Where(entry => entry.Level == LogLevel.Information).Select(entry => entry.Message)];
+    AssertLoggedInOrder(
+        story, "WaitingForPlayers → Starting", "Starting → Running", "Running → Ending", "resultado oficial Victory", "Ending → Ended");
+    Assert.Equal(2, story.Count(message => message.Contains("es el jugador", StringComparison.Ordinal)));
+    Assert.DoesNotContain(rig.Logger.Entries, entry => entry.Level >= LogLevel.Warning);
+  }
+
+  [Fact]
+  public async Task AFailingInitialization_IsLoggedAsAnErrorWithItsException()
+  {
+    HostRig rig = NewRig();
+    var failure = new InvalidOperationException("sin mapa");
+    rig.Simulation.InitializeFailure = failure;
+    Task<MatchResult> run = rig.Host.RunAsync(CancellationToken.None);
+
+    rig.Inbox.TryPostHello(ConnA);
+    rig.Inbox.TryPostHello(ConnB);
+    await run.WaitAsync(WaitLimit);
+
+    AssertLoggedError(rig, failure);
+  }
+
+  [Fact]
+  public async Task AFailingStartOfTicks_IsLoggedAsAnErrorWithItsException()
+  {
+    HostRig rig = NewRig();
+    var failure = new InvalidOperationException("no arranca");
+    rig.Simulation.StartFailure = failure;
+    Task<MatchResult> run = rig.Host.RunAsync(CancellationToken.None);
+
+    await StartMatchAsync(rig);
+    await run.WaitAsync(WaitLimit);
+
+    AssertLoggedError(rig, failure);
+  }
+
+  [Fact]
+  public async Task AFailingStopOfTicks_StillFixesTheResultWithoutFinalTick_AndIsLoggedAsAnError()
+  {
+    HostRig rig = NewRig();
+    var failure = new InvalidOperationException("no se detiene");
+    rig.Simulation.StopFailure = failure;
+    Task<MatchResult> run = rig.Host.RunAsync(CancellationToken.None);
+    await StartMatchAsync(rig);
+
+    rig.Inbox.PostConnectionClosed(ConnA);
+
+    // La sesión no puede quedar esperando: se informa SimulationStopped(null) igual (07 §8).
+    Assert.Equal(MatchResult.PlayerDisconnected(PlayerId.Two, null), await run.WaitAsync(WaitLimit));
+    AssertLoggedError(rig, failure);
+    Assert.Contains(rig.Logger.Entries, entry => entry.Message.Contains("se pidió detener los ticks", StringComparison.Ordinal));
+  }
+
+  [Fact]
+  public async Task AFailingDrain_IsLoggedAsAnError_AndTheSessionStillEnds()
+  {
+    HostRig rig = NewRig();
+    rig.Effects.DrainFails = true;
+    using var shutdown = new CancellationTokenSource();
+    Task<MatchResult> run = rig.Host.RunAsync(shutdown.Token);
+
+    await EndAsync(shutdown, run);
+
+    LogEntry error = Assert.Single(rig.Logger.Entries, entry => entry.Level == LogLevel.Error);
+    Assert.IsType<InvalidOperationException>(error.Exception);
+  }
+
+  [Fact]
+  public async Task ARequestWithoutEffect_IsLoggedOnlyAtDebugLevel()
+  {
+    HostRig rig = NewRig();
+    using var shutdown = new CancellationTokenSource();
+    Task<MatchResult> run = rig.Host.RunAsync(shutdown.Token);
+
+    rig.Inbox.TryPostHello(ConnA);
+    rig.Inbox.TryPostHello(ConnA); // Hello duplicado: se rechaza sin efecto.
+    await rig.WaitForAsync($"Send:{ConnA.Value}:SessionRequestRejected");
+    await EndAsync(shutdown, run);
+
+    LogEntry rejected = Assert.Single(rig.Logger.Entries, entry => entry.Message.Contains("sin efecto", StringComparison.Ordinal));
+    Assert.Equal(LogLevel.Debug, rejected.Level);
+  }
+
+  private static void AssertLoggedError(HostRig rig, Exception failure)
+  {
+    LogEntry error = Assert.Single(rig.Logger.Entries, entry => entry.Level == LogLevel.Error);
+    Assert.Same(failure, error.Exception);
+  }
+
+  /// <summary>Cada fragmento aparece en algún mensaje, y en el mismo orden en que se pasaron.</summary>
+  private static void AssertLoggedInOrder(string[] messages, params string[] fragments)
+  {
+    int[] positions = [.. fragments.Select(fragment => Array.FindIndex(messages, message => message.Contains(fragment, StringComparison.Ordinal)))];
+    Assert.All(positions, position => Assert.True(position >= 0));
+    Assert.Equal(positions.Order(), positions);
   }
 
   private static HostRig NewRig() => new(Session, ReadyTimeout, QueueCapacity);

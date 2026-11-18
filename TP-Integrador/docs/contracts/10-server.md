@@ -145,5 +145,5 @@ Crear no arranca nada: la red escucha recién en `RunAsync` y los ticks los arra
 **PENDIENTE:**
 
 - Prueba manual con el cliente Godot real: dos instancias contra `rts-server` (08 §11).
-- Logging de `SessionHost`: se le pasará `ILogger<T>` si se acepta la D-096 (O-011).
+- ~~Logging de `SessionHost`~~: hecho (2026-11-16). `CreateSession` le pasa `loggers.CreateLogger<SessionHost>()` (D-096, cierra la O-011).
 - El archivo de mapa real (formato D-052) y los valores definitivos de configuración.
