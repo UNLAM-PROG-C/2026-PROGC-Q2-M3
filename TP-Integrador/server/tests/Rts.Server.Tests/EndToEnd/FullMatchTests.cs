@@ -48,8 +48,7 @@ public class FullMatchTests
     Dictionary<long, JsonElement> results = await ReadCommandResultsAsync(p1, StopCommandId, TrainCommandId);
 
     Assert.Equal("Accepted", results[StopCommandId].GetProperty("outcome").GetString());
-    Assert.Equal("Rejected", results[TrainCommandId].GetProperty("outcome").GetString());
-    Assert.Equal("Production.NotAvailable", results[TrainCommandId].GetProperty("error").GetString()); // Provisorio (paso 26).
+    Assert.Equal("Accepted", results[TrainCommandId].GetProperty("outcome").GetString()); // Production real (AGENTS §8).
 
     // 4. Ctrl+C: a cada cliente le llega MatchEnded y DESPUÉS Disconnecting, y el servidor cierra la conexión (D-084, 07 §9).
     await shutdown.CancelAsync();

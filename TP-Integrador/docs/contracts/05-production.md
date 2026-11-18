@@ -1,6 +1,6 @@
 # Contrato 05 — Production (`Rts.Production`)
 
-> **Estado:** contratos, modelos, interfaces y configuración implementados (`server/src/Rts.Production`) y probados (`server/tests/Rts.Production.Tests`). **La lógica está implementada:** `ProductionRules` (validación de `TrainUnit`, duraciones y búsqueda de celda de aparición) y `ProductionCalculator` (la fase 8). Falta integrarlos con el motor de Simulation real (ver §8).
+> **Estado:** contratos, modelos, interfaces y configuración implementados (`server/src/Rts.Production`) y probados (`server/tests/Rts.Production.Tests`). **La lógica está implementada:** `ProductionRules` (validación de `TrainUnit`, duraciones y búsqueda de celda de aparición) y `ProductionCalculator` (la fase 8). **Integrado:** el Server, `Rts.Integration.Tests` y `Rts.Measurement` usan el módulo real; `Rts.Integration.Tests/ProductionTests` lo prueba dentro del motor de Simulation.
 > **Etiquetas:** **DECIDIDO** = aprobado (módulo [05-production](../modules/05-production.md) o [decisiones](../decisions.md)); **RECOMENDADO** = elección pendiente de revisión; **PENDIENTE** = no definido.
 > **Depende de:** [Contrato 00](00-shared-kernel.md). No depende de ningún otro módulo: recibe la comida y los costos de Economy como datos inyectados.
 
@@ -133,4 +133,5 @@ Son de integración con Simulation: productor destruido que pierde cola y tarea,
 
 - Valores (§6).
 - Política de publicación del progreso en Godot (State Sync).
-- Integración con el motor de Simulation real (las pruebas usan un Simulation de juguete) y las pruebas de integración de este módulo: productor destruido que pierde cola y tarea, duplicado de solicitud, fin de partida que evita Production y dos apariciones que no eligen la misma celda en un mismo commit (work-plan §4).
+- ~~Integración con el motor de Simulation real.~~ Hecha (2026-11-16): un `TrainUnit` de punta a punta, la espera sin comida y **dos apariciones del mismo commit que no eligen la misma celda** (work-plan §4) están en `Rts.Integration.Tests/ProductionTests`.
+- Quedan por escribir, con el motor real: productor destruido que pierde cola y tarea, duplicado de solicitud y fin de partida que evita Production.

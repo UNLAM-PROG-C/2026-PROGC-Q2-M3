@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- Pruebas de integración (work-plan §4): Simulation con los módulos de dominio reales; fakes solo para lo no implementado. -->
+  <!-- Pruebas de integración (work-plan §4): Simulation con los cinco módulos de dominio reales. -->
   <ItemGroup>
     <ProjectReference Include="..\..\src\Rts.Server\Rts.Server.csproj" />
     <!-- Para correr la herramienta de medición con poca carga y que no se rompa sin que nadie lo note (D-101). -->
