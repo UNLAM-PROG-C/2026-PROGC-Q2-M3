@@ -18,7 +18,7 @@ sincronización y consistencia funcionando de forma coordinada en un juego real:
 |------------------------|-------------------------------|
 | **Comunicación entre procesos** | Dos clientes Godot se comunican con un servidor C# por **TCP**, intercambiando mensajes JSON (uno por línea) |
 | **Productor / consumidor** | Cada conexión lee sus comandos en forma concurrente y los deja en una **cola global**; un único consumidor (la simulación) los procesa en orden |
-| **Paralelismo y barrera** | En cada tick, Economía y Combate se calculan **en paralelo** sobre el mismo snapshot inmutable; una **barrera** espera a ambos antes de confirmar los cambios |
+| **Paralelismo y barrera** | En cada tick, Economía y Combate se calculan **en paralelo** sobre el mismo snapshot inmutable; una **barrera** espera a ambos antes de confirmar los cambios (Cabe destacar que el código asegura paralelismo pero dependemos de como el S.O pueda mappearlo, en dicho caso de que no tengamos nucleos del CPU disponibles, será concurrente) |
 | **Exclusión mutua y consistencia** | Solo la simulación escribe el estado del mundo; el resto trabaja sobre copias inmutables, así no hay condiciones de carrera |
 | **Escritor único por conexión** | Cada cliente tiene su propia cola de salida con un solo escritor: un cliente lento no frena la partida ni al otro jugador |
 
