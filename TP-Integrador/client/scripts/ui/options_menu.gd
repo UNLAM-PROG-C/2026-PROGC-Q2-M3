@@ -2,14 +2,18 @@ extends Control
 
 ## Panel de opciones: volumen de la música y de los sonidos (AudioSettings).
 ## Los cambios se oyen al instante y se guardan al soltar el slider y al cerrar.
-## Se usa en el menú principal y, como menú de pausa, durante la partida (MatchPause).
+## Se usa en el menú principal y, como menú de pausa, durante la partida (MatchPause). En la
+## partida muestra además el botón "Ayuda", que abre el panel de controles (help_menu.gd).
 
 signal closed
 
 const UI_THEME := preload("res://themes/rts_theme.tres")
+const HELP_MENU_SCRIPT := preload("res://scripts/ui/help_menu.gd")
 
 @export var title_text := "Opciones"
 @export var back_text := "Volver"
+## Muestra el botón "Ayuda" (menú de pausa).
+@export var show_help_button := false
 
 const VOLUME_ROWS := [
 	{"bus": "Music", "label": "Música", "name": "MusicSlider"},
@@ -20,6 +24,9 @@ var _settings: Node
 var _sliders: Dictionary = {}
 var _value_labels: Dictionary = {}
 var _back_button: Button
+var _content: Control
+var _help_button: Button
+var _help_menu: Control
 
 
 func _ready() -> void:
@@ -38,6 +45,9 @@ func open() -> void:
 		(_sliders[row["bus"]] as HSlider).set_value_no_signal(roundf(volume * 100.0))
 		_refresh_value_label(row["bus"])
 	visible = true
+	_content.visible = true
+	if _help_menu != null:
+		_help_menu.visible = false
 	_back_button.grab_focus()
 
 
@@ -46,12 +56,27 @@ func close() -> void:
 		return
 	if _settings != null:
 		_settings.save_settings()
+	if _help_menu != null:
+		_help_menu.visible = false
 	visible = false
 	closed.emit()
 
 
+func open_help() -> void:
+	if _help_menu == null:
+		return
+	_content.visible = false
+	_help_menu.open()
+
+
+func _on_help_closed() -> void:
+	_content.visible = true
+	_help_button.grab_focus()
+
+
 func _unhandled_input(event: InputEvent) -> void:
-	if not visible:
+	# Con la ayuda abierta, Escape la cierra a ella (help_menu.gd) y vuelve a este panel.
+	if not visible or (_help_menu != null and _help_menu.visible):
 		return
 	if event.is_action_pressed("ui_cancel") or event.is_action_pressed("pause_menu"):
 		close()
@@ -89,6 +114,8 @@ func _build_ui() -> void:
 	backdrop.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(backdrop)
 	var center := CenterContainer.new()
+	center.name = "Content"
+	_content = center
 	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	center.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_child(center)
@@ -132,6 +159,19 @@ func _build_ui() -> void:
 		line.add_child(value_label)
 		_sliders[row["bus"]] = slider
 		_value_labels[row["bus"]] = value_label
+
+	if show_help_button:
+		_help_button = Button.new()
+		_help_button.name = "HelpButton"
+		_help_button.text = "Ayuda"
+		_help_button.custom_minimum_size = Vector2(200, 56)
+		_help_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		_help_button.pressed.connect(open_help)
+		box.add_child(_help_button)
+		_help_menu = HELP_MENU_SCRIPT.new()
+		_help_menu.name = "HelpMenu"
+		_help_menu.closed.connect(_on_help_closed)
+		add_child(_help_menu)
 
 	_back_button = Button.new()
 	_back_button.name = "BackButton"

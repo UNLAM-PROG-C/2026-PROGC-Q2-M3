@@ -122,7 +122,16 @@ func _test_train_unit_command() -> void:
 	_check(_panel(hud).visible, "The selection panel is visible for a selected building.")
 	_check(_label(hud, "Title") == "Centro Principal", "The panel names the building.")
 	var button := hud.find_child("TrainButton", true, false) as Button
-	_check(button.text == "Entrenar Trabajador (50 comida)" and not button.disabled, "The main center trains workers.")
+	_check(_train_text(button) == "Entrenar Trabajador | 50" and not button.disabled, "The main center trains workers: %s" % _train_text(button))
+	var content := button.get_node("Content")
+	var parts: Array[String] = []
+	for part: Node in content.get_children():
+		parts.append(str(part.name))
+	_check(parts == ["NameLabel", "CostIcon", "CostLabel"], "The food icon sits between the name and the cost: %s" % str(parts))
+	_check((content.get_node("CostIcon") as TextureRect).texture == hud.FOOD_ICON, "The training cost uses the food icon.")
+	_check(button.text.is_empty(), "The train button text lives in its labels, not in the button.")
+	_check(button.tooltip_text == "Entrenar Trabajador: 50 de comida", "The train button tooltip names the food cost.")
+	_check(button.get_combined_minimum_size().x >= content.get_combined_minimum_size().x, "The train button fits its content.")
 	button.pressed.emit()
 	_check(network.sent_messages.size() == 1, "The train button sends one command.")
 	var sent: Dictionary = network.sent_messages[-1]
@@ -132,7 +141,7 @@ func _test_train_unit_command() -> void:
 
 	controller.set_selected_building(BARRACKS)
 	_check(_label(hud, "Title") == "Cuartel", "The barracks panel is shown.")
-	_check(button.text.begins_with("Entrenar Soldado"), "The barracks trains soldiers.")
+	_check(_train_text(button).begins_with("Entrenar Soldado | "), "The barracks trains soldiers: %s" % _train_text(button))
 	var world: Node = setup["world"]
 	_check(world.issue_train_unit_command(OWN_MAIN_CENTER, "Soldier").get("error", "") == "WrongUnitType", "Main centers do not train soldiers.")
 	_check(world.issue_train_unit_command(FARM, "Worker").get("error", "") == "NotAProducer", "Farms do not train units.")
@@ -152,13 +161,23 @@ func _test_production_panel() -> void:
 	setup["controller"].set_selected_building(OWN_MAIN_CENTER)
 	_check(_label(hud, "StatusLabel") == "Sin entrenamientos.", "An idle producer says so.")
 	_check(not (hud.find_child("ProgressBar", true, false) as ProgressBar).visible, "An idle producer has no progress bar.")
+	_check(not (hud.find_child("ProductionIcons", true, false) as Control).visible, "An idle producer shows no production icons.")
 	_apply(world, [{
 		"type": "ProductionChanged", "producerId": OWN_MAIN_CENTER, "status": "Training",
 		"activeUnitType": "Worker", "remainingTicks": 200, "pending": ["Worker", "Worker"], "index": 0,
 	}])
 	hud._process(0.0)
-	_check(_label(hud, "StatusLabel") == "Entrenando Trabajador.", "Training shows the active unit.")
-	_check(_label(hud, "QueueLabel") == "En cola: Trabajador, Trabajador", "The pending FIFO queue is listed.")
+	_check(not (hud.find_child("StatusLabel", true, false) as Label).visible, "While training there is no status text, only icons.")
+	_check(hud.find_child("QueueLabel", true, false) == null, "The queue is not listed as text.")
+	_check(_production_icons(hud) == ["active:Worker", "Worker", "Worker"], "The icons show the active unit and then the FIFO queue: %s" % str(_production_icons(hud)))
+	var icons := hud.find_child("ProductionIcons", true, false) as Control
+	var active_icon := icons.get_child(0) as TextureRect
+	_check(active_icon.texture == hud.UNIT_ICONS["Worker"], "A worker in production uses production_worker.svg.")
+	_check(active_icon.custom_minimum_size.x > (icons.get_child(1) as Control).custom_minimum_size.x, "The active unit icon is bigger than the queued ones.")
+	_check(active_icon.tooltip_text == "Entrenando: Trabajador", "The active icon names the unit in its tooltip.")
+	var first_icon := active_icon
+	hud._process(0.0)
+	_check(icons.get_child(0) == first_icon, "The icons are not rebuilt every frame.")
 	var received: int = hud._production_received_usec[OWN_MAIN_CENTER]
 	_check(is_zero_approx(hud.production_progress(OWN_MAIN_CENTER, received)), "Progress starts at the reported remaining ticks.")
 	_check(
@@ -172,10 +191,21 @@ func _test_production_panel() -> void:
 	}])
 	hud._process(0.0)
 	_check(_label(hud, "StatusLabel").contains("esperando lugar libre"), "PendingSpawn explains that there is no free cell.")
+	_check(_production_icons(hud) == ["active:Worker"], "The ready unit keeps its icon while it waits for a free cell.")
 	_apply(world, [{"type": "ResourcesChanged", "wood": 200, "food": 10, "index": 0}])
 	hud._process(0.0)
 	_check((hud.find_child("FoodHint", true, false) as Label).visible, "Without enough food the HUD warns that the order will wait.")
 	_check(not (hud.find_child("TrainButton", true, false) as Button).disabled, "Training without food is still allowed (05 §3).")
+
+	setup["controller"].set_selected_building(BARRACKS)
+	_apply(world, [{
+		"type": "ProductionChanged", "producerId": BARRACKS, "status": "Training",
+		"activeUnitType": "Soldier", "remainingTicks": 100, "pending": ["Soldier"], "index": 0,
+	}])
+	hud._process(0.0)
+	_check(_production_icons(hud) == ["active:Soldier", "Soldier"], "The barracks shows soldier icons: %s" % str(_production_icons(hud)))
+	var soldier_icon := (hud.find_child("ProductionIcons", true, false) as Control).get_child(-1) as TextureRect
+	_check(soldier_icon != null and soldier_icon.texture == hud.UNIT_ICONS["Soldier"], "A soldier in production uses production_soldier.svg.")
 	_free_setup(setup)
 
 
@@ -208,6 +238,12 @@ func _test_building_selection_rules() -> void:
 	controller.set_selected_building(UNFINISHED_BARRACKS)
 	_check(_label(hud, "StateLabel").contains("En construcción"), "A construction shows its state.")
 	_check((hud.find_child("TrainButton", true, false) as Button).disabled, "A construction cannot train yet.")
+	var disabled_content := hud.find_child("TrainButton", true, false).get_node("Content")
+	_check(
+		(disabled_content.get_node("NameLabel") as Label).get_theme_color("font_color") == hud.get_theme_color("font_disabled_color", "Button"),
+		"A disabled train button greys out its labels."
+	)
+	_check((disabled_content.get_node("CostIcon") as Control).modulate.a < 1.0, "A disabled train button dims the food icon.")
 	_check(_label(hud, "StatusLabel") == "El edificio todavía no está operativo.", "The panel explains why it cannot train.")
 	controller.set_selected_units(_ids([3]))
 	_check(controller.selected_building_id == 0 and not _panel(hud).visible, "Selecting units clears the building selection.")
@@ -320,3 +356,24 @@ func _example(direction: String, filename: String) -> Dictionary:
 		return {}
 	var parsed: Variant = JSON.parse_string(file.get_as_text())
 	return parsed if parsed is Dictionary else {}
+
+
+func _train_text(button: Button) -> String:
+	var content := button.get_node_or_null("Content")
+	if content == null:
+		return ""
+	return "%s | %s" % [(content.get_node("NameLabel") as Label).text, (content.get_node("CostLabel") as Label).text]
+
+
+## Íconos de producción: "active:Tipo" para la unidad que se entrena y "Tipo" para la cola.
+func _production_icons(hud: Control) -> Array[String]:
+	var result: Array[String] = []
+	var icons := hud.find_child("ProductionIcons", true, false)
+	if icons == null:
+		return result
+	for icon: Node in icons.get_children():
+		if icon.is_queued_for_deletion():
+			continue
+		var unit_type := str(icon.get_meta("unit_type", ""))
+		result.append(("active:%s" % unit_type) if icon.name == "ActiveIcon" else unit_type)
+	return result
