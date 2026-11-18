@@ -8,6 +8,13 @@ const ErrorTexts = preload("res://scripts/ui/error_texts.gd")
 const UI_THEME := preload("res://themes/rts_theme.tres")
 const WOOD_ICON := preload("res://assets/ui/resource_wood.svg")
 const FOOD_ICON := preload("res://assets/ui/resource_food.svg")
+## Íconos de la fila de producción: la unidad que se entrena y las que esperan en la cola.
+const UNIT_ICONS := {
+	"Worker": preload("res://assets/ui/production_worker.svg"),
+	"Soldier": preload("res://assets/ui/production_soldier.svg"),
+}
+const ACTIVE_ICON_SIZE := Vector2(44, 44)
+const PENDING_ICON_SIZE := Vector2(32, 32)
 
 const MESSAGE_SECONDS := 4.0
 const MAX_MESSAGES := 4
@@ -34,8 +41,9 @@ const FENCE_HINT := "Arrastrá para una línea de vallas  ·  Clic derecho o Esc
 const STATUS_TEXTS := {
 	"Idle": "Sin entrenamientos.",
 	"WaitingForResources": "Esperando comida para empezar.",
-	"Training": "Entrenando %s.",
-	"PendingSpawn": "%s listo: esperando lugar libre para aparecer.",
+	# Training no tiene texto: la fila de íconos muestra qué se entrena.
+	"Training": "",
+	"PendingSpawn": "Listo: esperando lugar libre para aparecer.",
 }
 
 @export var world: Node
@@ -58,7 +66,9 @@ var _selection_state: Label
 var _production_box: VBoxContainer
 var _production_status: Label
 var _production_bar: ProgressBar
-var _production_queue: Label
+var _production_icons: HBoxContainer
+## Unidades que muestra la fila de íconos (activa primero), para rehacerla solo si cambia.
+var _production_icon_types: Array[String] = []
 var _train_button: Button
 var _food_hint: Label
 var _messages: VBoxContainer
@@ -225,24 +235,27 @@ func _refresh_selection() -> void:
 		return
 	var production: Dictionary = world.get_own_production(selected_building_id)
 	var status := str(production.get("status", "Idle"))
-	var active_name: String = UNIT_NAMES.get(str(production.get("activeUnitType", "")), "")
 	var status_text: String = STATUS_TEXTS.get(status, status)
-	if status_text.contains("%s"):
-		status_text = status_text % active_name
 	if not bool(trainable.get("ok", false)):
 		status_text = ErrorTexts.text_for(str(trainable.get("error", "")))
 	_production_status.text = status_text
+	_production_status.visible = not status_text.is_empty()
 	_production_bar.visible = status == "Training" or status == "PendingSpawn"
 	_production_bar.value = production_progress(selected_building_id) * 100.0
-	var pending_names: PackedStringArray = []
+	var icon_types: Array[String] = []
+	var active_type := str(production.get("activeUnitType", ""))
+	if status != "Idle" and not active_type.is_empty():
+		icon_types.append(active_type)
 	for unit_type: Variant in production.get("pending", []):
-		pending_names.append(UNIT_NAMES.get(str(unit_type), str(unit_type)))
-	_production_queue.text = "En cola: %s" % (", ".join(pending_names) if not pending_names.is_empty() else "nada")
+		icon_types.append(str(unit_type))
+	_refresh_production_icons(icon_types, not active_type.is_empty() and status != "Idle")
 
 	var unit_type := str(trainable.get("unitType", world.PRODUCER_UNIT_TYPES[building_type]))
 	var food_cost := int(_unit_catalog(unit_type).get("cost", {}).get("food", 0))
-	_train_button.text = "Entrenar %s (%d comida)" % [UNIT_NAMES.get(unit_type, unit_type), food_cost]
+	var train_text := "Entrenar %s" % UNIT_NAMES.get(unit_type, unit_type)
 	_train_button.disabled = not bool(trainable.get("ok", false))
+	_set_cost_button(_train_button, train_text, food_cost)
+	_train_button.tooltip_text = "%s: %d de comida" % [train_text, food_cost]
 	var food := int(world.get_own_resources().get("food", 0))
 	_food_hint.visible = bool(trainable.get("ok", false)) and food < food_cost
 	_food_hint.text = "Sin comida suficiente: la orden esperará en la cola."
@@ -279,9 +292,7 @@ func _refresh_build_panel() -> void:
 		name_label.text = BUILDING_NAMES.get(building_type, building_type)
 		if not key_label.is_empty():
 			name_label.text = "[%s] %s" % [key_label, name_label.text]
-		(button.find_child("CostLabel", true, false) as Label).text = str(wood_cost)
-		var content := button.get_child(0) as Control
-		button.custom_minimum_size = content.get_combined_minimum_size() + BUILD_BUTTON_PADDING
+		_set_cost_button(button, name_label.text, wood_cost)
 		button.tooltip_text = "%s: %d de madera" % [BUILDING_NAMES.get(building_type, building_type), wood_cost]
 		button.button_pressed = building_type == placing_type
 	_build_hint.visible = not placing_type.is_empty()
@@ -442,15 +453,20 @@ func _build_ui() -> void:
 	box.add_child(_production_box)
 	_production_status = _make_label("StatusLabel")
 	_production_box.add_child(_production_status)
+	_production_icons = HBoxContainer.new()
+	_production_icons.name = "ProductionIcons"
+	_production_icons.alignment = BoxContainer.ALIGNMENT_CENTER
+	_production_icons.add_theme_constant_override("separation", 6)
+	_production_icons.visible = false
+	_production_box.add_child(_production_icons)
 	_production_bar = ProgressBar.new()
 	_production_bar.name = "ProgressBar"
 	_production_bar.show_percentage = false
 	_production_bar.custom_minimum_size = Vector2(0, 18)
 	_production_box.add_child(_production_bar)
-	_production_queue = _make_label("QueueLabel")
-	_production_box.add_child(_production_queue)
 	_train_button = Button.new()
 	_train_button.name = "TrainButton"
+	_train_button.add_child(_make_cost_button_content(FOOD_ICON))
 	_train_button.pressed.connect(func() -> void: train_selected())
 	_production_box.add_child(_train_button)
 	_food_hint = _make_label("FoodHint")
@@ -485,7 +501,7 @@ func _build_build_panel(parent: Control) -> void:
 		button.toggle_mode = true
 		button.focus_mode = Control.FOCUS_NONE
 		button.pressed.connect(func() -> void: start_building(building_type))
-		button.add_child(_make_build_button_content())
+		button.add_child(_make_cost_button_content(WOOD_ICON))
 		buttons.add_child(button)
 		_build_buttons[building_type] = button
 	_build_hint = _make_label("BuildHint")
@@ -494,10 +510,11 @@ func _build_build_panel(parent: Control) -> void:
 	box.add_child(_build_hint)
 
 
-## Contenido de un botón de construcción: "[tecla] Nombre", ícono de madera y costo.
+## Contenido de un botón con costo: nombre, ícono del recurso y costo. Lo usan los botones de
+## construcción ("[tecla] Nombre", madera) y el de entrenar ("Entrenar Unidad", comida).
 ## Button no admite un ícono en medio del texto, así que el contenido son nodos hijos
 ## que no toman el mouse (el clic lo recibe el botón).
-func _make_build_button_content() -> HBoxContainer:
+func _make_cost_button_content(cost_icon: Texture2D) -> HBoxContainer:
 	var content := HBoxContainer.new()
 	content.name = "Content"
 	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -518,7 +535,7 @@ func _make_build_button_content() -> HBoxContainer:
 		if label_name == "NameLabel":
 			var icon := TextureRect.new()
 			icon.name = "CostIcon"
-			icon.texture = WOOD_ICON
+			icon.texture = cost_icon
 			icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
 			icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
@@ -526,6 +543,50 @@ func _make_build_button_content() -> HBoxContainer:
 			icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 			content.add_child(icon)
 	return content
+
+
+## Fila de íconos de producción: la unidad que se entrena (más grande) y después la cola FIFO
+## (más chicas y atenuadas). Solo se rehace cuando cambia lo que hay que mostrar.
+func _refresh_production_icons(unit_types: Array[String], has_active: bool) -> void:
+	_production_icons.visible = not unit_types.is_empty()
+	var key: Array[String] = unit_types.duplicate()
+	key.append("active" if has_active else "")
+	if key == _production_icon_types:
+		return
+	_production_icon_types = key
+	for child: Node in _production_icons.get_children():
+		_production_icons.remove_child(child)
+		child.queue_free()
+	for index in range(unit_types.size()):
+		var unit_type := unit_types[index]
+		var is_active := has_active and index == 0
+		var icon := TextureRect.new()
+		icon.name = "ActiveIcon" if is_active else "PendingIcon%d" % index
+		icon.texture = UNIT_ICONS.get(unit_type)
+		icon.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		icon.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		icon.custom_minimum_size = ACTIVE_ICON_SIZE if is_active else PENDING_ICON_SIZE
+		icon.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		icon.modulate.a = 1.0 if is_active else 0.7
+		var unit_name: String = UNIT_NAMES.get(unit_type, unit_type)
+		icon.tooltip_text = ("Entrenando: %s" if is_active else "En cola: %s") % unit_name
+		icon.set_meta("unit_type", unit_type)
+		_production_icons.add_child(icon)
+
+
+## Actualiza el nombre y el costo de un botón armado con _make_cost_button_content. El texto
+## del botón queda vacío: los labels hijos no siguen solos el estado deshabilitado, así que
+## toman el color correspondiente del tema y el ícono se atenúa.
+func _set_cost_button(button: Button, button_name: String, cost: int) -> void:
+	var content := button.get_node("Content") as Control
+	(content.get_node("NameLabel") as Label).text = button_name
+	(content.get_node("CostLabel") as Label).text = str(cost)
+	var color_name := "font_disabled_color" if button.disabled else "font_color"
+	var text_color := button.get_theme_color(color_name, "Button")
+	for label_name: String in ["NameLabel", "CostLabel"]:
+		(content.get_node(label_name) as Label).add_theme_color_override("font_color", text_color)
+	(content.get_node("CostIcon") as Control).modulate.a = 0.5 if button.disabled else 1.0
+	button.custom_minimum_size = content.get_combined_minimum_size() + BUILD_BUTTON_PADDING
 
 
 func _add_resource(parent: HBoxContainer, icon: Texture2D, label_name: String, tooltip: String) -> Label:

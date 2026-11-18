@@ -37,23 +37,100 @@ func _run() -> void:
 		_check_idle_character(menu, "MaleB", MALE_B_PATH)
 		var play_button := menu.find_child("PlayButton", true, false) as Button
 		_check(play_button != null and play_button.text == "Jugar", "The menu should have a Jugar button.")
-		var title := menu.find_child("GameTitle", true, false) as Label
-		_check(title != null and title.text == "Age of Concurrency", "The menu shows the game title.")
+		var title := menu.find_child("GameTitle", true, false) as Control
+		var title_lines: Array[Label] = []
+		if title != null:
+			for child: Node in title.get_children():
+				if child is Label:
+					title_lines.append(child)
+		_check(
+			title_lines.map(func(line: Label) -> String: return line.text) == ["Age", "of", "Concurrency"],
+			"The menu shows the game title in three lines: Age / of / Concurrency."
+		)
+		for line: Label in title_lines:
+			var font := line.get_theme_font("font")
+			_check(
+				font != null and font.resource_path.ends_with("JunigardenSwash_PERSONAL_USE_ONLY.otf"),
+				"The title uses the Junigarden Swash font (%s)." % line.text
+			)
+			_check(
+				line.get_theme_color("font_shadow_color").a > 0.0
+					and line.get_theme_constant("shadow_offset_x") > 0
+					and line.get_theme_constant("shadow_offset_y") > 0,
+				"The title text has a shadow (%s)." % line.text
+			)
+			# Todas ocupan el ancho de "Concurrency": centradas, "Age" y "of" quedan al medio.
+			if line.text != "Concurrency":
+				_check(line.horizontal_alignment == HORIZONTAL_ALIGNMENT_CENTER, "The title lines are centered (%s)." % line.text)
+		if title_lines.size() == 3:
+			var of_size := title_lines[1].get_theme_font_size("font_size")
+			_check(
+				of_size < title_lines[0].get_theme_font_size("font_size") and of_size < title_lines[2].get_theme_font_size("font_size"),
+				"The word of is smaller than Age and Concurrency."
+			)
+		var credits := menu.find_child("Credits", true, false) as Label
+		_check(credits != null, "The menu shows the team credits.")
+		if credits != null:
+			for member: String in [
+				"Iván Abaca", "Joaquín Barcella", "Augusto Coronati", "Luca Gonzalez", "Florencia Licarzi", "Agustín Zabalgoitia"
+			]:
+				_check(credits.text.contains(member), "The credits name %s." % member)
+			_check(credits.get_theme_color("font_color") == Color.WHITE, "The credits are white.")
+			var screen := credits.get_viewport_rect().size
+			var credits_rect := credits.get_global_rect()
+			_check(
+				credits_rect.end.x > screen.x * 0.95 and credits_rect.end.x <= screen.x
+					and credits_rect.end.y > screen.y * 0.9 and credits_rect.end.y <= screen.y,
+				"The credits are in the bottom right corner."
+			)
+			_check(credits.mouse_filter == Control.MOUSE_FILTER_IGNORE, "The credits do not block clicks.")
+			var options_panel := menu.find_child("OptionsMenu", true, false)
+			_check(options_panel == null or options_panel.is_greater_than(credits), "The options panel covers the credits.")
+		var emblem := menu.find_child("TitleEmblem", true, false) as TextureRect
+		_check(
+			emblem != null and emblem.texture != null and emblem.texture.resource_path.ends_with("title_emblem.png"),
+			"The title has the shield emblem."
+		)
+		if emblem != null and title != null:
+			_check(emblem.is_greater_than(title) == false and title.is_greater_than(emblem), "The emblem is drawn behind the title.")
+			_check(
+				emblem.get_global_rect().get_center().distance_to(title.get_global_rect().get_center()) <= 1.0,
+				"The emblem is centered behind the title."
+			)
+			_check(emblem.mouse_filter == Control.MOUSE_FILTER_IGNORE, "The emblem does not block clicks.")
+			var emblem_shadow := menu.find_child("TitleEmblemShadow", true, false) as TextureRect
+			_check(
+				emblem_shadow != null and emblem_shadow.texture == emblem.texture and emblem.is_greater_than(emblem_shadow),
+				"The emblem has a shadow drawn behind it."
+			)
+			if emblem_shadow != null:
+				var shadow_shift := emblem_shadow.get_global_rect().position - emblem.get_global_rect().position
+				_check(shadow_shift.x > 0.0 and shadow_shift.y > 0.0, "The emblem shadow falls down and to the right.")
+				_check(emblem_shadow.self_modulate.a < 1.0 and emblem_shadow.self_modulate.v < 0.2, "The emblem shadow is dark and translucent.")
+				_check(emblem_shadow.mouse_filter == Control.MOUSE_FILTER_IGNORE, "The emblem shadow does not block clicks.")
 		if title != null and play_button != null:
-			_check(title.theme_type_variation == &"TitleLabel", "The title uses the title font (Magic Retro).")
 			_check(title.get_global_rect().end.y <= play_button.get_global_rect().position.y, "The title is above the buttons.")
 			var options_button := menu.find_child("OptionsButton", true, false) as Control
+			var title_center := title.get_global_rect().get_center().x
 			_check(
-				is_equal_approx(play_button.get_global_rect().position.x, title.get_global_rect().position.x)
-					and is_equal_approx(options_button.get_global_rect().position.x, title.get_global_rect().position.x),
-				"The buttons are aligned to the left, under the start of the title."
+				# Hasta 1 px de diferencia: Godot redondea las posiciones a píxeles enteros.
+				absf(play_button.get_global_rect().get_center().x - title_center) <= 1.0
+					and absf(options_button.get_global_rect().get_center().x - title_center) <= 1.0,
+				"The buttons are centered under the title."
 			)
 		var buttons := menu.find_child("Buttons", true, false) as Control
 		if buttons != null:
 			var screen := root.get_visible_rect().size
 			var rect := buttons.get_global_rect()
 			_check(rect.end.x < screen.x / 2.0, "The menu buttons are on the left side: %s" % str(rect))
-			_check(absf(rect.get_center().y - screen.y / 2.0) < 2.0, "The menu buttons are vertically centered: %s" % str(rect))
+			# El bloque (título y botones) está centrado en el área que deja el margen inferior,
+			# así queda un poco más arriba que el centro de la pantalla.
+			var title_area := menu.find_child("TitleArea", true, false) as Control
+			var options_button := menu.find_child("OptionsButton", true, false) as Control
+			if title_area != null and options_button != null:
+				var block_center := (title_area.get_global_rect().position.y + options_button.get_global_rect().end.y) / 2.0
+				_check(absf(block_center - rect.get_center().y) < 2.0, "The title and buttons are centered in their area: %s" % str(rect))
+				_check(block_center < screen.y / 2.0 - 20.0, "The title and buttons sit above the screen center.")
 		if play_button != null:
 			play_button.pressed.emit()
 			await process_frame
