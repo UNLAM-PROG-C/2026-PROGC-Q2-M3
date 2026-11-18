@@ -135,3 +135,4 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("16_options_menu")
 back_text = "Volver a la partida"
+show_help_button = true

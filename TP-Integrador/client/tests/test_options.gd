@@ -47,6 +47,7 @@ func _run() -> void:
 	if options_button != null and options != null:
 		options_button.pressed.emit()
 		_check(options.visible, "Opciones opens the options panel.")
+		_check(options.find_child("HelpButton", true, false) == null, "The main menu options have no Ayuda button (it belongs to the pause menu).")
 		var music_slider := options.find_child("MusicSlider", true, false) as HSlider
 		var sfx_slider := options.find_child("SfxSlider", true, false) as HSlider
 		_check(music_slider != null and sfx_slider != null, "There is one slider for music and one for sounds.")
@@ -71,6 +72,7 @@ func _run() -> void:
 		escape.pressed = true
 		root.push_input(escape)
 		_check(not options.visible, "Escape also closes the options.")
+	_test_input_labels()
 	completed = true
 
 	settings.set_volume("Music", 1.0, false)
@@ -82,6 +84,23 @@ func _run() -> void:
 		return
 	print("Options tests passed.")
 	quit(0)
+
+
+## Los nombres de los controles salen del InputMap, no de texto escrito a mano.
+func _test_input_labels() -> void:
+	var labels := preload("res://scripts/ui/input_labels.gd")
+	_check(labels.for_action("move_selected_units") == "Clic derecho", "Mouse buttons have readable names.")
+	_check(labels.for_action("camera_rotate_left").begins_with("Ctrl + Rueda"), "Modifiers are part of the label: %s" % labels.for_action("camera_rotate_left"))
+	_check(labels.for_action("missing_action").is_empty(), "Unknown actions have no label.")
+	_check(labels.for_wheel_pair("camera_zoom_in", "camera_zoom_out") == "Rueda", "Zooming in and out with the wheel is shown as one control.")
+	_check(labels.for_wheel_pair("camera_rotate_left", "camera_rotate_right") == "Ctrl + Rueda", "The wheel pair keeps its modifiers.")
+	_check(labels.for_wheel_pair("select_unit", "move_selected_units") == "Clic izquierdo / Clic derecho", "Other pairs are listed separately.")
+	InputMap.add_action("test_help_action")
+	var key := InputEventKey.new()
+	key.physical_keycode = KEY_H
+	InputMap.action_add_event("test_help_action", key)
+	_check(labels.for_action("test_help_action") == "H", "Keys use the key name from the InputMap.")
+	InputMap.erase_action("test_help_action")
 
 
 func _check(condition: bool, message: String) -> void:

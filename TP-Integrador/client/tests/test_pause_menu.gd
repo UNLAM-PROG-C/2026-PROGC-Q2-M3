@@ -65,6 +65,35 @@ func _run() -> void:
 	_press_escape()
 	_check(not pause_menu.visible, "Escape also closes it.")
 
+	# Ayuda: explica cómo mover la cámara y las unidades, con los controles del InputMap.
+	_press_escape()
+	var help_button := pause_menu.find_child("HelpButton", true, false) as Button
+	_check(help_button != null and help_button.text == "Ayuda", "The pause menu has an Ayuda button.")
+	var help := pause_menu.find_child("HelpMenu", true, false) as Control
+	var content := pause_menu.find_child("Content", false, false) as Control
+	if help_button != null and help != null and content != null:
+		_check(not help.visible, "The help starts closed.")
+		help_button.pressed.emit()
+		_check(help.visible and not content.visible, "Ayuda replaces the options with the help panel.")
+		var help_text := _texts(help)
+		for expected: String in ["Cámara", "Unidades", "W A S D", "Mantener Shift", "Mantener Clic de la rueda", "Rueda", "Ctrl + Rueda", "Clic izquierdo", "Clic izquierdo y arrastrar", "Clic derecho", "Q", "1 2 3 4"]:
+			_check(help_text.contains(expected), "The help mentions %s." % expected)
+		_check(help_text.contains("Mover la cámara") and help_text.contains("Detener a las unidades"), "The help explains what each control does.")
+		var help_panel := help.find_child("HelpPanel", true, false) as Control
+		var screen := help.get_viewport_rect().size
+		_check(help_panel.size.x <= 920.0 and help_panel.size.y <= screen.y - 20.0, "The help panel fits on screen: %s" % str(help_panel.size))
+		_press_escape()
+		_check(pause_menu.visible and not help.visible and content.visible, "Escape in the help goes back to the pause menu.")
+		help_button.pressed.emit()
+		(help.find_child("HelpBackButton", true, false) as Button).pressed.emit()
+		_check(not help.visible and content.visible, "Volver in the help goes back to the pause menu.")
+		help_button.pressed.emit()
+		pause_menu.close()
+		pause_menu.open()
+		_check(content.visible and not help.visible, "Reopening the pause menu starts on the options, not on the help.")
+	_press_escape()
+	_check(not pause_menu.visible, "Escape closes the pause menu after visiting the help.")
+
 	# Colocando un edificio, Escape cancela la colocación y no abre el menú.
 	_check(placement.start_placement("Farm"), "A worker can start placing a farm.")
 	_press_escape()
@@ -97,6 +126,13 @@ func _press_escape() -> void:
 	var release := key.duplicate() as InputEventKey
 	release.pressed = false
 	root.push_input(release)
+
+
+func _texts(node: Node) -> String:
+	var parts: PackedStringArray = []
+	for label: Node in node.find_children("*", "Label", true, false):
+		parts.append((label as Label).text)
+	return "\n".join(parts)
 
 
 func _press_action_key(action: String) -> void:
